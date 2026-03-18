@@ -4,12 +4,10 @@ import logging
 import math
 from datetime import datetime, timezone
 
-import numpy as np
-
+from .chunker import chunk_hash, chunk_text, is_duplicate
 from .db import MemoryDB
 from .embeddings import EmbeddingProvider, NullEmbedder, cosine_similarity, from_blob, to_blob
 from .errors import EmbeddingConfigMismatchError
-from .chunker import chunk_hash, chunk_text, is_duplicate
 from .types import (
     Chunk,
     ConnectedMemory,

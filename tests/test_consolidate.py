@@ -14,7 +14,7 @@ import pytest
 
 from engram.db import MemoryDB
 from engram.search import SearchEngine
-from engram.types import Memory, MemoryType, Relationship, RelationType
+from engram.types import Memory, Relationship, RelationType
 from tests.conftest import FakeEmbedder
 
 
@@ -46,9 +46,13 @@ class TestChunkDeduplication:
                 embedding=fake_emb,
             )
             conn.execute(
-                "INSERT INTO chunks (id, memory_id, chunk_text, chunk_index, chunk_hash, embedding) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (chunk.id, chunk.memory_id, chunk.chunk_text, chunk.chunk_index, chunk.chunk_hash, chunk.embedding),
+                "INSERT INTO chunks (id, memory_id, chunk_text,"
+                " chunk_index, chunk_hash, embedding)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    chunk.id, chunk.memory_id, chunk.chunk_text,
+                    chunk.chunk_index, chunk.chunk_hash, chunk.embedding,
+                ),
             )
         conn.commit()
 
@@ -60,7 +64,7 @@ class TestChunkDeduplication:
         for i in range(100):
             stress_engine.store(Memory(content=f"Unique memory number {i} about topic {i * 7}"))
 
-        result = stress_engine.memify()
+        stress_engine.memify()
         stats_after = stress_engine.db.get_stats()
 
         assert stats_after.total_chunks >= 100
@@ -190,7 +194,7 @@ class TestIdempotency:
         for i in range(50):
             stress_engine.store(Memory(content=f"Memory {i} for idempotency test"))
 
-        result1 = stress_engine.memify()
+        stress_engine.memify()
         result2 = stress_engine.memify()
 
         assert result2["chunks_deduped"] == 0
@@ -232,9 +236,9 @@ class TestPerformanceBenchmark:
         result = stress_engine.memify()
         elapsed = time.perf_counter() - start
 
-        print(f"\n=== Consolidation Benchmark ===")
-        print(f"  Memories: 200")
-        print(f"  Edges: ~30")
+        print("\n=== Consolidation Benchmark ===")
+        print("  Memories: 200")
+        print("  Edges: ~30")
         print(f"  Time: {elapsed:.3f}s")
         print(f"  Chunks deduped: {result['chunks_deduped']}")
         print(f"  Edges decayed: {result['edges_decayed']}")

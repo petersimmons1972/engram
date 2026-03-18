@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from engram.db import MemoryDB
-from engram.embeddings import NullEmbedder, create_embedder, cosine_similarity, to_blob, from_blob
+from engram.embeddings import NullEmbedder, cosine_similarity, create_embedder, from_blob, to_blob
 from engram.errors import EmbeddingConfigMismatchError
 from engram.search import SearchEngine
 from engram.types import Memory

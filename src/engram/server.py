@@ -11,7 +11,6 @@ from .embeddings import create_embedder
 from .errors import EmbeddingConfigMismatchError
 from .search import SearchEngine
 from .types import (
-    Importance,
     Memory,
     MemoryType,
     Relationship,
@@ -146,7 +145,7 @@ def memory_store(
         memory_type: One of: decision, pattern, error, context, architecture, preference.
         tags: Comma-separated tags for filtering (e.g. "auth,security,jwt").
         importance: Priority 0-4. 0=critical identity, 1=key facts, 2=general, 3=low, 4=trivial.
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         The stored memory's ID and metadata.
@@ -202,11 +201,12 @@ def memory_recall(
     Args:
         query: What to search for. Can be a keyword, question, or concept.
         top_k: Number of results to return (default 5).
-        memory_type: Filter by type (decision/pattern/error/context/architecture/preference). Empty = all.
+        memory_type: Filter by type (decision/pattern/error/context/architecture/
+            preference). Empty = all.
         tags: Comma-separated tags to filter by. Empty = all.
         min_importance: Only return memories with importance <= this value (0=only critical, 4=all).
         graph_hops: How many relationship hops to traverse (1 or 2).
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         Ranked list of memories with scores, matched chunks, and connected context.
@@ -284,9 +284,10 @@ def memory_connect(
     Args:
         source_id: ID of the source memory.
         target_id: ID of the target memory.
-        rel_type: Relationship type: caused_by, relates_to, depends_on, supersedes, used_in, resolved_by.
+        rel_type: Type: caused_by, relates_to, depends_on,
+            supersedes, used_in, resolved_by.
         strength: Connection strength from 0.0 to 1.0 (default 1.0).
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         The created relationship.
@@ -338,7 +339,7 @@ def memory_list(
         tags: Comma-separated tags to filter by. Empty = all.
         min_importance: Only return memories with importance <= this (0=only critical, 4=all).
         limit: Max number of memories to return.
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         List of memories sorted by most recently updated.
@@ -460,7 +461,7 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
 
     Args:
         memory_id: The ID of the memory to remove.
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         Confirmation of deletion.
@@ -483,7 +484,7 @@ def memory_status(project: str = "") -> dict:
     """Get statistics about the memory system.
 
     Args:
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         Total memories, chunks, relationships, breakdown by type and importance,
@@ -512,7 +513,7 @@ def memory_feedback(
     Args:
         memory_ids: Comma-separated IDs of memories from the recall results.
         helpful: True if the results were useful, False if they were not.
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         Number of memories whose graph edges were adjusted.
@@ -539,7 +540,7 @@ def memory_consolidate(project: str = "") -> dict:
     Run this periodically to keep the memory system healthy and focused.
 
     Args:
-        project: Project namespace. Derive from workspace folder name (e.g. "my-app"). Empty = "default".
+        project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
         Breakdown of chunks deduped, edges decayed/pruned, and stale memories removed.

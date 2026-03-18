@@ -6,7 +6,6 @@ directories, and pre-wired SearchEngine instances for fast, isolated testing.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from typing import Sequence
 

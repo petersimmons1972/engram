@@ -8,12 +8,10 @@ from pathlib import Path
 
 from .types import (
     Chunk,
-    Importance,
     Memory,
     MemoryStats,
     MemoryType,
     Relationship,
-    RelationType,
 )
 
 DEFAULT_DB_DIR = Path.home() / ".engram"
@@ -332,13 +330,16 @@ class MemoryDB:
             conn.commit()
         except sqlite3.IntegrityError:
             conn.execute(
-                "UPDATE relationships SET strength = ? WHERE source_id = ? AND target_id = ? AND rel_type = ?",
+                "UPDATE relationships SET strength = ?"
+                " WHERE source_id = ? AND target_id = ? AND rel_type = ?",
                 (rel.strength, rel.source_id, rel.target_id, rel.rel_type.value),
             )
             conn.commit()
         return rel
 
-    def get_connected(self, memory_id: str, max_hops: int = 2) -> list[tuple[Memory, str, str, float]]:
+    def get_connected(
+        self, memory_id: str, max_hops: int = 2,
+    ) -> list[tuple[Memory, str, str, float]]:
         """BFS traversal up to max_hops. Returns (memory, rel_type, direction, strength)."""
         conn = self._get_conn()
         visited: set[str] = {memory_id}
@@ -419,7 +420,9 @@ class MemoryDB:
         ).fetchone()
         return row["c"]
 
-    def decay_all_edges(self, decay_factor: float = 0.02, min_strength: float = 0.1) -> tuple[int, int]:
+    def decay_all_edges(
+        self, decay_factor: float = 0.02, min_strength: float = 0.1,
+    ) -> tuple[int, int]:
         """Apply decay to all edges. Prune edges below min_strength.
         Returns (decayed_count, pruned_count)."""
         conn = self._get_conn()
@@ -438,7 +441,7 @@ class MemoryDB:
         """Remove low-importance memories that haven't been accessed in max_age_hours.
         Never prunes memories with importance <= 1 (critical/high)."""
         conn = self._get_conn()
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
         cursor = conn.execute(
             """DELETE FROM memories
@@ -506,7 +509,8 @@ class MemoryDB:
         total_rels = conn.execute("SELECT COUNT(*) as c FROM relationships").fetchone()["c"]
 
         type_rows = conn.execute(
-            "SELECT memory_type, COUNT(*) as c FROM memories WHERE project = ? GROUP BY memory_type",
+            "SELECT memory_type, COUNT(*) as c FROM memories"
+            " WHERE project = ? GROUP BY memory_type",
             (self.project,),
         ).fetchall()
         by_type = {r["memory_type"]: r["c"] for r in type_rows}

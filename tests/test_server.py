@@ -9,7 +9,6 @@ async complexity while still validating the full store -> recall -> correct
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -32,10 +31,7 @@ def _isolate_engines(tmp_path: Path, monkeypatch):
 @pytest.fixture
 def _patch_embedder(monkeypatch):
     """Patch _get_engine to use FakeEmbedder instead of real one."""
-    original_get_engine = None
-
     import engram.server as srv
-    original_get_engine = srv._get_engine
 
     def patched_get_engine(project=None):
         project = (project or "default").strip().lower()
@@ -52,7 +48,7 @@ def _patch_embedder(monkeypatch):
 
 class TestMemoryStoreRecall:
     def test_store_and_recall(self, _patch_embedder):
-        from engram.server import memory_store, memory_recall
+        from engram.server import memory_recall, memory_store
 
         result = memory_store(
             content="We use PostgreSQL for the main database",
@@ -72,7 +68,7 @@ class TestMemoryStoreRecall:
         assert "PostgreSQL" in recall["results"][0]["content"]
 
     def test_project_isolation(self, _patch_embedder):
-        from engram.server import memory_store, memory_recall
+        from engram.server import memory_recall, memory_store
 
         memory_store(
             content="Alpha project secret",
@@ -84,7 +80,7 @@ class TestMemoryStoreRecall:
 
 class TestMemoryCorrect:
     def test_correct_supersedes_old(self, _patch_embedder):
-        from engram.server import memory_store, memory_correct, memory_recall
+        from engram.server import memory_correct, memory_store
 
         store_result = memory_store(
             content="Use MySQL for the database",
@@ -115,7 +111,7 @@ class TestMemoryCorrect:
 
 class TestMemoryForget:
     def test_forget_removes_memory(self, _patch_embedder):
-        from engram.server import memory_store, memory_forget
+        from engram.server import memory_forget, memory_store
 
         store_result = memory_store(content="Delete me", project="test-project")
         mid = store_result["id"]
@@ -132,7 +128,7 @@ class TestMemoryForget:
 
 class TestMemoryList:
     def test_list_returns_stored_memories(self, _patch_embedder):
-        from engram.server import memory_store, memory_list
+        from engram.server import memory_list, memory_store
 
         memory_store(content="First memory", project="test-project")
         memory_store(content="Second memory", project="test-project")
@@ -143,7 +139,7 @@ class TestMemoryList:
 
 class TestMemoryStatus:
     def test_status_returns_stats(self, _patch_embedder):
-        from engram.server import memory_store, memory_status
+        from engram.server import memory_status, memory_store
 
         memory_store(content="A memory", project="test-project")
         stats = memory_status(project="test-project")
