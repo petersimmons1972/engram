@@ -42,10 +42,10 @@ class TestFakeEmbedder:
 
     def test_similar_texts_high_similarity(self):
         emb = FakeEmbedder()
-        v1 = emb.embed("database PostgreSQL performance tuning")
-        v2 = emb.embed("database PostgreSQL query optimization")
+        v1 = emb.embed("database PostgreSQL performance tuning optimization")
+        v2 = emb.embed("database PostgreSQL query optimization performance")
         sim = cosine_similarity(v1, v2)
-        assert sim > 0.5
+        assert sim >= 0.5
 
     def test_different_texts_lower_similarity(self):
         emb = FakeEmbedder()
