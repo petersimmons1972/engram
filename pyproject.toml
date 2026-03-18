@@ -40,5 +40,26 @@ Issues = "https://github.com/shugav/engram/issues"
 [project.scripts]
 engram = "engram.__main__:cli"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/engram"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow (e.g. consolidation benchmarks)",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
