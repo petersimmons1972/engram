@@ -142,8 +142,8 @@ the wrong words" layer.
 
 ### Prerequisites
 
-- Python 3.11 or newer
-- Git
+- **Local install:** Python 3.11+, Git
+- **Docker install:** Docker with Compose
 - *(Optional)* An OpenAI API key, or [Ollama](https://ollama.com) with
   `nomic-embed-text` pulled
 
@@ -157,8 +157,41 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-No Docker. No database to provision. No config files. Engram creates its SQLite
-databases on first use at `~/.engram/`.
+Engram creates its SQLite databases on first use at `~/.engram/`.
+
+### Install with Docker
+
+If you prefer containers, Engram ships a multi-stage Dockerfile built on
+[Chainguard](https://www.chainguard.dev/) images — distroless, non-root, ~24×
+fewer CVEs than standard Python images.
+
+```bash
+git clone https://github.com/shugav/engram.git
+cd engram
+docker compose up -d
+```
+
+That starts Engram in SSE mode on port 8788 with BM25-only search. To add
+embeddings or an API key, create a `.env` file:
+
+```bash
+# .env (in the engram directory)
+ENGRAM_API_KEY=your-secret-token
+ENGRAM_EMBEDDER=openai
+OPENAI_API_KEY=sk-...
+```
+
+Then `docker compose up -d` again. Your data persists in a named Docker volume
+(`engram-data`).
+
+To build and run manually without Compose:
+
+```bash
+docker build -t engram .
+docker run -d -p 8788:8788 -v engram-data:/data engram
+```
+
+Point your IDE at `http://localhost:8788/sse` (see "Network Mode" below).
 
 ### Configure Embeddings (Optional)
 
@@ -311,10 +344,11 @@ back it up by copying the `.db` file, or move it to another machine.
 
 ## Scaling
 
-| Deployment     | Agents   | How it works                                                                    |
-|----------------|----------|---------------------------------------------------------------------------------|
+| Deployment     | Agents        | How it works                                                              |
+|----------------|---------------|---------------------------------------------------------------------------|
 | **stdio**      | 1 per machine | IDE spawns engram as a subprocess. Simplest setup.                        |
-| **SSE**        | Many     | One central server, many agent clients over HTTP. All writes serialize through one process. |
+| **SSE**        | Many          | One central server, many clients over HTTP. Writes serialize through one process. |
+| **Docker**     | Many          | Same as SSE, but containerized with Chainguard images. Isolated and reproducible. |
 
 **Known limit:** SQLite is single-writer. In SSE mode, one server process
 handles all writes in series — fine for typical agent workloads, but it won't
@@ -335,19 +369,24 @@ pip uninstall engram
 
 # If cloned manually
 rm -rf /path/to/engram
+
+# If running in Docker
+docker compose down
+docker rmi engram
 ```
 
 ### Remove Your Data
 
-All databases live in one directory:
-
 ```bash
+# Local install — all databases live in one directory
 rm -rf ~/.engram
+
+# Docker install — remove the named volume
+docker volume rm engram_engram-data
 ```
 
 That's everything. No background processes, no system services, no config files
-scattered across your system. If you used the `engram.sh` launcher via SSH,
-removing the clone directory handles it.
+scattered across your system.
 
 ### Remove IDE Configuration
 

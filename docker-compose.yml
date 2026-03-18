@@ -1,0 +1,16 @@
+services:
+  engram:
+    build: .
+    ports:
+      - "${ENGRAM_PORT:-8788}:8788"
+    volumes:
+      - engram-data:/data
+    environment:
+      - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
+      - ENGRAM_EMBEDDER=${ENGRAM_EMBEDDER:-none}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+    restart: unless-stopped
+
+volumes:
+  engram-data:
