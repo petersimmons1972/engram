@@ -3,6 +3,11 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![MCP Server](https://img.shields.io/badge/MCP-server-black)](https://modelcontextprotocol.io/)
+[![Status: Beta](https://img.shields.io/badge/status-beta-orange)](https://github.com/shugav/engram)
+
+> **Beta software.** Engram is under active development. APIs, storage format,
+> and behavior may change between releases. Use in production at your own
+> discretion. See [LICENSE](LICENSE) for the full warranty disclaimer.
 
 Persistent three-layer memory for AI agents, exposed as an MCP server.
 
