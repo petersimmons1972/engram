@@ -7,7 +7,8 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 from .db import MemoryDB
-from .embeddings import EmbeddingClient
+from .embeddings import create_embedder
+from .errors import EmbeddingConfigMismatchError
 from .search import SearchEngine
 from .types import (
     Importance,
@@ -124,9 +125,8 @@ def _get_engine(project: str | None = None) -> SearchEngine:
     project = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
     if project not in _engines:
         db_dir = os.environ.get("ENGRAM_DIR", None)
-        api_key = os.environ.get("OPENAI_API_KEY", None)
         db = MemoryDB(project=project, db_dir=db_dir)
-        embedder = EmbeddingClient(api_key=api_key)
+        embedder = create_embedder()
         _engines[project] = SearchEngine(db=db, embedder=embedder)
     return _engines[project]
 
@@ -168,7 +168,10 @@ def memory_store(
         importance=importance,
     )
 
-    stored = engine.store(memory)
+    try:
+        stored = engine.store(memory)
+    except EmbeddingConfigMismatchError as e:
+        return {"error": str(e)}
 
     return {
         "status": "stored",
@@ -423,7 +426,10 @@ def memory_correct(
         tags=tag_list,
         importance=max(0, min(4, importance)),
     )
-    stored = engine.store(new_memory)
+    try:
+        stored = engine.store(new_memory)
+    except EmbeddingConfigMismatchError as e:
+        return {"error": str(e)}
 
     # Link: new supersedes old
     rel = Relationship(

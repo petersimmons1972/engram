@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import logging
 import math
 from datetime import datetime, timezone
 
 import numpy as np
 
 from .db import MemoryDB
-from .embeddings import EmbeddingClient, cosine_similarity, from_blob, to_blob
+from .embeddings import EmbeddingProvider, NullEmbedder, cosine_similarity, from_blob, to_blob
+from .errors import EmbeddingConfigMismatchError
 from .chunker import chunk_hash, chunk_text, is_duplicate
 from .types import (
     Chunk,
@@ -14,6 +16,8 @@ from .types import (
     Memory,
     SearchResult,
 )
+
+logger = logging.getLogger(__name__)
 
 WEIGHT_VECTOR = 0.45
 WEIGHT_BM25 = 0.25
@@ -24,12 +28,45 @@ DECAY_RATE = 0.01  # per hour
 
 
 class SearchEngine:
-    def __init__(self, db: MemoryDB, embedder: EmbeddingClient):
+    def __init__(self, db: MemoryDB, embedder: EmbeddingProvider):
         self.db = db
         self.embedder = embedder
+        self._is_null = isinstance(embedder, NullEmbedder)
+
+    @property
+    def has_vectors(self) -> bool:
+        """Whether this engine produces vector embeddings."""
+        return not self._is_null
+
+    def _check_embedder_metadata(self) -> None:
+        """Enforce that the current embedder matches the project's stored config.
+
+        On first embed, stores the embedder name and dimensions.
+        On subsequent embeds, raises EmbeddingConfigMismatchError on mismatch.
+        """
+        if self._is_null:
+            return
+
+        stored_name = self.db.get_meta("embedder_name")
+        stored_dims = self.db.get_meta("embedder_dimensions")
+
+        if stored_name is None:
+            self.db.set_meta("embedder_name", self.embedder.name)
+            self.db.set_meta("embedder_dimensions", str(self.embedder.dimensions))
+            return
+
+        if stored_name != self.embedder.name or int(stored_dims or 0) != self.embedder.dimensions:
+            raise EmbeddingConfigMismatchError(
+                stored_name=stored_name,
+                stored_dims=int(stored_dims or 0),
+                current_name=self.embedder.name,
+                current_dims=self.embedder.dimensions,
+            )
 
     def store(self, memory: Memory) -> Memory:
-        """Store a memory: chunk it, embed it, index it."""
+        """Store a memory: chunk it, embed it (if provider available), index it."""
+        self._check_embedder_metadata()
+
         memory = self.db.store_memory(memory)
 
         chunks = chunk_text(memory.content)
@@ -59,7 +96,7 @@ class SearchEngine:
             texts_to_embed.append(text)
             existing_texts.append(text)
 
-        if texts_to_embed:
+        if texts_to_embed and self.has_vectors:
             embeddings = self.embedder.embed_batch(texts_to_embed)
             for chunk_obj, emb in zip(chunk_objects, embeddings):
                 chunk_obj.embedding = to_blob(emb)
@@ -92,32 +129,35 @@ class SearchEngine:
                 cand.bm25_score = norm_score
                 cand.matched_chunk = mem.content[:200]
 
-        # Layer 2: Vector / Semantic
-        query_vec = self.embedder.embed(query)
-        all_chunks = self.db.get_all_chunks_with_embeddings()
+        # Layer 2: Vector / Semantic (skipped for NullEmbedder)
+        if self.has_vectors:
+            query_vec = self.embedder.embed(query)
+            all_chunks = self.db.get_all_chunks_with_embeddings()
 
-        chunk_scores: list[tuple[Chunk, float]] = []
-        for chunk in all_chunks:
-            if chunk.embedding is None:
-                continue
-            chunk_vec = from_blob(chunk.embedding)
-            sim = cosine_similarity(query_vec, chunk_vec)
-            chunk_scores.append((chunk, sim))
-
-        chunk_scores.sort(key=lambda x: x[1], reverse=True)
-        top_chunks = chunk_scores[: top_k * 2]
-
-        if top_chunks:
-            max_vec = top_chunks[0][1] if top_chunks[0][1] > 0 else 1.0
-            for chunk, sim in top_chunks:
-                norm_score = sim / max_vec if max_vec > 0 else 0
-                mem = self.db.get_memory(chunk.memory_id)
-                if not mem:
+            chunk_scores: list[tuple[Chunk, float]] = []
+            for chunk in all_chunks:
+                if chunk.embedding is None:
                     continue
-                cand = candidates.setdefault(mem.id, _Candidate(memory=mem))
-                if norm_score > cand.vector_score:
-                    cand.vector_score = norm_score
-                    cand.matched_chunk = chunk.chunk_text[:200]
+                chunk_vec = from_blob(chunk.embedding)
+                if len(chunk_vec) == 0:
+                    continue
+                sim = cosine_similarity(query_vec, chunk_vec)
+                chunk_scores.append((chunk, sim))
+
+            chunk_scores.sort(key=lambda x: x[1], reverse=True)
+            top_chunks = chunk_scores[: top_k * 2]
+
+            if top_chunks:
+                max_vec = top_chunks[0][1] if top_chunks[0][1] > 0 else 1.0
+                for chunk, sim in top_chunks:
+                    norm_score = sim / max_vec if max_vec > 0 else 0
+                    mem = self.db.get_memory(chunk.memory_id)
+                    if not mem:
+                        continue
+                    cand = candidates.setdefault(mem.id, _Candidate(memory=mem))
+                    if norm_score > cand.vector_score:
+                        cand.vector_score = norm_score
+                        cand.matched_chunk = chunk.chunk_text[:200]
 
         # Score each candidate
         now = datetime.now(timezone.utc)

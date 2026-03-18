@@ -22,15 +22,17 @@ class FakeEmbedder:
 
     Produces similar vectors for texts with overlapping vocabulary, enabling
     realistic semantic search tests without any external API calls.
+    Implements the EmbeddingProvider protocol.
     """
 
-    DIMS = 64
+    name = "fake/test-embedder"
+    dimensions = 64
 
     def embed(self, text: str) -> np.ndarray:
         words = set(text.lower().split())
-        vec = np.zeros(self.DIMS, dtype=np.float32)
+        vec = np.zeros(self.dimensions, dtype=np.float32)
         for w in words:
-            idx = hash(w) % self.DIMS
+            idx = hash(w) % self.dimensions
             vec[idx] = 1.0
         norm = np.linalg.norm(vec)
         return vec / norm if norm > 0 else vec

@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS relationships (
 CREATE INDEX IF NOT EXISTS idx_rel_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_rel_target ON relationships(target_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_pair ON relationships(source_id, target_id, rel_type);
+
+CREATE TABLE IF NOT EXISTS project_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 
@@ -115,6 +120,25 @@ class MemoryDB:
         if self._conn:
             self._conn.close()
             self._conn = None
+
+    # ── Project Metadata ─────────────────────────────────────────
+
+    def get_meta(self, key: str) -> str | None:
+        """Retrieve a project metadata value by key."""
+        conn = self._get_conn()
+        row = conn.execute(
+            "SELECT value FROM project_meta WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key: str, value: str) -> None:
+        """Store or update a project metadata value."""
+        conn = self._get_conn()
+        conn.execute(
+            "INSERT OR REPLACE INTO project_meta (key, value) VALUES (?, ?)",
+            (key, value),
+        )
+        conn.commit()
 
     # ── Memory CRUD ──────────────────────────────────────────────
 
