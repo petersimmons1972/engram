@@ -27,30 +27,9 @@ Engram gives agents a durable "second brain" with:
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────┐
-│        AI Agent (Cursor, VS Code, Claude, ...) │
-└──────────────┬──────────────────────────────────┘
-               │ MCP (stdio or SSE)
-┌──────────────▼──────────────────────────────────┐
-│              Engram MCP Server                  │
-│  Tools: store, recall, connect, list, correct, │
-│  forget, status, feedback, consolidate          │
-└──────┬──────┬───────┬───────┬───────────────────┘
-       │      │       │       │
-  ┌────▼──┐ ┌─▼────┐ ┌▼─────┐ ┌▼──────────┐
-  │Chunker│ │Embed │ │Search│ │   DB       │
-  │       │ │      │ │Engine│ │  SQLite    │
-  └───────┘ └──┬───┘ └──────┘ │  + FTS5    │
-          ┌────┼────┐         │            │
-          │ OpenAI  │         │            │
-          │ Ollama  │         │            │
-          │  None   │         │            │
-          └─────────┘         │            │
-                               │  + BLOBs   │
-                               │  + Graph   │
-                               └────────────┘
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="Engram Architecture" width="900">
+</p>
 
 ## Quick Start
 

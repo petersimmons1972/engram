@@ -1,0 +1,374 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" width="900" height="720">
+  <defs>
+    <!-- Background gradient -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f1419"/>
+      <stop offset="100%" stop-color="#141b22"/>
+    </linearGradient>
+
+    <!-- Card gradients -->
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e2832"/>
+      <stop offset="100%" stop-color="#182028"/>
+    </linearGradient>
+    <linearGradient id="serverGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a2740"/>
+      <stop offset="100%" stop-color="#142035"/>
+    </linearGradient>
+    <linearGradient id="pillBlue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="pillGreen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <linearGradient id="pillAmber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d97706"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="pillRose" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e11d48"/>
+      <stop offset="100%" stop-color="#f43f5e"/>
+    </linearGradient>
+    <linearGradient id="proposedGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1f2e"/>
+      <stop offset="100%" stop-color="#151a26"/>
+    </linearGradient>
+
+    <!-- Glow filters -->
+    <filter id="glowBlue" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#3b82f6" flood-opacity="0.3"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glowGreen" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feFlood flood-color="#10b981" flood-opacity="0.25"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+    <filter id="softShadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- Arrow marker -->
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#3b82f6" stroke-width="1.2"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#10b981" stroke-width="1.2"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="720" fill="url(#bgGrad)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.03">
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(50,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(150,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(250,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(350,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(450,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(550,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(650,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(750,0)"/>
+    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(850,0)"/>
+  </g>
+
+  <!-- ═══════════ TITLE ═══════════ -->
+  <text x="450" y="38" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif" font-size="18" font-weight="700" letter-spacing="0.5">ENGRAM</text>
+  <text x="450" y="55" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" letter-spacing="2" text-transform="uppercase">MCP Memory Server Architecture</text>
+
+  <!-- ═══════════ TOP LAYER: AI AGENTS ═══════════ -->
+  <!-- Section label -->
+  <text x="30" y="85" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">AI CLIENTS</text>
+  <line x1="30" y1="90" x2="580" y2="90" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Agent pills -->
+  <g filter="url(#softShadow)">
+    <rect x="42" y="100" width="120" height="34" rx="17" fill="url(#pillBlue)" opacity="0.9"/>
+    <text x="102" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Cursor</text>
+  </g>
+  <g filter="url(#softShadow)">
+    <rect x="178" y="100" width="120" height="34" rx="17" fill="url(#pillGreen)" opacity="0.9"/>
+    <text x="238" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">VS Code</text>
+  </g>
+  <g filter="url(#softShadow)">
+    <rect x="314" y="100" width="120" height="34" rx="17" fill="url(#pillAmber)" opacity="0.9"/>
+    <text x="374" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Claude Code</text>
+  </g>
+  <g filter="url(#softShadow)">
+    <rect x="450" y="100" width="120" height="34" rx="17" fill="url(#pillRose)" opacity="0.9"/>
+    <text x="510" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Windsurf</text>
+  </g>
+
+  <!-- ═══════════ MCP PROTOCOL CONNECTION ═══════════ -->
+  <!-- Vertical connecting lines from each pill -->
+  <g stroke="#3b82f6" stroke-width="1.5" opacity="0.5">
+    <line x1="102" y1="134" x2="102" y2="155"/>
+    <line x1="238" y1="134" x2="238" y2="155"/>
+    <line x1="374" y1="134" x2="374" y2="155"/>
+    <line x1="510" y1="134" x2="510" y2="155"/>
+  </g>
+
+  <!-- Protocol bar -->
+  <rect x="42" y="155" width="528" height="28" rx="6" fill="#1a2740" stroke="#3b82f6" stroke-width="1" opacity="0.7"/>
+  <text x="306" y="173" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="11" font-weight="500" letter-spacing="0.5">MCP Protocol  ·  stdio | SSE</text>
+
+  <!-- Arrow down from protocol bar -->
+  <line x1="306" y1="183" x2="306" y2="210" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrowBlue)" opacity="0.6"/>
+
+  <!-- ═══════════ MIDDLE LAYER: ENGRAM MCP SERVER ═══════════ -->
+  <text x="30" y="220" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">CORE SERVER</text>
+  <line x1="30" y1="225" x2="580" y2="225" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Main server box -->
+  <g filter="url(#shadow)">
+    <rect x="42" y="235" width="528" height="130" rx="12" fill="url(#serverGrad)" stroke="#3b82f6" stroke-width="1.5" stroke-opacity="0.5"/>
+  </g>
+
+  <!-- Server title -->
+  <text x="306" y="260" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif" font-size="15" font-weight="700">Engram MCP Server</text>
+  <line x1="80" y1="270" x2="532" y2="270" stroke="#2a3a50" stroke-width="1"/>
+
+  <!-- Tool labels — row 1 -->
+  <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">
+    <rect x="68" y="282" width="66" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="101" y="298" text-anchor="middle" fill="#60a5fa">store</text>
+
+    <rect x="146" y="282" width="66" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="179" y="298" text-anchor="middle" fill="#60a5fa">recall</text>
+
+    <rect x="224" y="282" width="72" height="24" rx="5" fill="#0f1419" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="260" y="298" text-anchor="middle" fill="#34d399">connect</text>
+
+    <rect x="308" y="282" width="56" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="336" y="298" text-anchor="middle" fill="#60a5fa">list</text>
+
+    <rect x="376" y="282" width="68" height="24" rx="5" fill="#0f1419" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="410" y="298" text-anchor="middle" fill="#fbbf24">correct</text>
+
+    <rect x="456" y="282" width="66" height="24" rx="5" fill="#0f1419" stroke="#f43f5e" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="489" y="298" text-anchor="middle" fill="#fb7185">forget</text>
+  </g>
+
+  <!-- Tool labels — row 2 -->
+  <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">
+    <rect x="118" y="316" width="66" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="151" y="332" text-anchor="middle" fill="#60a5fa">status</text>
+
+    <rect x="198" y="316" width="78" height="24" rx="5" fill="#0f1419" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="237" y="332" text-anchor="middle" fill="#34d399">feedback</text>
+
+    <rect x="290" y="316" width="96" height="24" rx="5" fill="#0f1419" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="338" y="332" text-anchor="middle" fill="#fbbf24">consolidate</text>
+
+    <rect x="400" y="316" width="80" height="24" rx="5" fill="#0f1419" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="440" y="332" text-anchor="middle" fill="#34d399">configure</text>
+  </g>
+
+  <!-- ═══════════ CONNECTING LINES TO BOTTOM LAYER ═══════════ -->
+  <g stroke="#10b981" stroke-width="1.2" opacity="0.45" fill="none">
+    <!-- Curved paths from server to each component -->
+    <path d="M150,365 L150,395 Q150,410 150,410 L138,430" marker-end="url(#arrowGreen)"/>
+    <path d="M260,365 L260,395 Q260,410 260,410 L270,430" marker-end="url(#arrowGreen)"/>
+    <path d="M370,365 L370,395 Q370,410 370,410 L400,430" marker-end="url(#arrowGreen)"/>
+    <path d="M470,365 L470,395 Q470,410 470,410 L490,430" marker-end="url(#arrowGreen)"/>
+  </g>
+
+  <!-- ═══════════ BOTTOM LAYER: COMPONENTS ═══════════ -->
+  <text x="30" y="420" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">DATA LAYER</text>
+  <line x1="30" y1="425" x2="580" y2="425" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Component 1: Chunker -->
+  <g filter="url(#softShadow)">
+    <rect x="30" y="438" width="125" height="80" rx="10" fill="url(#cardGrad)" stroke="#10b981" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="92" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Chunker</text>
+    <line x1="48" y1="470" x2="138" y2="470" stroke="#1e3a3a" stroke-width="0.8"/>
+    <text x="92" y="487" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5">Splits text into</text>
+    <text x="92" y="500" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5">semantic chunks</text>
+  </g>
+
+  <!-- Component 2: Embeddings -->
+  <g filter="url(#softShadow)">
+    <rect x="170" y="438" width="125" height="80" rx="10" fill="url(#cardGrad)" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="232" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Embeddings</text>
+    <line x1="188" y1="470" x2="278" y2="470" stroke="#1e2a3a" stroke-width="0.8"/>
+    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" fill="#94a3b8">
+      <text x="200" y="487">OpenAI</text>
+      <text x="200" y="501">Ollama</text>
+      <text x="200" y="515" fill="#475569" font-style="italic">None (disabled)</text>
+    </g>
+  </g>
+
+  <!-- Component 3: Search Engine -->
+  <g filter="url(#softShadow)">
+    <rect x="310" y="438" width="135" height="80" rx="10" fill="url(#cardGrad)" stroke="#f59e0b" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="377" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Search Engine</text>
+    <line x1="328" y1="470" x2="428" y2="470" stroke="#2a2a1e" stroke-width="0.8"/>
+    <text x="377" y="487" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5">Hybrid scoring</text>
+    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8.5" fill="#fbbf24" opacity="0.7">
+      <text x="330" y="503">BM25</text>
+      <text x="363" y="503">Vector</text>
+      <text x="402" y="503">Graph</text>
+      <text x="330" y="515">Recency</text>
+    </g>
+  </g>
+
+  <!-- Component 4: SQLite Database -->
+  <g filter="url(#softShadow)">
+    <rect x="460" y="438" width="125" height="80" rx="10" fill="url(#cardGrad)" stroke="#f43f5e" stroke-width="1" stroke-opacity="0.4"/>
+    <text x="522" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">SQLite</text>
+    <line x1="478" y1="470" x2="568" y2="470" stroke="#2a1e2a" stroke-width="0.8"/>
+    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" fill="#fb7185" opacity="0.7">
+      <text x="480" y="487">FTS5</text>
+      <text x="520" y="487">BLOBs</text>
+      <text x="480" y="501">Graph</text>
+      <text x="520" y="501">WAL</text>
+    </g>
+  </g>
+
+  <!-- ═══════════ PROPOSED ENHANCEMENT (right column) ═══════════ -->
+  <text x="620" y="85" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">PROPOSED</text>
+  <line x1="620" y1="90" x2="875" y2="90" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Dashed container -->
+  <rect x="620" y="100" width="255" height="418" rx="14" fill="url(#proposedGrad)" stroke="#475569" stroke-width="1.5" stroke-dasharray="6 3" opacity="0.85"/>
+
+  <!-- Issue label -->
+  <rect x="640" y="112" width="215" height="24" rx="5" fill="#1e293b" stroke="#64748b" stroke-width="0.8"/>
+  <text x="747" y="128" text-anchor="middle" fill="#94a3b8" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">Issue #26 · Containerized Deploy</text>
+
+  <!-- Shield icon + Chainguard label -->
+  <g transform="translate(670, 152)">
+    <!-- Shield shape -->
+    <path d="M12,2 L22,7 L22,13 C22,19 18,24 12,26 C6,24 2,19 2,13 L2,7 Z" fill="none" stroke="#10b981" stroke-width="1.5" opacity="0.8"/>
+    <path d="M12,6 L12,16" stroke="#10b981" stroke-width="1.2" opacity="0.5"/>
+    <path d="M8,11 L12,15 L18,8" stroke="#10b981" stroke-width="1.5" fill="none" opacity="0.8"/>
+    <text x="30" y="18" fill="#34d399" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Chainguard Hardened</text>
+  </g>
+
+  <!-- Container box 1: Python -->
+  <g filter="url(#softShadow)">
+    <rect x="640" y="195" width="215" height="100" rx="10" fill="#0f1419" stroke="#10b981" stroke-width="1" stroke-opacity="0.5"/>
+
+    <!-- Container header -->
+    <rect x="640" y="195" width="215" height="30" rx="10" fill="#10b981" fill-opacity="0.1"/>
+    <rect x="640" y="215" width="215" height="10" fill="#10b981" fill-opacity="0.1"/>
+    <text x="660" y="215" fill="#34d399" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="600">Engram Container</text>
+
+    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">
+      <text x="656" y="243" fill="#94a3b8">FROM</text>
+      <text x="680" y="243" fill="#60a5fa">cgr.dev/chainguard/</text>
+      <text x="660" y="257" fill="#60a5fa">  python:latest</text>
+      <text x="656" y="278" fill="#64748b">Distroless · Non-root</text>
+      <text x="656" y="290" fill="#64748b">SBOM included · CVE-free</text>
+    </g>
+  </g>
+
+  <!-- Arrow between containers -->
+  <line x1="747" y1="295" x2="747" y2="318" stroke="#10b981" stroke-width="1" stroke-dasharray="3 2" opacity="0.4" marker-end="url(#arrowGreen)"/>
+  <text x="770" y="310" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8">optional</text>
+
+  <!-- Container box 2: PostgreSQL -->
+  <g filter="url(#softShadow)">
+    <rect x="640" y="322" width="215" height="100" rx="10" fill="#0f1419" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.5"/>
+
+    <!-- Container header -->
+    <rect x="640" y="322" width="215" height="30" rx="10" fill="#3b82f6" fill-opacity="0.1"/>
+    <rect x="640" y="342" width="215" height="10" fill="#3b82f6" fill-opacity="0.1"/>
+    <text x="660" y="342" fill="#60a5fa" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="600">PostgreSQL Sidecar</text>
+
+    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">
+      <text x="656" y="370" fill="#94a3b8">FROM</text>
+      <text x="680" y="370" fill="#60a5fa">cgr.dev/chainguard/</text>
+      <text x="660" y="384" fill="#60a5fa">  postgres:latest</text>
+      <text x="656" y="405" fill="#64748b">pgvector extension</text>
+      <text x="656" y="417" fill="#64748b">Replaces SQLite + BLOBs</text>
+    </g>
+  </g>
+
+  <!-- K8s deployment note -->
+  <g transform="translate(650, 438)">
+    <rect x="0" y="0" width="195" height="60" rx="8" fill="#1a1f2e" stroke="#475569" stroke-width="0.8" stroke-dasharray="4 2"/>
+    <text x="97" y="18" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5" font-weight="500">Deployment target</text>
+    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8.5" fill="#475569">
+      <text x="14" y="34">Kubernetes Pod</text>
+      <text x="14" y="48">PVC: engram-data (RWO)</text>
+    </g>
+  </g>
+
+  <!-- ═══════════ DATA FLOW LEGEND ═══════════ -->
+  <g transform="translate(30, 545)">
+    <text x="0" y="0" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">DATA FLOW</text>
+    <line x1="0" y1="5" x2="555" y2="5" stroke="#1e293b" stroke-width="1"/>
+
+    <!-- Flow diagram -->
+    <g transform="translate(0, 20)">
+      <!-- Store flow -->
+      <rect x="0" y="0" width="70" height="22" rx="5" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="35" y="15" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">store()</text>
+
+      <line x1="70" y1="11" x2="92" y2="11" stroke="#3b82f6" stroke-width="1" opacity="0.5" marker-end="url(#arrowBlue)"/>
+
+      <rect x="95" y="0" width="70" height="22" rx="5" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="130" y="15" text-anchor="middle" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">chunk</text>
+
+      <line x1="165" y1="11" x2="187" y2="11" stroke="#3b82f6" stroke-width="1" opacity="0.5" marker-end="url(#arrowBlue)"/>
+
+      <rect x="190" y="0" width="70" height="22" rx="5" fill="#3b82f6" fill-opacity="0.12" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="225" y="15" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">embed</text>
+
+      <line x1="260" y1="11" x2="282" y2="11" stroke="#3b82f6" stroke-width="1" opacity="0.5" marker-end="url(#arrowBlue)"/>
+
+      <rect x="285" y="0" width="70" height="22" rx="5" fill="#f43f5e" fill-opacity="0.12" stroke="#f43f5e" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="320" y="15" text-anchor="middle" fill="#fb7185" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">persist</text>
+    </g>
+
+    <!-- Recall flow -->
+    <g transform="translate(0, 52)">
+      <rect x="0" y="0" width="72" height="22" rx="5" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="36" y="15" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">recall()</text>
+
+      <line x1="72" y1="11" x2="94" y2="11" stroke="#f59e0b" stroke-width="1" opacity="0.5"/>
+
+      <rect x="95" y="0" width="70" height="22" rx="5" fill="#f59e0b" fill-opacity="0.12" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="130" y="15" text-anchor="middle" fill="#fbbf24" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">search</text>
+
+      <line x1="165" y1="11" x2="187" y2="11" stroke="#f59e0b" stroke-width="1" opacity="0.5"/>
+
+      <rect x="190" y="0" width="70" height="22" rx="5" fill="#f59e0b" fill-opacity="0.12" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="225" y="15" text-anchor="middle" fill="#fbbf24" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">rank</text>
+
+      <line x1="260" y1="11" x2="282" y2="11" stroke="#f59e0b" stroke-width="1" opacity="0.5"/>
+
+      <rect x="285" y="0" width="70" height="22" rx="5" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
+      <text x="320" y="15" text-anchor="middle" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">return</text>
+    </g>
+
+    <!-- Legend items -->
+    <g transform="translate(400, 5)">
+      <rect x="0" y="0" width="10" height="10" rx="2" fill="#3b82f6" opacity="0.7"/>
+      <text x="16" y="9" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">MCP Tools</text>
+
+      <rect x="0" y="18" width="10" height="10" rx="2" fill="#10b981" opacity="0.7"/>
+      <text x="16" y="27" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Processing</text>
+
+      <rect x="0" y="36" width="10" height="10" rx="2" fill="#f59e0b" opacity="0.7"/>
+      <text x="16" y="45" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Search / Scoring</text>
+
+      <rect x="0" y="54" width="10" height="10" rx="2" fill="#f43f5e" opacity="0.7"/>
+      <text x="16" y="63" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Storage</text>
+    </g>
+  </g>
+
+  <!-- ═══════════ FOOTER ═══════════ -->
+  <line x1="30" y1="690" x2="870" y2="690" stroke="#1e293b" stroke-width="0.5"/>
+  <text x="450" y="708" text-anchor="middle" fill="#334155" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Architecture by Peter Simmons · Original by shugav</text>
+</svg>
