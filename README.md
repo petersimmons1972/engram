@@ -35,8 +35,13 @@ Engram gives agents a durable "second brain" with:
        │      │       │       │
   ┌────▼──┐ ┌─▼────┐ ┌▼─────┐ ┌▼──────────┐
   │Chunker│ │Embed │ │Search│ │   DB       │
-  │       │ │OpenAI│ │Engine│ │  SQLite    │
-  └───────┘ └──────┘ └──────┘ │  + FTS5    │
+  │       │ │      │ │Engine│ │  SQLite    │
+  └───────┘ └──┬───┘ └──────┘ │  + FTS5    │
+          ┌────┼────┐         │            │
+          │ OpenAI  │         │            │
+          │ Ollama  │         │            │
+          │  None   │         │            │
+          └─────────┘         │            │
                                │  + BLOBs   │
                                │  + Graph   │
                                └────────────┘
@@ -54,11 +59,17 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2) Set your OpenAI API key
+### 2) Configure embeddings (optional)
 
-```bash
-export OPENAI_API_KEY="sk-..."
-```
+Engram works in three embedding modes. It auto-detects the best available:
+
+| Mode | Quality | Setup | Env var |
+|------|---------|-------|---------|
+| **OpenAI** | Highest | `export OPENAI_API_KEY="sk-..."` | `ENGRAM_EMBEDDER=openai` |
+| **Ollama** | Good (free, local) | [Install Ollama](https://ollama.com), then `ollama pull nomic-embed-text` | `ENGRAM_EMBEDDER=ollama` |
+| **None** | BM25 keyword only | Nothing needed | `ENGRAM_EMBEDDER=none` |
+
+If no embedder is configured, engram auto-detects: Ollama (if running) -> OpenAI (if key set) -> BM25-only.
 
 ### 3) Add Engram to Cursor (local stdio mode)
 
@@ -126,7 +137,9 @@ You can also run `setup-remote.sh` to generate this config automatically.
 
 | Variable | Default | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | (required) | OpenAI key used for embeddings |
+| `ENGRAM_EMBEDDER` | auto-detect | Embedding provider: `openai`, `ollama`, or `none` |
+| `OPENAI_API_KEY` | (unset) | OpenAI key (only needed if using OpenAI embeddings) |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL (only needed if non-default) |
 | `ENGRAM_PROJECT` | `default` | Project namespace (separate DB file per project) |
 | `ENGRAM_DIR` | `~/.engram/` | Directory where project databases are stored |
 | `ENGRAM_API_KEY` | (unset) | Optional bearer token required for SSE requests |
@@ -182,7 +195,26 @@ Each project gets its own SQLite file at `~/.engram/{project}.db`.
 - `chunks` -- chunked text, embedding BLOBs, and dedup hashes
 - `relationships` -- typed directed graph edges
 
-WAL mode is enabled for better concurrent read behavior.
+WAL mode is enabled for better concurrent read behavior. A `busy_timeout` of 5 seconds is set to handle brief lock contention from async interleaving.
+
+Each project also stores embedding metadata (`project_meta` table) to prevent mixing vectors from incompatible models.
+
+## Architecture & Scaling
+
+### Deployment modes
+
+| Mode | Agents | How |
+|------|--------|-----|
+| **stdio** (local) | Single agent per machine | Cursor spawns engram as a subprocess |
+| **SSE** (network) | Many agents, one server | Run one central server; agents connect as clients |
+
+For multiple concurrent agents, **use SSE mode**. The single server process serializes all writes through one SQLite connection, avoiding write conflicts entirely. All agents are clients -- they send MCP requests over HTTP, not direct DB writes.
+
+### Known limitations
+
+- **SQLite single-writer**: One process can write at a time. SSE mode handles this by design (one server process). Running multiple server processes against the same DB will cause `SQLITE_BUSY` errors even with the 5-second busy timeout.
+- **Embedding model lock-in per project**: Once a project stores its first embedding, switching models requires re-indexing all chunks. A `memory_reindex` tool is planned for a future release.
+- **Future**: A `StorageBackend` interface is planned to support PostgreSQL for true multi-process concurrent writes.
 
 ## Compatible MCP Clients
 
