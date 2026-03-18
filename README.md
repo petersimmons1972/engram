@@ -162,8 +162,17 @@ Engram creates its SQLite databases on first use at `~/.engram/`.
 ### Install with Docker
 
 If you prefer containers, Engram ships a multi-stage Dockerfile built on
-[Chainguard](https://www.chainguard.dev/) images — distroless, non-root, ~24×
-fewer CVEs than standard Python images.
+[Chainguard](https://www.chainguard.dev/) images instead of the standard Docker
+Hub Python images.
+
+Why? A typical `python:3.11-slim` image carries ~120 known CVEs at any given
+time. Chainguard's equivalent carries ~5. That's a 24× reduction in
+vulnerability surface before you write a line of code. The images are
+distroless (no shell, no package manager), run as non-root by default (UID
+65532), and ship with SBOM attestations for supply chain verification. If you're
+running a server that stores your AI agents' memory — decisions, architecture
+notes, credentials context — the container it runs in should be hardened. More
+at [chainguard.dev/images](https://images.chainguard.dev/).
 
 ```bash
 git clone https://github.com/shugav/engram.git
