@@ -288,6 +288,18 @@ class MemoryDB:
         ).fetchall()
         return [self._row_to_chunk(r) for r in rows]
 
+    def get_all_chunk_texts(self, limit: int = 5000) -> list[str]:
+        """Fetch chunk texts for dedup comparison. Works regardless of embedding status."""
+        conn = self._get_conn()
+        rows = conn.execute(
+            """SELECT c.chunk_text FROM chunks c
+               JOIN memories m ON m.id = c.memory_id
+               WHERE m.project = ?
+               LIMIT ?""",
+            (self.project, limit),
+        ).fetchall()
+        return [r["chunk_text"] for r in rows]
+
     def chunk_hash_exists(self, chunk_hash: str) -> bool:
         conn = self._get_conn()
         row = conn.execute(

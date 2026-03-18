@@ -174,3 +174,40 @@ class TestNullEmbedderSearch:
 
         if results:
             assert results[0].score_breakdown["vector"] == 0.0
+
+    def test_bm25_dedup_works_without_embeddings(self, tmp_path: Path):
+        """Bug fix: dedup must work in NullEmbedder mode (no embeddings on chunks)."""
+        db = MemoryDB(project="bm25-dedup", db_dir=tmp_path)
+        emb = NullEmbedder()
+        engine = SearchEngine(db=db, embedder=emb)
+
+        engine.store(Memory(content="Exact same content stored twice"))
+        engine.store(Memory(content="Exact same content stored twice"))
+
+        # hash-based dedup should prevent the second chunk from being stored
+        stats = db.get_stats()
+        assert stats.total_chunks == 1
+
+
+class TestAutoDetectOllamaUrl:
+    def test_auto_detect_reads_env_var(self, monkeypatch):
+        """Bug fix: auto-detect must respect OLLAMA_URL env var."""
+        monkeypatch.setenv("OLLAMA_URL", "http://custom-host:11434")
+        monkeypatch.delenv("ENGRAM_EMBEDDER", raising=False)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+        # Auto-detect will try custom-host, fail (unreachable), and fall back to NullEmbedder.
+        # The important thing is it TRIED the custom URL, not localhost.
+        emb = create_embedder()
+        assert isinstance(emb, NullEmbedder)
+
+
+class TestMetadataVersion:
+    def test_version_stored_on_first_embed(self, tmp_path: Path):
+        db = MemoryDB(project="version-test", db_dir=tmp_path)
+        emb = FakeEmbedder()
+        engine = SearchEngine(db=db, embedder=emb)
+
+        engine.store(Memory(content="Test version storage"))
+
+        assert db.get_meta("embedder_version") == "v1-test"

@@ -53,6 +53,7 @@ class SearchEngine:
         if stored_name is None:
             self.db.set_meta("embedder_name", self.embedder.name)
             self.db.set_meta("embedder_dimensions", str(self.embedder.dimensions))
+            self.db.set_meta("embedder_version", getattr(self.embedder, "version", "unknown"))
             return
 
         if stored_name != self.embedder.name or int(stored_dims or 0) != self.embedder.dimensions:
@@ -70,10 +71,7 @@ class SearchEngine:
         memory = self.db.store_memory(memory)
 
         chunks = chunk_text(memory.content)
-        existing_texts = [
-            c.chunk_text
-            for c in self.db.get_all_chunks_with_embeddings(limit=5000)
-        ]
+        existing_texts = self.db.get_all_chunk_texts(limit=5000)
 
         texts_to_embed: list[str] = []
         chunk_objects: list[Chunk] = []

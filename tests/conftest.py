@@ -27,6 +27,7 @@ class FakeEmbedder:
 
     name = "fake/test-embedder"
     dimensions = 64
+    version = "v1-test"
 
     def embed(self, text: str) -> np.ndarray:
         words = set(text.lower().split())

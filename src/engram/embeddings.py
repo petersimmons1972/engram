@@ -37,6 +37,7 @@ class OpenAIEmbedder:
 
     name = "openai/text-embedding-3-small"
     dimensions = 1536
+    version = "v1"
 
     def __init__(self, api_key: str | None = None):
         from openai import OpenAI
@@ -67,6 +68,7 @@ class OllamaEmbedder:
 
     name = "ollama/nomic-embed-text"
     dimensions = 768
+    version = "v1.5"
 
     def __init__(self, base_url: str = "http://localhost:11434"):
         self._base_url = base_url.rstrip("/")
@@ -105,6 +107,7 @@ class NullEmbedder:
 
     name = "none"
     dimensions = 0
+    version = "n/a"
 
     def embed(self, text: str) -> np.ndarray:
         return np.array([], dtype=np.float32)
@@ -145,9 +148,10 @@ def create_embedder(
         return NullEmbedder()
 
     # Auto-detect
-    if _ollama_reachable(ollama_url):
-        logger.info("Auto-detected Ollama at %s, using local embeddings", ollama_url)
-        return OllamaEmbedder(base_url=ollama_url)
+    auto_url = os.environ.get("OLLAMA_URL", ollama_url)
+    if _ollama_reachable(auto_url):
+        logger.info("Auto-detected Ollama at %s, using local embeddings", auto_url)
+        return OllamaEmbedder(base_url=auto_url)
 
     key = api_key or os.environ.get("OPENAI_API_KEY")
     if key:

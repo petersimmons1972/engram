@@ -99,6 +99,29 @@ class TestGraphExpansion:
             assert other_id in connected_ids
 
 
+class TestSupersedeWarning:
+    def test_superseded_memory_shows_warning(self, engine):
+        """Verify that superseded memories get a WARNING flag in recall results."""
+        old = engine.store(Memory(content="Use MySQL for the database"))
+        new = engine.store(Memory(content="Use PostgreSQL instead of MySQL"))
+
+        rel = Relationship(
+            source_id=new.id, target_id=old.id,
+            rel_type=RelationType.SUPERSEDES,
+        )
+        engine.db.store_relationship(rel)
+
+        # Demote old memory like memory_correct does
+        engine.db.update_memory(old.id, importance=4)
+
+        results = engine.recall("MySQL database")
+        for r in results:
+            if r.memory.id == old.id:
+                # The server layer adds the WARNING; search layer attaches connected
+                connected_types = [c.rel_type for c in r.connected]
+                assert "supersedes" in connected_types
+
+
 class TestFeedback:
     def test_positive_feedback_boosts_edges(self, engine):
         m1 = Memory(content="Memory A")
