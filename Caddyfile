@@ -1,0 +1,7 @@
+# Engram TLS termination with Caddy (Chainguard image)
+# Replace "engram.example.com" with your actual domain.
+# Caddy handles automatic HTTPS via Let's Encrypt.
+
+engram.example.com {
+    reverse_proxy engram:8788
+}

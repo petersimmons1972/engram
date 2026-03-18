@@ -13,11 +13,11 @@ session starts from zero. You re-explain. The agent re-discovers the same
 gotchas. Both of you waste time.
 
 Engram is a persistent memory server for AI agents. It speaks
-[MCP](https://modelcontextprotocol.io/), stores everything in a local SQLite
-file you own, and searches it four ways — keyword match, semantic similarity,
-knowledge graph, and recency. Search for "database lock contention" and it finds
-the memory you stored about "WAL mode busy timeout." No cloud service. No
-subscription. One Python process, one database file, your disk.
+[MCP](https://modelcontextprotocol.io/), stores everything in a database you
+own, and searches it four ways — keyword match, semantic similarity, knowledge
+graph, and recency. Search for "database lock contention" and it finds the
+memory you stored about "WAL mode busy timeout." No cloud service. No
+subscription. Run it locally with SQLite, or deploy with Docker and PostgreSQL.
 
 When one agent stores a decision, the next agent finds it. Switch from Cursor to
 Claude Code — the context follows. Three agents on the same project share what
@@ -48,9 +48,9 @@ Engram runs as a local MCP server and exposes ten tools any MCP client can call:
 | `memory_status`        | View stats: memory count, chunks, graph size, DB size           |
 | `onboarding`           | Get a project-specific quick-start guide for new sessions       |
 
-Engram organizes memories by **project** — each project gets its own database
-file. Your web app memories don't leak into your CLI tool's context. Store
-user-wide preferences in `project="global"` so every project can find them.
+Engram organizes memories by **project** — each project gets its own namespace.
+Your web app memories don't leak into your CLI tool's context. Store user-wide
+preferences in `project="global"` so every project can find them.
 
 ---
 
@@ -69,9 +69,9 @@ remember the exact error code or just the shape of the problem:
   <img src="docs/scoring.svg" alt="Engram Search Scoring" width="900">
 </p>
 
-**1. BM25 Keyword Search** — SQLite FTS5 with Porter stemming. Search for
-"SQLITE_BUSY timeout" and it finds the exact phrase. Fast, precise, no external
-dependencies.
+**1. BM25 Keyword Search** — Full-text search with Porter stemming (FTS5 in
+SQLite, tsvector in PostgreSQL). Search for "SQLITE_BUSY timeout" and it finds
+the exact phrase. Fast, precise, no external dependencies.
 
 **2. Vector Semantic Search** — Optional embedding-based similarity. Search for
 "database lock contention" when the stored memory says "WAL mode busy timeout" —
@@ -142,26 +142,16 @@ the wrong words" layer.
 
 ### Prerequisites
 
-- **Local install:** Python 3.11+, Git
-- **Docker install:** Docker with Compose
+- Docker with Compose
 - *(Optional)* An OpenAI API key, or [Ollama](https://ollama.com) with
   `nomic-embed-text` pulled
 
+> **Not using Docker?** See [ALTERNATIVE-INSTALL.md](ALTERNATIVE-INSTALL.md) for
+> local pip install with SQLite.
+
 ### Install
 
-```bash
-git clone https://github.com/shugav/engram.git
-cd engram
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-Engram creates its SQLite databases on first use at `~/.engram/`.
-
-### Install with Docker
-
-If you prefer containers, Engram ships a multi-stage Dockerfile built on
+Engram ships a multi-stage Dockerfile built on
 [Chainguard](https://www.chainguard.dev/) images instead of the standard Docker
 Hub Python images.
 
@@ -174,33 +164,51 @@ running a server that stores your AI agents' memory — decisions, architecture
 notes, credentials context — the container it runs in should be hardened. More
 at [chainguard.dev/images](https://images.chainguard.dev/).
 
+Every container in the stack uses Chainguard images:
+
+| Service        | Image                                  | Role                        |
+|----------------|----------------------------------------|-----------------------------|
+| **Engram**     | `cgr.dev/chainguard/python:latest`     | MCP server (SSE mode)       |
+| **PostgreSQL** | `cgr.dev/chainguard/postgres:latest`   | Database backend            |
+| **Caddy**      | `cgr.dev/chainguard/caddy:latest`      | TLS termination (optional)  |
+
+> **Why `:latest`?** Chainguard's free tier only provides `:latest` and
+> `:latest-dev` tags. Version-pinned tags (e.g., `python:3.12.4`) require a
+> [paid subscription](https://www.chainguard.dev/pricing). The `:latest` tag
+> always tracks the most recent stable release. If you need deterministic builds,
+> pin by digest: `cgr.dev/chainguard/python@sha256:abc123...`.
+
 ```bash
 git clone https://github.com/shugav/engram.git
 cd engram
 docker compose up -d
 ```
 
-That starts Engram in SSE mode on port 8788 with BM25-only search. To add
-embeddings or an API key, create a `.env` file:
+That starts Engram in SSE mode on port 8788 with a PostgreSQL database. To add
+embeddings, an API key, or a custom database password, create a `.env` file:
 
 ```bash
 # .env (in the engram directory)
 ENGRAM_API_KEY=your-secret-token
 ENGRAM_EMBEDDER=openai
 OPENAI_API_KEY=sk-...
+POSTGRES_PASSWORD=change-me-in-production
 ```
 
 Then `docker compose up -d` again. Your data persists in a named Docker volume
-(`engram-data`).
+(`pgdata`).
 
-To build and run manually without Compose:
+To add TLS termination for production deployments, uncomment the Caddy service
+in `docker-compose.yml` and edit `Caddyfile` with your domain:
 
 ```bash
-docker build -t engram .
-docker run -d -p 8788:8788 -v engram-data:/data engram
+# Caddyfile
+engram.example.com {
+    reverse_proxy engram:8788
+}
 ```
 
-Point your IDE at `http://localhost:8788/sse` (see "Network Mode" below).
+Point your IDE at `https://engram.example.com/sse` (see "Connect Your IDE" below).
 
 ### Configure Embeddings (Optional)
 
@@ -217,7 +225,9 @@ ollama pull nomic-embed-text
 
 ### Connect Your IDE
 
-#### Cursor / VS Code (local, same machine)
+Docker runs Engram in SSE mode. Point your IDE at the server:
+
+#### Cursor / VS Code
 
 Add to `~/.cursor/mcp.json`:
 
@@ -225,64 +235,38 @@ Add to `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "engram": {
-      "command": "/path/to/engram/.venv/bin/python",
-      "args": ["-m", "engram"],
-      "env": {
-        "OPENAI_API_KEY": "sk-...",
-        "PYTHONPATH": "/path/to/engram/src"
-      }
+      "url": "http://localhost:8788/sse"
     }
   }
 }
 ```
-
-Replace `/path/to/engram` with your actual clone path. Restart Cursor. Engram
-starts as a subprocess — no server to manage.
 
 #### Claude Code
 
 ```bash
-claude mcp add engram -- /path/to/engram/.venv/bin/python -m engram
+claude mcp add engram --transport sse http://localhost:8788/sse
 ```
 
-#### Network Mode (SSE) — Multiple Machines
+Replace `localhost` with your server's address if running remotely.
 
-Start the server on one machine:
-
-```bash
-python -m engram --transport sse --port 8788
-```
-
-Point any client at it:
-
-```json
-{
-  "mcpServers": {
-    "engram": {
-      "url": "http://your-server:8788/sse"
-    }
-  }
-}
-```
-
-Or use the setup script to auto-configure a remote Cursor instance:
-
-```bash
-bash setup-remote.sh your-server 8788
-```
+> **Local (stdio) mode** — not using Docker? See
+> [ALTERNATIVE-INSTALL.md](ALTERNATIVE-INSTALL.md) for subprocess-based IDE
+> configuration.
 
 ---
 
 ## Environment Variables
 
-| Variable           | Default                   | What it does                                       |
-|--------------------|---------------------------|----------------------------------------------------|
-| `ENGRAM_EMBEDDER`  | *(auto-detect)*           | Force embedding mode: `openai`, `ollama`, or `none` |
-| `OPENAI_API_KEY`   | *(unset)*                 | OpenAI key for vector embeddings                   |
-| `OLLAMA_URL`       | `http://localhost:11434`  | Ollama server address (if non-default)             |
-| `ENGRAM_PROJECT`   | `default`                 | Default project namespace                          |
-| `ENGRAM_DIR`       | `~/.engram/`              | Where database files live                          |
-| `ENGRAM_API_KEY`   | *(unset)*                 | Bearer token for SSE authentication                |
+| Variable             | Default                  | What it does                                         |
+|----------------------|--------------------------|------------------------------------------------------|
+| `ENGRAM_EMBEDDER`    | *(auto-detect)*          | Force embedding mode: `openai`, `ollama`, or `none`  |
+| `OPENAI_API_KEY`     | *(unset)*                | OpenAI key for vector embeddings                     |
+| `OLLAMA_URL`         | `http://localhost:11434` | Ollama server address (if non-default)               |
+| `ENGRAM_PROJECT`     | `default`                | Default project namespace                            |
+| `ENGRAM_DIR`         | `~/.engram/`             | Where SQLite database files live (local mode)        |
+| `ENGRAM_API_KEY`     | *(unset)*                | Bearer token for SSE authentication                  |
+| `DATABASE_URL`       | *(unset)*                | PostgreSQL connection string (Docker mode)           |
+| `POSTGRES_PASSWORD`  | `engram`                 | PostgreSQL password (Docker mode — change this)      |
 
 ---
 
@@ -305,8 +289,9 @@ attack surface matches any other CLI tool you run locally.
   trusted mesh VPN like Tailscale, binding to your Tailscale IP is reasonable.
 
 **What Engram stores:** Memory text, embedding vectors (opaque float arrays), and
-a knowledge graph (relationship metadata). All of it lives in `~/.engram/*.db`
-SQLite files. Engram sends no data anywhere unless you configure OpenAI
+a knowledge graph (relationship metadata). In local mode, everything lives in
+`~/.engram/*.db` SQLite files. In Docker mode, PostgreSQL stores the same data
+in a Docker volume. Engram sends no data anywhere unless you configure OpenAI
 embeddings — then your memory text goes to OpenAI's embedding API. Use Ollama or
 `none` mode if that concerns you.
 
@@ -336,73 +321,57 @@ noise. The memory gets sharper the more you use it.
 
 ## Database Layout
 
-Each project gets its own SQLite file at `~/.engram/{project}.db`.
+**Local mode** uses SQLite — each project gets its own file at
+`~/.engram/{project}.db`. WAL mode is on for better read concurrency. Each
+database is self-contained — back it up by copying the `.db` file.
+
+**Docker mode** uses PostgreSQL with the same schema in a shared database,
+separated by project namespace. PostgreSQL handles concurrent writes from
+multiple agents without SQLite's single-writer limitation.
 
 | Table             | Purpose                                                         |
 |-------------------|-----------------------------------------------------------------|
 | `memories`        | Memory records with content, type, tags, importance, timestamps |
-| `memory_fts`      | FTS5 full-text index (Porter stemming, Unicode)                 |
-| `chunks`          | Chunked text with embedding BLOBs and dedup hashes              |
+| `memory_fts`      | Full-text index (FTS5 in SQLite, tsvector in PostgreSQL)        |
+| `chunks`          | Chunked text with embedding vectors and dedup hashes            |
 | `relationships`   | Typed directed graph edges with decay-capable strength values    |
 | `project_meta`    | Metadata: embedding model name, dimensions, schema version      |
-
-WAL mode is on for better read concurrency. Each database is self-contained —
-back it up by copying the `.db` file, or move it to another machine.
 
 ---
 
 ## Scaling
 
-| Deployment     | Agents        | How it works                                                              |
-|----------------|---------------|---------------------------------------------------------------------------|
-| **stdio**      | 1 per machine | IDE spawns engram as a subprocess. Simplest setup.                        |
-| **SSE**        | Many          | One central server, many clients over HTTP. Writes serialize through one process. |
-| **Docker**     | Many          | Same as SSE, but containerized with Chainguard images. Isolated and reproducible. |
+| Deployment     | Database   | Agents        | How it works                                                 |
+|----------------|------------|---------------|--------------------------------------------------------------|
+| **stdio**      | SQLite     | 1 per machine | IDE spawns engram as a subprocess. Simplest setup.           |
+| **SSE**        | SQLite     | Many          | One server, many clients over HTTP. Single-writer limit.     |
+| **Docker**     | PostgreSQL | Many          | Chainguard containers with full concurrent write support.    |
 
-**Known limit:** SQLite is single-writer. In SSE mode, one server process
-handles all writes in series — fine for typical agent workloads, but it won't
-scale to hundreds of concurrent writers. A PostgreSQL backend is planned for true
-multi-process concurrency.
+Local installs use SQLite — one database file per project, zero configuration.
+Docker deployments use PostgreSQL, which handles concurrent writes from multiple
+agents without contention. If you outgrow SQLite on a local install, switch to
+Docker and your data migrates with `memory_consolidate`.
 
 ---
 
 ## Uninstall
 
-Engram leaves a small footprint and cleans up fast.
-
-### Remove the Code
-
 ```bash
-# If installed with pip
-pip uninstall engram
-
-# If cloned manually
-rm -rf /path/to/engram
-
-# If running in Docker
 docker compose down
 docker rmi engram
+docker volume rm engram_pgdata
 ```
 
-### Remove Your Data
+Then remove the `engram` entry from your IDE's MCP config:
 
-```bash
-# Local install — all databases live in one directory
-rm -rf ~/.engram
-
-# Docker install — remove the named volume
-docker volume rm engram_engram-data
-```
+- **Cursor/VS Code:** `~/.cursor/mcp.json` → remove the `"engram"` key
+- **Claude Code:** `claude mcp remove engram`
 
 That's everything. No background processes, no system services, no config files
 scattered across your system.
 
-### Remove IDE Configuration
-
-Delete the `engram` entry from your MCP config:
-
-- **Cursor/VS Code:** `~/.cursor/mcp.json` → remove the `"engram"` key
-- **Claude Code:** `claude mcp remove engram`
+> **Local install?** See [ALTERNATIVE-INSTALL.md](ALTERNATIVE-INSTALL.md) for
+> local uninstall instructions.
 
 ---
 

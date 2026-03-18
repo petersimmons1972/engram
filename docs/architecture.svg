@@ -221,29 +221,29 @@
     </g>
   </g>
 
-  <!-- Component 4: SQLite Database -->
+  <!-- Component 4: Database -->
   <g filter="url(#softShadow)">
     <rect x="460" y="438" width="125" height="80" rx="10" fill="url(#cardGrad)" stroke="#f43f5e" stroke-width="1" stroke-opacity="0.4"/>
-    <text x="522" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">SQLite</text>
+    <text x="522" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Database</text>
     <line x1="478" y1="470" x2="568" y2="470" stroke="#2a1e2a" stroke-width="0.8"/>
     <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" fill="#fb7185" opacity="0.7">
-      <text x="480" y="487">FTS5</text>
-      <text x="520" y="487">BLOBs</text>
-      <text x="480" y="501">Graph</text>
-      <text x="520" y="501">WAL</text>
+      <text x="480" y="487">SQLite</text>
+      <text x="527" y="487">(local)</text>
+      <text x="480" y="501">PostgreSQL</text>
+      <text x="544" y="501">(Docker)</text>
     </g>
   </g>
 
-  <!-- ═══════════ PROPOSED ENHANCEMENT (right column) ═══════════ -->
-  <text x="620" y="85" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">PROPOSED</text>
+  <!-- ═══════════ DOCKER DEPLOYMENT (right column) ═══════════ -->
+  <text x="620" y="85" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">DOCKER DEPLOYMENT</text>
   <line x1="620" y1="90" x2="875" y2="90" stroke="#1e293b" stroke-width="1"/>
 
-  <!-- Dashed container -->
-  <rect x="620" y="100" width="255" height="418" rx="14" fill="url(#proposedGrad)" stroke="#475569" stroke-width="1.5" stroke-dasharray="6 3" opacity="0.85"/>
+  <!-- Container -->
+  <rect x="620" y="100" width="255" height="418" rx="14" fill="url(#proposedGrad)" stroke="#10b981" stroke-width="1.5" stroke-opacity="0.5" opacity="0.85"/>
 
-  <!-- Issue label -->
-  <rect x="640" y="112" width="215" height="24" rx="5" fill="#1e293b" stroke="#64748b" stroke-width="0.8"/>
-  <text x="747" y="128" text-anchor="middle" fill="#94a3b8" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">Issue #26 · Containerized Deploy</text>
+  <!-- Label -->
+  <rect x="640" y="112" width="215" height="24" rx="5" fill="#1e293b" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.5"/>
+  <text x="747" y="128" text-anchor="middle" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">docker compose up -d</text>
 
   <!-- Shield icon + Chainguard label -->
   <g transform="translate(670, 152)">
@@ -273,8 +273,8 @@
   </g>
 
   <!-- Arrow between containers -->
-  <line x1="747" y1="295" x2="747" y2="318" stroke="#10b981" stroke-width="1" stroke-dasharray="3 2" opacity="0.4" marker-end="url(#arrowGreen)"/>
-  <text x="770" y="310" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8">optional</text>
+  <line x1="747" y1="295" x2="747" y2="318" stroke="#10b981" stroke-width="1.2" opacity="0.5" marker-end="url(#arrowGreen)"/>
+  <text x="770" y="310" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8">depends_on</text>
 
   <!-- Container box 2: PostgreSQL -->
   <g filter="url(#softShadow)">
@@ -294,13 +294,13 @@
     </g>
   </g>
 
-  <!-- K8s deployment note -->
+  <!-- Caddy TLS note -->
   <g transform="translate(650, 438)">
-    <rect x="0" y="0" width="195" height="60" rx="8" fill="#1a1f2e" stroke="#475569" stroke-width="0.8" stroke-dasharray="4 2"/>
-    <text x="97" y="18" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5" font-weight="500">Deployment target</text>
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8.5" fill="#475569">
-      <text x="14" y="34">Kubernetes Pod</text>
-      <text x="14" y="48">PVC: engram-data (RWO)</text>
+    <rect x="0" y="0" width="195" height="60" rx="8" fill="#1a1f2e" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
+    <text x="97" y="18" text-anchor="middle" fill="#fbbf24" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5" font-weight="500">Caddy (optional TLS)</text>
+    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8.5" fill="#94a3b8">
+      <text x="14" y="34">cgr.dev/chainguard/caddy</text>
+      <text x="14" y="48">Auto HTTPS · Reverse proxy</text>
     </g>
   </g>
 

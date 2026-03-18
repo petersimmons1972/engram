@@ -1,3 +1,8 @@
+# Chainguard images: free tier requires :latest / :latest-dev tags.
+# Version-pinned tags (e.g., python:3.12) require a paid Chainguard subscription.
+# The :latest tag always tracks the most recent stable release.
+# See: https://edu.chainguard.dev/chainguard/chainguard-images/faq/
+
 # Stage 1: Install dependencies in a builder with pip available
 FROM cgr.dev/chainguard/python:latest-dev AS builder
 
@@ -5,7 +10,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt --target /app/deps
 
-# Stage 2: Copy into minimal runtime (no shell, no pip, non-root)
+# Stage 2: Copy into minimal runtime (no shell, no pip, non-root UID 65532)
 FROM cgr.dev/chainguard/python:latest
 
 WORKDIR /app

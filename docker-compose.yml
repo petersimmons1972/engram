@@ -1,16 +1,52 @@
+# Chainguard images: free tier requires :latest tag only.
+# Version-pinned tags require a paid subscription.
+# See: https://edu.chainguard.dev/chainguard/chainguard-images/faq/
+
 services:
   engram:
     build: .
     ports:
       - "${ENGRAM_PORT:-8788}:8788"
-    volumes:
-      - engram-data:/data
     environment:
       - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
       - ENGRAM_EMBEDDER=${ENGRAM_EMBEDDER:-none}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-}
+      - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
+  postgres:
+    image: cgr.dev/chainguard/postgres:latest
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=engram
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-engram}
+      - POSTGRES_DB=engram
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "engram"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # Optional: TLS termination for production SSE deployments.
+  # Uncomment and configure Caddyfile with your domain.
+  # caddy:
+  #   image: cgr.dev/chainguard/caddy:latest
+  #   ports:
+  #     - "443:443"
+  #     - "80:80"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy-data:/data
+  #   depends_on:
+  #     - engram
+  #   restart: unless-stopped
+
 volumes:
-  engram-data:
+  pgdata:
+  # caddy-data:
