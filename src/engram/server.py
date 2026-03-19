@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
-from .db import MemoryDB
+from .db import create_database
 from .embeddings import create_embedder
 from .errors import EmbeddingConfigMismatchError
 from .search import SearchEngine
@@ -138,7 +138,7 @@ def _get_engine(project: str | None = None) -> SearchEngine:
             _engines.move_to_end(project)
             return _engines[project]
         db_dir = os.environ.get("ENGRAM_DIR", None)
-        db = MemoryDB(project=project, db_dir=db_dir)
+        db = create_database(project=project, db_dir=db_dir)
         embedder = create_embedder()
         engine = SearchEngine(db=db, embedder=embedder)
         _engines[project] = engine

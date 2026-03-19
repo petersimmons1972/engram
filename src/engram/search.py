@@ -5,7 +5,7 @@ import math
 from datetime import datetime, timezone
 
 from .chunker import chunk_hash, chunk_text
-from .db import MemoryDB
+from .db import DatabaseBackend
 from .embeddings import EmbeddingProvider, NullEmbedder, cosine_similarity, from_blob, to_blob
 from .errors import EmbeddingConfigMismatchError
 from .types import (
@@ -26,7 +26,7 @@ DECAY_RATE = 0.01  # per hour
 
 
 class SearchEngine:
-    def __init__(self, db: MemoryDB, embedder: EmbeddingProvider):
+    def __init__(self, db: DatabaseBackend, embedder: EmbeddingProvider):
         self.db = db
         self.embedder = embedder
         self._is_null = isinstance(embedder, NullEmbedder)
