@@ -88,7 +88,13 @@ CREATE TABLE IF NOT EXISTS project_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed);
+CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
 """
+
+CURRENT_SCHEMA_VERSION = 2
 
 
 class MemoryDB:
@@ -121,6 +127,19 @@ class MemoryDB:
     def _init_db(self) -> None:
         conn = self._get_conn()
         conn.executescript(SCHEMA_SQL)
+        conn.commit()
+        self._migrate(conn)
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        row = conn.execute("SELECT value FROM project_meta WHERE key = 'schema_version'").fetchone()
+        current = int(row["value"]) if row else 1
+        if current < 2:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project)")
+            conn.commit()
+        conn.execute("INSERT OR REPLACE INTO project_meta (key, value) VALUES ('schema_version', ?)",
+                     (str(CURRENT_SCHEMA_VERSION),))
         conn.commit()
 
     def close(self) -> None:
