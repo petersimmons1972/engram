@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -234,3 +235,63 @@ class TestPruning:
         pruned = db.prune_stale_memories(max_age_hours=720, max_importance=3)
         assert pruned == 0
         assert db.get_memory(stored.id) is not None
+
+
+class TestThreadSafety:
+    def test_concurrent_stores(self, tmp_db_dir):
+        db = MemoryDB(project="threadsafe", db_dir=tmp_db_dir)
+        errors = []
+
+        def store_batch(start):
+            try:
+                for i in range(20):
+                    db.store_memory(Memory(content=f"Thread {start} memory {i}"))
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=store_batch, args=(t,)) for t in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert not errors, f"Errors: {errors}"
+        mems = db.list_memories(limit=200)
+        assert len(mems) == 100
+
+    def test_close_releases_connection(self, tmp_db_dir):
+        db = MemoryDB(project="closetest", db_dir=tmp_db_dir)
+        db.store_memory(Memory(content="test"))
+        db.close()
+        assert db._conn is None
+
+    def test_context_manager(self, tmp_db_dir):
+        with MemoryDB(project="ctxtest", db_dir=tmp_db_dir) as db:
+            db.store_memory(Memory(content="test"))
+        assert db._conn is None
+
+
+class TestSchemaMigration:
+    def test_schema_version_stored(self, tmp_db_dir):
+        db = MemoryDB(project="migration", db_dir=tmp_db_dir)
+        version = db.get_meta("schema_version")
+        assert version is not None
+        assert int(version) >= 2
+
+    def test_date_indexes_exist(self, tmp_db_dir):
+        db = MemoryDB(project="indexes", db_dir=tmp_db_dir)
+        conn = db._get_conn()
+        indexes = conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
+        index_names = {r["name"] for r in indexes}
+        assert "idx_memories_last_accessed" in index_names
+        assert "idx_memories_updated_at" in index_names
+        assert "idx_memories_project" in index_names
+
+    def test_old_db_gets_migrated(self, tmp_db_dir):
+        db = MemoryDB(project="olddb", db_dir=tmp_db_dir)
+        conn = db._get_conn()
+        conn.execute("DELETE FROM project_meta WHERE key = 'schema_version'")
+        conn.commit()
+        db.close()
+        db2 = MemoryDB(project="olddb", db_dir=tmp_db_dir)
+        version = db2.get_meta("schema_version")
+        assert version == "2"

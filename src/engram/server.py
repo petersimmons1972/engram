@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 
 from mcp.server.fastmcp import FastMCP
 
@@ -113,6 +114,7 @@ and the user's conventions for this codebase. This bootstraps future agents.
 mcp = FastMCP("engram", instructions=ENGRAM_INSTRUCTIONS)
 
 _engines: dict[str, SearchEngine] = {}
+_engines_lock = threading.Lock()
 
 
 def _get_engine(project: str | None = None) -> SearchEngine:
@@ -121,13 +123,14 @@ def _get_engine(project: str | None = None) -> SearchEngine:
     Each project gets its own SQLite database file (~/.engram/{project}.db),
     so memories are fully isolated between projects.
     """
-    project = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
-    if project not in _engines:
-        db_dir = os.environ.get("ENGRAM_DIR", None)
-        db = MemoryDB(project=project, db_dir=db_dir)
-        embedder = create_embedder()
-        _engines[project] = SearchEngine(db=db, embedder=embedder)
-    return _engines[project]
+    with _engines_lock:
+        project = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
+        if project not in _engines:
+            db_dir = os.environ.get("ENGRAM_DIR", None)
+            db = MemoryDB(project=project, db_dir=db_dir)
+            embedder = create_embedder()
+            _engines[project] = SearchEngine(db=db, embedder=embedder)
+        return _engines[project]
 
 
 @mcp.tool()
