@@ -241,6 +241,49 @@ class TestStats:
         assert stats.by_type.get("error") == 1
 
 
+class TestStatsPerProject:
+    def test_chunks_counted_per_project(self, tmp_db_dir):
+        from engram.search import SearchEngine
+        from tests.conftest import FakeEmbedder
+
+        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
+        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
+        eng_a = SearchEngine(db=db_a, embedder=FakeEmbedder())
+        eng_b = SearchEngine(db=db_b, embedder=FakeEmbedder())
+        eng_a.store(Memory(content="Alpha memory about databases"))
+        eng_b.store(Memory(content="Beta memory about APIs"))
+        eng_b.store(Memory(content="Beta memory about auth"))
+        stats_a = db_a.get_stats()
+        stats_b = db_b.get_stats()
+        assert stats_a.total_chunks >= 1
+        assert stats_b.total_chunks >= 2
+
+
+class TestTransactionSafety:
+    def test_store_relationship_rejects_invalid_memory_id(self, db):
+        rel = Relationship(source_id="nonexistent", target_id="also-fake")
+        with pytest.raises(ValueError):
+            db.store_relationship(rel)
+
+    def test_delete_memory_atomic(self, db):
+        from engram.search import SearchEngine
+        from tests.conftest import FakeEmbedder
+
+        engine = SearchEngine(db=db, embedder=FakeEmbedder())
+        mem = engine.store(Memory(content="To be atomically deleted"))
+        mid = mem.id
+        chunks_before = db.get_chunks_for_memory(mid)
+        assert len(chunks_before) >= 1
+        result = db.delete_memory_atomic(mid)
+        assert result is True
+        assert db.get_memory(mid) is None
+        assert db.get_chunks_for_memory(mid) == []
+
+    def test_delete_memory_atomic_nonexistent(self, db):
+        result = db.delete_memory_atomic("nonexistent")
+        assert result is False
+
+
 class TestPruning:
     def test_prune_stale_memories(self, db: MemoryDB):
         old = Memory(content="Old and forgotten", importance=4)

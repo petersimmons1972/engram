@@ -264,11 +264,19 @@ class SearchEngine:
         # Stage 1: Dedup chunks
         deduped = self._dedup_chunks()
 
+        # Stage 1b: Rebuild FTS index to remove stale entries from deduped/pruned memories
+        if deduped > 0:
+            self.db.rebuild_fts()
+
         # Stage 2: Decay and prune edges
         decayed, pruned_edges = self.db.decay_all_edges(decay_factor=0.02, min_strength=0.1)
 
         # Stage 3: Prune stale memories (30 days, low importance, never accessed)
         pruned_memories = self.db.prune_stale_memories(max_age_hours=720, max_importance=3)
+
+        # Rebuild FTS if any memories were pruned (triggers may not fire for all deletions)
+        if pruned_memories > 0:
+            self.db.rebuild_fts()
 
         return {
             "chunks_deduped": deduped,
@@ -279,18 +287,17 @@ class SearchEngine:
 
     def _dedup_chunks(self) -> int:
         all_chunks = self.db.get_all_chunks_with_embeddings()
-        merged = 0
         seen_hashes: set[str] = set()
+        dup_ids: list[str] = []
         for chunk in all_chunks:
             h = chunk.chunk_hash
             if h in seen_hashes:
-                self.db._get_conn().execute("DELETE FROM chunks WHERE id = ?", (chunk.id,))
-                merged += 1
+                dup_ids.append(chunk.id)
             else:
                 seen_hashes.add(h)
-        if merged:
-            self.db._get_conn().commit()
-        return merged
+        if dup_ids:
+            self.db.delete_chunks_by_ids(dup_ids)
+        return len(dup_ids)
 
 
 class _Candidate:

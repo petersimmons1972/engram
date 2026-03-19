@@ -34,9 +34,11 @@ def _patch_embedder(monkeypatch):
     import engram.server as srv
 
     def patched_get_engine(project=None):
-        project = (project or "default").strip().lower()
+        import os
+        import re
+        raw = (project or "default").strip().lower()
+        project = re.sub(r'[^a-z0-9_-]', '', raw) or "default"
         if project not in srv._engines:
-            import os
             db_dir = os.environ.get("ENGRAM_DIR", None)
             db = MemoryDB(project=project, db_dir=db_dir)
             embedder = FakeEmbedder()
@@ -208,6 +210,25 @@ class TestAuthMiddleware:
         scope = {"type": "unknown_protocol", "headers": []}
         await wrapped(scope, None, mock_send)
         assert len(responses) > 0
+
+
+class TestProjectNormalization:
+    def test_project_name_normalized_consistently(self, _patch_embedder):
+        from engram.server import memory_recall, memory_store
+
+        result = memory_store(content="Test content for normalization", project="My-App")
+        recall = memory_recall(query="Test", project="my-app")
+        assert recall["count"] >= 1
+
+
+class TestAtomicOperations:
+    def test_forget_is_atomic(self, _patch_embedder):
+        from engram.server import memory_forget, memory_store
+
+        result = memory_store(content="Atomic test", project="test-atomic")
+        mid = result["id"]
+        forget = memory_forget(memory_id=mid, project="test-atomic")
+        assert forget["status"] == "forgotten"
 
 
 class TestMemoryStatus:

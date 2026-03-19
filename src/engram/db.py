@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from .types import (
     Chunk,
@@ -243,6 +246,24 @@ class MemoryDB:
             conn.commit()
             return cursor.rowcount > 0
 
+    def delete_memory_atomic(self, memory_id: str) -> bool:
+        """Delete a memory and all its chunks/relationships in a single transaction."""
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("DELETE FROM chunks WHERE memory_id = ?", (memory_id,))
+                conn.execute(
+                    "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
+                    (memory_id, memory_id),
+                )
+                cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+                conn.commit()
+                return cursor.rowcount > 0
+            except Exception:
+                conn.rollback()
+                raise
+
     def list_memories(
         self,
         memory_type: MemoryType | None = None,
@@ -352,11 +373,28 @@ class MemoryDB:
             conn.execute("DELETE FROM chunks WHERE memory_id = ?", (memory_id,))
             conn.commit()
 
+    def delete_chunks_by_ids(self, chunk_ids: list[str]) -> int:
+        """Delete specific chunks by their IDs."""
+        if not chunk_ids:
+            return 0
+        with self._lock:
+            conn = self._get_conn()
+            placeholders = ",".join("?" for _ in chunk_ids)
+            cursor = conn.execute(f"DELETE FROM chunks WHERE id IN ({placeholders})", chunk_ids)
+            conn.commit()
+            return cursor.rowcount
+
     # ── Relationship CRUD ────────────────────────────────────────
 
     def store_relationship(self, rel: Relationship) -> Relationship:
         with self._lock:
             conn = self._get_conn()
+            src = conn.execute("SELECT 1 FROM memories WHERE id = ?", (rel.source_id,)).fetchone()
+            tgt = conn.execute("SELECT 1 FROM memories WHERE id = ?", (rel.target_id,)).fetchone()
+            if not src:
+                raise ValueError(f"Source memory '{rel.source_id}' does not exist")
+            if not tgt:
+                raise ValueError(f"Target memory '{rel.target_id}' does not exist")
             try:
                 conn.execute(
                     """INSERT INTO relationships (id, source_id, target_id, rel_type,
@@ -537,7 +575,8 @@ class MemoryDB:
                        LIMIT ?""",
                     (safe_query, self.project, limit),
                 ).fetchall()
-            except sqlite3.OperationalError:
+            except sqlite3.OperationalError as exc:
+                logger.debug("FTS query failed for %r: %s", safe_query, exc)
                 return []
 
             results = []
@@ -546,6 +585,19 @@ class MemoryDB:
                 score = -row["rank"]  # BM25 returns negative scores; negate for positive
                 results.append((mem, score))
             return results
+
+    def rebuild_fts(self) -> None:
+        """Rebuild the FTS index by dropping and re-populating from memories table."""
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute("DELETE FROM memory_fts")
+            conn.execute(
+                "INSERT INTO memory_fts(rowid, content, tags) "
+                "SELECT rowid, content, tags FROM memories WHERE project = ?",
+                (self.project,),
+            )
+            conn.commit()
+            logger.info("Rebuilt FTS index for project %s", self.project)
 
     # ── Stats ────────────────────────────────────────────────────
 
@@ -557,9 +609,19 @@ class MemoryDB:
                 "SELECT COUNT(*) as c FROM memories WHERE project = ?", (self.project,)
             ).fetchone()["c"]
 
-            total_chunks = conn.execute("SELECT COUNT(*) as c FROM chunks").fetchone()["c"]
+            total_chunks = conn.execute(
+                """SELECT COUNT(*) as c FROM chunks c
+                   JOIN memories m ON m.id = c.memory_id
+                   WHERE m.project = ?""",
+                (self.project,),
+            ).fetchone()["c"]
 
-            total_rels = conn.execute("SELECT COUNT(*) as c FROM relationships").fetchone()["c"]
+            total_rels = conn.execute(
+                """SELECT COUNT(*) as c FROM relationships r
+                   WHERE r.source_id IN (SELECT id FROM memories WHERE project = ?)
+                   OR r.target_id IN (SELECT id FROM memories WHERE project = ?)""",
+                (self.project, self.project),
+            ).fetchone()["c"]
 
             type_rows = conn.execute(
                 "SELECT memory_type, COUNT(*) as c FROM memories"

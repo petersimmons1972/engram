@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 import threading
+from collections import OrderedDict
 
 from mcp.server.fastmcp import FastMCP
+
+logger = logging.getLogger(__name__)
 
 from .db import MemoryDB
 from .embeddings import create_embedder
@@ -114,7 +119,8 @@ and the user's conventions for this codebase. This bootstraps future agents.
 
 mcp = FastMCP("engram", instructions=ENGRAM_INSTRUCTIONS)
 
-_engines: dict[str, SearchEngine] = {}
+_MAX_ENGINES = 64
+_engines: OrderedDict[str, SearchEngine] = OrderedDict()
 _engines_lock = threading.Lock()
 
 
@@ -122,16 +128,25 @@ def _get_engine(project: str | None = None) -> SearchEngine:
     """Return (or create) a SearchEngine for the given project.
 
     Each project gets its own SQLite database file (~/.engram/{project}.db),
-    so memories are fully isolated between projects.
+    so memories are fully isolated between projects. Uses LRU eviction to
+    bound cache size to _MAX_ENGINES entries.
     """
     with _engines_lock:
-        project = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
-        if project not in _engines:
-            db_dir = os.environ.get("ENGRAM_DIR", None)
-            db = MemoryDB(project=project, db_dir=db_dir)
-            embedder = create_embedder()
-            _engines[project] = SearchEngine(db=db, embedder=embedder)
-        return _engines[project]
+        raw = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
+        project = re.sub(r'[^a-z0-9_-]', '', raw) or "default"
+        if project in _engines:
+            _engines.move_to_end(project)
+            return _engines[project]
+        db_dir = os.environ.get("ENGRAM_DIR", None)
+        db = MemoryDB(project=project, db_dir=db_dir)
+        embedder = create_embedder()
+        engine = SearchEngine(db=db, embedder=embedder)
+        _engines[project] = engine
+        if len(_engines) > _MAX_ENGINES:
+            _, evicted = _engines.popitem(last=False)
+            evicted.db.close()
+            logger.info("Evicted least-recently-used engine from cache")
+        return engine
 
 
 @mcp.tool()
@@ -487,9 +502,7 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
     if not mem:
         return {"error": f"Memory '{memory_id}' not found."}
 
-    engine.db.delete_chunks_for_memory(memory_id)
-    engine.db.delete_relationships_for_memory(memory_id)
-    engine.db.delete_memory(memory_id)
+    engine.db.delete_memory_atomic(memory_id)
 
     return {"status": "forgotten", "id": memory_id}
 
