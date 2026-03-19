@@ -42,12 +42,14 @@ engram = "engram.__main__:cli"
 openai = ["openai>=1.30.0"]
 ollama = ["httpx>=0.24"]
 embeddings = ["numpy>=1.26.0"]
-all = ["openai>=1.30.0", "httpx>=0.24", "numpy>=1.26.0"]
+postgres = ["psycopg[pool]>=3.1.0"]
+all = ["openai>=1.30.0", "httpx>=0.24", "numpy>=1.26.0", "psycopg[pool]>=3.1.0"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "ruff>=0.4",
     "numpy>=1.26.0",
+    "psycopg[pool]>=3.1.0",
 ]
 
 [tool.hatch.build.targets.wheel]
