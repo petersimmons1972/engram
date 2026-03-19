@@ -47,6 +47,21 @@ services:
   #     - engram
   #   restart: unless-stopped
 
+  test-postgres:
+    image: postgres:16-alpine
+    profiles: ["test"]
+    environment:
+      - POSTGRES_DB=engram_test
+      - POSTGRES_USER=engram
+      - POSTGRES_PASSWORD=test
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "engram"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
 volumes:
   pgdata:
   # caddy-data:
