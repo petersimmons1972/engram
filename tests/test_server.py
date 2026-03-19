@@ -137,6 +137,29 @@ class TestMemoryList:
         assert result["count"] == 2
 
 
+class TestInputValidation:
+    def test_invalid_memory_type_in_list(self, _patch_embedder):
+        from engram.server import memory_list
+        result = memory_list(memory_type="invalid_type", project="test-project")
+        assert "error" in result
+
+    def test_limit_capped(self, _patch_embedder):
+        from engram.server import memory_list
+        result = memory_list(limit=999999, project="test-project")
+        assert isinstance(result, dict)
+
+    def test_content_too_long_rejected(self, _patch_embedder):
+        from engram.server import memory_store
+        huge = "x" * 60_000
+        result = memory_store(content=huge, project="test-project")
+        assert "error" in result
+
+    def test_recall_limit_capped(self, _patch_embedder):
+        from engram.server import memory_recall
+        result = memory_recall(query="test", top_k=10000, project="test-project")
+        assert isinstance(result, dict)
+
+
 class TestMemoryStatus:
     def test_status_returns_stats(self, _patch_embedder):
         from engram.server import memory_status, memory_store

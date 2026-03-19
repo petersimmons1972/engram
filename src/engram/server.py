@@ -11,6 +11,7 @@ from .embeddings import create_embedder
 from .errors import EmbeddingConfigMismatchError
 from .search import SearchEngine
 from .types import (
+    MAX_CONTENT_LENGTH,
     Memory,
     MemoryType,
     Relationship,
@@ -150,6 +151,9 @@ def memory_store(
     Returns:
         The stored memory's ID and metadata.
     """
+    if len(content) > MAX_CONTENT_LENGTH:
+        return {"error": f"Content exceeds maximum length of {MAX_CONTENT_LENGTH} characters."}
+
     engine = _get_engine(project or None)
 
     try:
@@ -212,6 +216,7 @@ def memory_recall(
         Ranked list of memories with scores, matched chunks, and connected context.
     """
     engine = _get_engine(project or None)
+    top_k = max(1, min(50, top_k))
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
     mt = memory_type if memory_type else None
@@ -345,8 +350,15 @@ def memory_list(
         List of memories sorted by most recently updated.
     """
     engine = _get_engine(project or None)
+    limit = max(1, min(100, limit))
 
-    mt = MemoryType(memory_type) if memory_type else None
+    mt = None
+    if memory_type:
+        try:
+            mt = MemoryType(memory_type)
+        except ValueError:
+            return {"error": f"Invalid memory_type '{memory_type}'. Valid: {[t.value for t in MemoryType]}"}
+
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
     mi = min_importance if min_importance < 4 else None
 
