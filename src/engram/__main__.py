@@ -11,14 +11,22 @@ Examples:
 """
 
 import argparse
+import logging
 import os
 import sys
 
 from .server import main
 
+logger = logging.getLogger(__name__)
+
 
 def cli() -> None:
     """Parse CLI arguments and launch the engram MCP server."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+
     parser = argparse.ArgumentParser(
         description="Engram MCP memory server -- persistent three-layer memory for AI agents.",
     )
@@ -48,23 +56,21 @@ def cli() -> None:
     args = parser.parse_args()
 
     if args.transport == "sse":
-        print(f"Starting engram SSE server on {args.host}:{args.port}", file=sys.stderr)
+        logger.info("Starting engram SSE server on %s:%s", args.host, args.port)
         if args.api_key:
-            print("API key authentication enabled.", file=sys.stderr)
+            logger.info("API key authentication enabled.")
         elif args.host in ("0.0.0.0", "::"):
-            print(
-                "WARNING: Binding to all interfaces WITHOUT API key authentication.\n"
-                "Anyone on your network can read and write memories.\n"
-                "Set --api-key or ENGRAM_API_KEY to secure this endpoint.\n"
-                "To bind to localhost only, use --host 127.0.0.1\n"
-                "\n"
-                "If exposing beyond a trusted mesh VPN (e.g. Tailscale), deploy\n"
-                "behind a reverse proxy with TLS (Caddy, Nginx) to prevent\n"
+            logger.warning(
+                "Binding to all interfaces WITHOUT API key authentication. "
+                "Anyone on your network can read and write memories. "
+                "Set --api-key or ENGRAM_API_KEY to secure this endpoint. "
+                "To bind to localhost only, use --host 127.0.0.1. "
+                "If exposing beyond a trusted mesh VPN (e.g. Tailscale), deploy "
+                "behind a reverse proxy with TLS (Caddy, Nginx) to prevent "
                 "plaintext credential sniffing.",
-                file=sys.stderr,
             )
         else:
-            print("No API key set.", file=sys.stderr)
+            logger.info("No API key set.")
 
     main(
         transport=args.transport,

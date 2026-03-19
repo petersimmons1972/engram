@@ -587,16 +587,26 @@ class MemoryDB:
             return results
 
     def rebuild_fts(self) -> None:
-        """Rebuild the FTS index by dropping and re-populating from memories table."""
+        """Rebuild the FTS index from the memories table.
+
+        Uses the FTS5 'rebuild' command for content-sync tables, which
+        re-reads all content from the source table. Falls back to manual
+        delete+reinsert if 'rebuild' fails (e.g., corrupted index).
+        """
         with self._lock:
             conn = self._get_conn()
-            conn.execute("DELETE FROM memory_fts")
-            conn.execute(
-                "INSERT INTO memory_fts(rowid, content, tags) "
-                "SELECT rowid, content, tags FROM memories WHERE project = ?",
-                (self.project,),
-            )
-            conn.commit()
+            try:
+                conn.execute("INSERT INTO memory_fts(memory_fts) VALUES('rebuild')")
+                conn.commit()
+            except sqlite3.DatabaseError:
+                logger.warning("FTS rebuild command failed, falling back to manual rebuild")
+                conn.execute("DELETE FROM memory_fts")
+                conn.execute(
+                    "INSERT INTO memory_fts(rowid, content, tags) "
+                    "SELECT rowid, content, tags FROM memories WHERE project = ?",
+                    (self.project,),
+                )
+                conn.commit()
             logger.info("Rebuilt FTS index for project %s", self.project)
 
     # ── Stats ────────────────────────────────────────────────────

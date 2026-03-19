@@ -231,6 +231,57 @@ class TestAtomicOperations:
         assert forget["status"] == "forgotten"
 
 
+class TestEngineCacheLRU:
+    def test_cache_evicts_oldest(self, monkeypatch):
+        """Test that engine cache evicts LRU entries when exceeding max size."""
+        import engram.server as srv
+        from tests.conftest import FakeEmbedder
+
+        monkeypatch.setattr(srv, "create_embedder", lambda: FakeEmbedder())
+        srv._engines.clear()
+        original_max = srv.MAX_ENGINE_CACHE_SIZE
+        srv.MAX_ENGINE_CACHE_SIZE = 3
+        try:
+            for i in range(5):
+                srv._get_engine(f"proj-{i}")
+            assert len(srv._engines) <= 3
+            # Most recent 3 should survive
+            assert "proj-4" in srv._engines
+            assert "proj-3" in srv._engines
+            assert "proj-2" in srv._engines
+            # Oldest should be evicted
+            assert "proj-0" not in srv._engines
+            assert "proj-1" not in srv._engines
+        finally:
+            srv.MAX_ENGINE_CACHE_SIZE = original_max
+            srv._engines.clear()
+
+    def test_cache_moves_accessed_to_end(self, monkeypatch):
+        """Test that accessing a cached engine moves it to MRU position."""
+        import engram.server as srv
+        from tests.conftest import FakeEmbedder
+
+        monkeypatch.setattr(srv, "create_embedder", lambda: FakeEmbedder())
+        srv._engines.clear()
+        original_max = srv.MAX_ENGINE_CACHE_SIZE
+        srv.MAX_ENGINE_CACHE_SIZE = 3
+        try:
+            srv._get_engine("proj-a")
+            srv._get_engine("proj-b")
+            srv._get_engine("proj-c")
+            # Access proj-a again (moves to end, so proj-b is now oldest)
+            srv._get_engine("proj-a")
+            # Adding one more should evict proj-b (the LRU)
+            srv._get_engine("proj-d")
+            assert "proj-a" in srv._engines
+            assert "proj-c" in srv._engines
+            assert "proj-d" in srv._engines
+            assert "proj-b" not in srv._engines
+        finally:
+            srv.MAX_ENGINE_CACHE_SIZE = original_max
+            srv._engines.clear()
+
+
 class TestMemoryStatus:
     def test_status_returns_stats(self, _patch_embedder):
         from engram.server import memory_status, memory_store

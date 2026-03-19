@@ -113,6 +113,19 @@ class TestProjectIsolation:
         assert len(results) == 0
 
 
+class TestFTSRebuildStaleCleanup:
+    def test_rebuild_fts_removes_stale_entries(self, db: MemoryDB):
+        mem = db.store_memory(Memory(content="Ephemeral data to be deleted"))
+        assert len(db.fts_search("Ephemeral")) > 0
+        # Delete the memory directly (bypassing triggers won't fire for manual FTS cleanup)
+        conn = db._get_conn()
+        conn.execute("DELETE FROM memories WHERE id = ?", (mem.id,))
+        conn.commit()
+        # Rebuild should clean up stale FTS entries
+        db.rebuild_fts()
+        assert len(db.fts_search("Ephemeral")) == 0
+
+
 class TestFTSSearch:
     def test_basic_search(self, db: MemoryDB):
         db.store_memory(Memory(content="JWT authentication with refresh tokens"))
@@ -257,6 +270,26 @@ class TestStatsPerProject:
         stats_b = db_b.get_stats()
         assert stats_a.total_chunks >= 1
         assert stats_b.total_chunks >= 2
+
+
+class TestFTSRebuild:
+    def test_rebuild_fts_restores_search(self, db):
+        db.store_memory(Memory(content="PostgreSQL database"))
+        # Verify search works
+        assert len(db.fts_search("PostgreSQL")) >= 1
+
+        # Clear FTS index content (simulates index corruption/staleness)
+        conn = db._get_conn()
+        conn.execute("INSERT INTO memory_fts(memory_fts) VALUES('delete-all')")
+        conn.commit()
+
+        # Search should return nothing now
+        assert db.fts_search("PostgreSQL") == []
+
+        # Rebuild should fix it
+        db.rebuild_fts()
+        results = db.fts_search("PostgreSQL")
+        assert len(results) >= 1
 
 
 class TestTransactionSafety:

@@ -119,7 +119,7 @@ and the user's conventions for this codebase. This bootstraps future agents.
 
 mcp = FastMCP("engram", instructions=ENGRAM_INSTRUCTIONS)
 
-_MAX_ENGINES = 64
+MAX_ENGINE_CACHE_SIZE = 64
 _engines: OrderedDict[str, SearchEngine] = OrderedDict()
 _engines_lock = threading.Lock()
 
@@ -142,7 +142,7 @@ def _get_engine(project: str | None = None) -> SearchEngine:
         embedder = create_embedder()
         engine = SearchEngine(db=db, embedder=embedder)
         _engines[project] = engine
-        if len(_engines) > _MAX_ENGINES:
+        if len(_engines) > MAX_ENGINE_CACHE_SIZE:
             _, evicted = _engines.popitem(last=False)
             evicted.db.close()
             logger.info("Evicted least-recently-used engine from cache")
@@ -169,6 +169,7 @@ def memory_store(
     Returns:
         The stored memory's ID and metadata.
     """
+    logger.debug("memory_store called: project=%s, type=%s, importance=%d", project, memory_type, importance)
     if len(content) > MAX_CONTENT_LENGTH:
         return {"error": f"Content exceeds maximum length of {MAX_CONTENT_LENGTH} characters."}
 
@@ -233,6 +234,7 @@ def memory_recall(
     Returns:
         Ranked list of memories with scores, matched chunks, and connected context.
     """
+    logger.debug("memory_recall called: project=%s, query=%r, top_k=%d", project, query[:50], top_k)
     engine = _get_engine(project or None)
     top_k = max(1, min(50, top_k))
 
@@ -315,6 +317,7 @@ def memory_connect(
     Returns:
         The created relationship.
     """
+    logger.debug("memory_connect called: project=%s, %s -> %s (%s)", project, source_id, target_id, rel_type)
     engine = _get_engine(project or None)
 
     source = engine.db.get_memory(source_id)
@@ -367,6 +370,7 @@ def memory_list(
     Returns:
         List of memories sorted by most recently updated.
     """
+    logger.debug("memory_list called: project=%s, type=%s, limit=%d", project, memory_type, limit)
     engine = _get_engine(project or None)
     limit = max(1, min(100, limit))
 
@@ -433,6 +437,7 @@ def memory_correct(
     Returns:
         The new memory ID and confirmation that the old one was superseded.
     """
+    logger.debug("memory_correct called: project=%s, old_id=%s", project, old_memory_id)
     engine = _get_engine(project or None)
 
     old_mem = engine.db.get_memory(old_memory_id)
@@ -496,6 +501,7 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
     Returns:
         Confirmation of deletion.
     """
+    logger.debug("memory_forget called: project=%s, id=%s", project, memory_id)
     engine = _get_engine(project or None)
 
     mem = engine.db.get_memory(memory_id)
@@ -518,6 +524,7 @@ def memory_status(project: str = "") -> dict:
         Total memories, chunks, relationships, breakdown by type and importance,
         database size, and age range.
     """
+    logger.debug("memory_status called: project=%s", project)
     engine = _get_engine(project or None)
     stats = engine.db.get_stats()
     return stats.model_dump()
@@ -546,6 +553,7 @@ def memory_feedback(
     Returns:
         Number of memories whose graph edges were adjusted.
     """
+    logger.debug("memory_feedback called: project=%s, helpful=%s", project, helpful)
     engine = _get_engine(project or None)
     ids = [mid.strip() for mid in memory_ids.split(",") if mid.strip()]
     if not ids:
@@ -573,6 +581,7 @@ def memory_consolidate(project: str = "") -> dict:
     Returns:
         Breakdown of chunks deduped, edges decayed/pruned, and stale memories removed.
     """
+    logger.debug("memory_consolidate called: project=%s", project)
     engine = _get_engine(project or None)
     result = engine.memify()
     return {"status": "consolidated", **result}
