@@ -271,10 +271,12 @@ class PostgresBackend:
             query += " AND importance <= %s"
             params.append(min_importance)
         if tags:
-            # JSONB containment: tags @> '["tag1"]'::jsonb
+            # JSONB containment with OR logic (match ANY tag, same as SQLite)
+            tag_conditions = []
             for tag in tags:
-                query += " AND tags @> %s::jsonb"
+                tag_conditions.append("tags @> %s::jsonb")
                 params.append(json.dumps([tag]))
+            query += " AND (" + " OR ".join(tag_conditions) + ")"
 
         query += " ORDER BY updated_at DESC LIMIT %s OFFSET %s"
         params.extend([limit, offset])
@@ -299,14 +301,17 @@ class PostgresBackend:
         if not chunks:
             return
         with self.pool.connection() as conn:
-            for c in chunks:
-                conn.execute(
+            with conn.cursor() as cur:
+                cur.executemany(
                     """INSERT INTO chunks (id, memory_id, chunk_text, chunk_index,
                        chunk_hash, embedding)
                        VALUES (%s, %s, %s, %s, %s, %s)
                        ON CONFLICT (id) DO NOTHING""",
-                    (c.id, c.memory_id, c.chunk_text, c.chunk_index,
-                     c.chunk_hash, c.embedding),
+                    [
+                        (c.id, c.memory_id, c.chunk_text, c.chunk_index,
+                         c.chunk_hash, c.embedding)
+                        for c in chunks
+                    ],
                 )
             conn.commit()
 

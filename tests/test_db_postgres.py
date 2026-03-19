@@ -24,11 +24,11 @@ def pg_db():
     dsn = os.environ["TEST_DATABASE_URL"]
     db = PostgresBackend(project="test_pg", dsn=dsn)
     yield db
-    # Cleanup test data
+    # Cleanup all test data (including other_project from isolation tests)
     with db.pool.connection() as conn:
-        conn.execute("DELETE FROM chunks WHERE memory_id IN (SELECT id FROM memories WHERE project = 'test_pg')")
-        conn.execute("DELETE FROM relationships WHERE source_id IN (SELECT id FROM memories WHERE project = 'test_pg') OR target_id IN (SELECT id FROM memories WHERE project = 'test_pg')")
-        conn.execute("DELETE FROM memories WHERE project = 'test_pg'")
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM relationships")
+        conn.execute("DELETE FROM memories")
         conn.execute("DELETE FROM project_meta")
         conn.commit()
     db.close()
