@@ -10,10 +10,12 @@ Selected via ENGRAM_EMBEDDER env var (openai|ollama|none). Default: auto-detect.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 import struct
 from typing import Protocol, Sequence, runtime_checkable
+from urllib.parse import urlparse
 
 import numpy as np
 
@@ -59,6 +61,25 @@ class OpenAIEmbedder:
         return all_embeddings
 
 
+def _validate_ollama_url(url: str) -> bool:
+    """Validate that an Ollama URL is not targeting internal/metadata services (SSRF protection)."""
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        blocked_hosts = {"metadata.google.internal", "metadata.aws.internal"}
+        if hostname in blocked_hosts:
+            return False
+        try:
+            ip = ipaddress.ip_address(hostname)
+            if ip.is_link_local:
+                return False
+        except ValueError:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 class OllamaEmbedder:
     """Ollama nomic-embed-text via local REST API (768 dimensions).
 
@@ -71,6 +92,8 @@ class OllamaEmbedder:
     version = "v1.5"
 
     def __init__(self, base_url: str = "http://localhost:11434"):
+        if not _validate_ollama_url(base_url):
+            raise ValueError(f"Blocked Ollama URL (potential SSRF): {base_url}")
         self._base_url = base_url.rstrip("/")
 
     def embed(self, text: str) -> np.ndarray:

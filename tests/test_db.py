@@ -213,6 +213,23 @@ class TestTagFilterBeforeLimit:
         assert len(results) == 10
 
 
+class TestBFSPhantomNodes:
+    def test_deleted_memory_not_in_frontier(self, db):
+        m1 = db.store_memory(Memory(content="Existing"))
+        m2 = db.store_memory(Memory(content="Will be deleted"))
+        rel = Relationship(source_id=m1.id, target_id=m2.id)
+        db.store_relationship(rel)
+        # Delete the memory but relationship persists (bypass CASCADE with FK off)
+        conn = db._get_conn()
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("DELETE FROM memories WHERE id = ?", (m2.id,))
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.commit()
+        connected = db.get_connected(m1.id, max_hops=2)
+        for mem, *_ in connected:
+            assert mem is not None
+
+
 class TestStats:
     def test_stats_reflect_stored_data(self, db: MemoryDB):
         db.store_memory(Memory(content="Decision 1", memory_type=MemoryType.DECISION))

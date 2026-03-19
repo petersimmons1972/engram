@@ -415,7 +415,7 @@ class MemoryDB:
                         mem = self.get_memory(nid)
                         if mem:
                             results.append((mem, row["rel_type"], "outgoing", row["strength"]))
-                        next_frontier.append(nid)
+                            next_frontier.append(nid)
 
                 for row in incoming:
                     nid = row["source_id"]
@@ -424,7 +424,7 @@ class MemoryDB:
                         mem = self.get_memory(nid)
                         if mem:
                             results.append((mem, row["rel_type"], "incoming", row["strength"]))
-                        next_frontier.append(nid)
+                            next_frontier.append(nid)
 
                 frontier = next_frontier
 

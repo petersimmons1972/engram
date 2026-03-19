@@ -209,6 +209,24 @@ class TestAutoDetectOllamaUrl:
         assert isinstance(emb, NullEmbedder)
 
 
+class TestSSRFProtection:
+    def test_localhost_allowed(self):
+        from engram.embeddings import _validate_ollama_url
+        assert _validate_ollama_url("http://localhost:11434") is True
+
+    def test_normal_ip_allowed(self):
+        from engram.embeddings import _validate_ollama_url
+        assert _validate_ollama_url("http://192.168.1.100:11434") is True
+
+    def test_link_local_blocked(self):
+        from engram.embeddings import _validate_ollama_url
+        assert _validate_ollama_url("http://169.254.169.254/latest/meta-data") is False
+
+    def test_metadata_hostname_blocked(self):
+        from engram.embeddings import _validate_ollama_url
+        assert _validate_ollama_url("http://metadata.google.internal") is False
+
+
 class TestMetadataVersion:
     def test_version_stored_on_first_embed(self, tmp_path: Path):
         db = MemoryDB(project="version-test", db_dir=tmp_path)

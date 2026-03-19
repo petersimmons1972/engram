@@ -12,6 +12,7 @@ from .embeddings import create_embedder
 from .errors import EmbeddingConfigMismatchError
 from .search import SearchEngine
 from .types import (
+    MAX_CONTENT_LENGTH,
     Memory,
     MemoryType,
     Relationship,
@@ -153,6 +154,9 @@ def memory_store(
     Returns:
         The stored memory's ID and metadata.
     """
+    if len(content) > MAX_CONTENT_LENGTH:
+        return {"error": f"Content exceeds maximum length of {MAX_CONTENT_LENGTH} characters."}
+
     engine = _get_engine(project or None)
 
     try:
@@ -215,6 +219,7 @@ def memory_recall(
         Ranked list of memories with scores, matched chunks, and connected context.
     """
     engine = _get_engine(project or None)
+    top_k = max(1, min(50, top_k))
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
     mt = memory_type if memory_type else None
@@ -348,8 +353,15 @@ def memory_list(
         List of memories sorted by most recently updated.
     """
     engine = _get_engine(project or None)
+    limit = max(1, min(100, limit))
 
-    mt = MemoryType(memory_type) if memory_type else None
+    mt = None
+    if memory_type:
+        try:
+            mt = MemoryType(memory_type)
+        except ValueError:
+            return {"error": f"Invalid memory_type '{memory_type}'. Valid: {[t.value for t in MemoryType]}"}
+
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
     mi = min_importance if min_importance < 4 else None
 
@@ -629,6 +641,7 @@ def _wrap_with_api_key_auth(app, api_key: str):
     """ASGI middleware that rejects requests missing a valid Bearer token.
 
     Uses constant-time comparison to prevent timing side-channel attacks.
+    Validates all scope types: http, websocket, and lifespan.
     """
     import secrets
 
@@ -637,13 +650,17 @@ def _wrap_with_api_key_auth(app, api_key: str):
     expected = f"Bearer {api_key}".encode("utf-8")
 
     async def auth_middleware(scope, receive, send):
-        if scope["type"] == "http":
+        if scope["type"] in ("http", "websocket"):
             headers = dict(scope.get("headers", []))
             token = headers.get(b"authorization", b"")
             if not secrets.compare_digest(token, expected):
                 resp = JSONResponse({"error": "unauthorized"}, status_code=401)
                 await resp(scope, receive, send)
                 return
+        elif scope["type"] != "lifespan":
+            resp = JSONResponse({"error": "unauthorized"}, status_code=403)
+            await resp(scope, receive, send)
+            return
         await app(scope, receive, send)
 
     return auth_middleware
@@ -666,6 +683,8 @@ def main(
     if transport == "stdio":
         mcp.run()
     elif transport == "sse":
+        import atexit
+
         import anyio
         import uvicorn
 
@@ -676,6 +695,13 @@ def main(
 
         if api_key:
             app = _wrap_with_api_key_auth(app, api_key)
+
+        def _shutdown():
+            for engine in _engines.values():
+                engine.db.close()
+            _engines.clear()
+
+        atexit.register(_shutdown)
 
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
