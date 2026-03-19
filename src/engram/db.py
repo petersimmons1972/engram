@@ -227,18 +227,18 @@ class MemoryDB:
         if min_importance is not None:
             query += " AND importance <= ?"
             params.append(min_importance)
+        if tags:
+            tag_conditions = []
+            for tag in tags:
+                tag_conditions.append("tags LIKE ?")
+                params.append(f'%"{tag}"%')
+            query += " AND (" + " OR ".join(tag_conditions) + ")"
 
         query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         rows = conn.execute(query, params).fetchall()
-        memories = [self._row_to_memory(r) for r in rows]
-
-        if tags:
-            tag_set = set(tags)
-            memories = [m for m in memories if tag_set & set(m.tags)]
-
-        return memories
+        return [self._row_to_memory(r) for r in rows]
 
     def touch_memory(self, memory_id: str) -> None:
         """Bump access_count and last_accessed for decay scoring."""
@@ -465,7 +465,8 @@ class MemoryDB:
     def _sanitize_fts_query(query: str) -> str:
         """Strip FTS5 special syntax to prevent malformed MATCH queries."""
         import re
-        sanitized = re.sub(r'[*^"()]', ' ', query)
+        sanitized = re.sub(r'\w+:', ' ', query)  # strip column filters
+        sanitized = re.sub(r'[*^"()]', ' ', sanitized)
         sanitized = re.sub(r'\b(AND|OR|NOT|NEAR)\b', '', sanitized, flags=re.IGNORECASE)
         return re.sub(r'\s+', ' ', sanitized).strip()
 

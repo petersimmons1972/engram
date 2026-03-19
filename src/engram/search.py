@@ -115,12 +115,26 @@ class SearchEngine:
 
         candidates: dict[str, _Candidate] = {}
 
+        if self._is_null:
+            non_vector = WEIGHT_BM25 + WEIGHT_RECENCY + WEIGHT_GRAPH
+            w_vector = 0.0
+            w_bm25 = WEIGHT_BM25 + WEIGHT_VECTOR * (WEIGHT_BM25 / non_vector)
+            w_recency = WEIGHT_RECENCY + WEIGHT_VECTOR * (WEIGHT_RECENCY / non_vector)
+            w_graph = WEIGHT_GRAPH + WEIGHT_VECTOR * (WEIGHT_GRAPH / non_vector)
+        else:
+            w_vector = WEIGHT_VECTOR
+            w_bm25 = WEIGHT_BM25
+            w_recency = WEIGHT_RECENCY
+            w_graph = WEIGHT_GRAPH
+
         # Layer 1: FTS5 / BM25
         fts_results = self.db.fts_search(query, limit=top_k * 2)
         if fts_results:
-            max_bm25 = max(score for _, score in fts_results) or 1.0
+            max_bm25 = max(score for _, score in fts_results)
+            min_bm25 = min(score for _, score in fts_results)
+            score_range = (max_bm25 - min_bm25) if max_bm25 != min_bm25 else 1.0
             for mem, score in fts_results:
-                norm_score = score / max_bm25
+                norm_score = (score - min_bm25) / score_range
                 cand = candidates.setdefault(mem.id, _Candidate(memory=mem))
                 cand.bm25_score = norm_score
                 cand.matched_chunk = mem.content[:200]
@@ -179,10 +193,10 @@ class SearchEngine:
             graph_score = min(1.0, conn_count / 5.0)
 
             composite = (
-                WEIGHT_VECTOR * cand.vector_score
-                + WEIGHT_BM25 * cand.bm25_score
-                + WEIGHT_RECENCY * recency_score
-                + WEIGHT_GRAPH * graph_score
+                w_vector * cand.vector_score
+                + w_bm25 * cand.bm25_score
+                + w_recency * recency_score
+                + w_graph * graph_score
             )
 
             # Importance multiplier: importance 0 => 2x, importance 4 => 0.6x

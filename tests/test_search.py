@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from engram.search import SearchEngine
 from engram.types import Memory, MemoryType, Relationship, RelationType
 
 
@@ -118,6 +119,27 @@ class TestSupersedeWarning:
                 # The server layer adds the WARNING; search layer attaches connected
                 connected_types = [c.rel_type for c in r.connected]
                 assert "supersedes" in connected_types
+
+
+class TestBM25Normalization:
+    def test_no_negative_bm25_scores(self, engine):
+        engine.store(Memory(content="Alpha beta gamma delta epsilon"))
+        engine.store(Memory(content="Zeta eta theta iota kappa"))
+        results = engine.recall("alpha")
+        for r in results:
+            assert r.score_breakdown["bm25"] >= 0.0
+
+
+class TestBM25OnlyWeights:
+    def test_bm25_only_redistributes_vector_weight(self, tmp_path):
+        from engram.db import MemoryDB
+        from engram.embeddings import NullEmbedder
+        db = MemoryDB(project="bm25weights", db_dir=tmp_path)
+        engine = SearchEngine(db=db, embedder=NullEmbedder())
+        engine.store(Memory(content="Test BM25 weight redistribution"))
+        results = engine.recall("BM25 weight")
+        if results:
+            assert results[0].score_breakdown["vector"] == 0.0
 
 
 class TestFeedback:
