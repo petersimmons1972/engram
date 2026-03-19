@@ -120,11 +120,16 @@ class MemoryDB:
 
     def _get_conn(self) -> sqlite3.Connection:
         if self._conn is None:
-            self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute("PRAGMA busy_timeout=5000")
-            self._conn.execute("PRAGMA foreign_keys=ON")
-            self._conn.row_factory = sqlite3.Row
+            conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA busy_timeout=5000")
+                conn.execute("PRAGMA foreign_keys=ON")
+            except Exception:
+                conn.close()
+                raise
+            conn.row_factory = sqlite3.Row
+            self._conn = conn
         return self._conn
 
     def _init_db(self) -> None:

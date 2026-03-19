@@ -409,3 +409,42 @@ class TestSchemaMigration:
         db2 = MemoryDB(project="olddb", db_dir=tmp_db_dir)
         version = db2.get_meta("schema_version")
         assert version == "2"
+
+
+class TestGetConnPragmaFailure:
+    """Regression tests for #38: _get_conn leaves broken connection on PRAGMA failure."""
+
+    def test_pragma_failure_does_not_persist_broken_connection(self, tmp_db_dir):
+        """If PRAGMAs fail, self._conn must stay None so the next call retries."""
+        import unittest.mock as mock
+        db = MemoryDB(project="pragma-test", db_dir=tmp_db_dir)
+        db.close()
+        db._conn = None
+
+        # Wrap Connection in a proxy that raises on PRAGMA journal_mode
+        original_connect = __import__("sqlite3").connect
+
+        class FailingConnection:
+            def __init__(self, real_conn):
+                self._real = real_conn
+
+            def execute(self, sql, *a, **kw):
+                if "journal_mode" in sql.lower():
+                    raise RuntimeError("Simulated PRAGMA failure")
+                return self._real.execute(sql, *a, **kw)
+
+            def close(self):
+                return self._real.close()
+
+            def __getattr__(self, name):
+                return getattr(self._real, name)
+
+        def failing_connect(*args, **kwargs):
+            conn = original_connect(*args, **kwargs)
+            return FailingConnection(conn)
+
+        with mock.patch("sqlite3.connect", side_effect=failing_connect):
+            with pytest.raises(RuntimeError, match="Simulated PRAGMA failure"):
+                db._get_conn()
+            # Connection must NOT be cached after failure
+            assert db._conn is None

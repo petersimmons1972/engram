@@ -282,6 +282,26 @@ class TestEngineCacheLRU:
             srv._engines.clear()
 
 
+class TestMemoryConnectErrorHandling:
+    """Regression tests for #37: Unhandled ValueError in memory_connect."""
+
+    def test_connect_nonexistent_source_returns_error(self, _patch_embedder):
+        from engram.server import memory_connect
+        result = memory_connect(
+            source_id="nonexistent", target_id="also-nonexistent", project="test-project",
+        )
+        assert "error" in result
+
+    def test_connect_valid_memories_succeeds(self, _patch_embedder):
+        from engram.server import memory_connect, memory_store
+        a = memory_store(content="Memory A", project="test-project")
+        b = memory_store(content="Memory B", project="test-project")
+        result = memory_connect(
+            source_id=a["id"], target_id=b["id"], project="test-project",
+        )
+        assert result["status"] == "connected"
+
+
 class TestMemoryStatus:
     def test_status_returns_stats(self, _patch_embedder):
         from engram.server import memory_status, memory_store

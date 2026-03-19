@@ -338,7 +338,10 @@ def memory_connect(
         rel_type=rt,
         strength=max(0.0, min(1.0, strength)),
     )
-    engine.db.store_relationship(rel)
+    try:
+        engine.db.store_relationship(rel)
+    except ValueError as exc:
+        return {"error": str(exc)}
 
     return {
         "status": "connected",

@@ -30,23 +30,27 @@ def chunk_text(
 
     for sentence in sentences:
         slen = len(sentence)
+        # Account for the space separator when appending to a non-empty chunk
+        added_len = slen + (1 if current else 0)
 
-        if current_len + slen > max_chars and current:
+        if current_len + added_len > max_chars and current:
             chunks.append(" ".join(current))
 
             # Build overlap from the tail of the current chunk
             overlap: list[str] = []
             overlap_len = 0
             for s in reversed(current):
-                if overlap_len + len(s) > overlap_chars:
+                sep = 1 if overlap else 0
+                if overlap_len + len(s) + sep > overlap_chars:
                     break
                 overlap.insert(0, s)
-                overlap_len += len(s)
+                overlap_len += len(s) + sep
             current = overlap
             current_len = overlap_len
+            added_len = slen + (1 if current else 0)
 
         current.append(sentence)
-        current_len += slen
+        current_len += added_len
 
     if current:
         chunks.append(" ".join(current))

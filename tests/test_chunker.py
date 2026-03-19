@@ -96,3 +96,20 @@ class TestIsDuplicate:
 
     def test_empty_existing(self):
         assert is_duplicate("Anything", []) is False
+
+
+class TestChunkLengthAccuracy:
+    """Regression tests for #39: Space separators not counted in chunk length."""
+
+    def test_chunks_do_not_exceed_max_chars(self):
+        """Every chunk's actual length must be <= max_tokens * 4 chars."""
+        sentences = [f"Sentence number {i} is here." for i in range(100)]
+        text = " ".join(sentences)
+        max_tokens = 50  # 200 chars
+        chunks = chunk_text(text, max_tokens=max_tokens, overlap_tokens=10)
+
+        max_chars = max_tokens * 4
+        for i, chunk in enumerate(chunks):
+            assert len(chunk) <= max_chars, (
+                f"Chunk {i} is {len(chunk)} chars, exceeds max of {max_chars}: {chunk[:80]}..."
+            )
