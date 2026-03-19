@@ -192,6 +192,27 @@ class TestRelationships:
         assert db.get_connection_count(m1.id) == 0
 
 
+class TestFTSSanitization:
+    def test_column_filter_stripped(self, db):
+        db.store_memory(Memory(content="Test content for FTS"))
+        results = db.fts_search("content:Test")
+        assert isinstance(results, list)
+
+    def test_prefix_operator_stripped(self, db):
+        db.store_memory(Memory(content="Testing prefix operators"))
+        results = db.fts_search("test*")
+        assert isinstance(results, list)
+
+
+class TestTagFilterBeforeLimit:
+    def test_tag_filter_respects_limit(self, db):
+        for i in range(30):
+            tags = ["target"] if i % 3 == 0 else ["other"]
+            db.store_memory(Memory(content=f"Memory {i} about things", tags=tags))
+        results = db.list_memories(tags=["target"], limit=10)
+        assert len(results) == 10
+
+
 class TestStats:
     def test_stats_reflect_stored_data(self, db: MemoryDB):
         db.store_memory(Memory(content="Decision 1", memory_type=MemoryType.DECISION))
