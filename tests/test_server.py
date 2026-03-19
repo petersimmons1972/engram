@@ -160,6 +160,56 @@ class TestInputValidation:
         assert isinstance(result, dict)
 
 
+class TestAuthMiddleware:
+    @pytest.mark.asyncio
+    async def test_auth_rejects_websocket_without_token(self):
+        from engram.server import _wrap_with_api_key_auth
+
+        async def fake_app(scope, receive, send):
+            pass
+
+        wrapped = _wrap_with_api_key_auth(fake_app, "test-key")
+        responses = []
+
+        async def mock_send(msg):
+            responses.append(msg)
+
+        scope = {"type": "websocket", "headers": []}
+        await wrapped(scope, None, mock_send)
+        assert len(responses) > 0  # Should have sent a rejection
+
+    @pytest.mark.asyncio
+    async def test_auth_allows_lifespan(self):
+        from engram.server import _wrap_with_api_key_auth
+
+        called = []
+
+        async def fake_app(scope, receive, send):
+            called.append(True)
+
+        wrapped = _wrap_with_api_key_auth(fake_app, "test-key")
+        scope = {"type": "lifespan"}
+        await wrapped(scope, None, None)
+        assert called  # App should have been called
+
+    @pytest.mark.asyncio
+    async def test_auth_rejects_unknown_scope(self):
+        from engram.server import _wrap_with_api_key_auth
+
+        async def fake_app(scope, receive, send):
+            pass
+
+        wrapped = _wrap_with_api_key_auth(fake_app, "test-key")
+        responses = []
+
+        async def mock_send(msg):
+            responses.append(msg)
+
+        scope = {"type": "unknown_protocol", "headers": []}
+        await wrapped(scope, None, mock_send)
+        assert len(responses) > 0
+
+
 class TestMemoryStatus:
     def test_status_returns_stats(self, _patch_embedder):
         from engram.server import memory_status, memory_store

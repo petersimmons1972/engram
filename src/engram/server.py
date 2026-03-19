@@ -638,6 +638,7 @@ def _wrap_with_api_key_auth(app, api_key: str):
     """ASGI middleware that rejects requests missing a valid Bearer token.
 
     Uses constant-time comparison to prevent timing side-channel attacks.
+    Validates all scope types: http, websocket, and lifespan.
     """
     import secrets
 
@@ -646,13 +647,17 @@ def _wrap_with_api_key_auth(app, api_key: str):
     expected = f"Bearer {api_key}".encode("utf-8")
 
     async def auth_middleware(scope, receive, send):
-        if scope["type"] == "http":
+        if scope["type"] in ("http", "websocket"):
             headers = dict(scope.get("headers", []))
             token = headers.get(b"authorization", b"")
             if not secrets.compare_digest(token, expected):
                 resp = JSONResponse({"error": "unauthorized"}, status_code=401)
                 await resp(scope, receive, send)
                 return
+        elif scope["type"] != "lifespan":
+            resp = JSONResponse({"error": "unauthorized"}, status_code=403)
+            await resp(scope, receive, send)
+            return
         await app(scope, receive, send)
 
     return auth_middleware
@@ -675,6 +680,8 @@ def main(
     if transport == "stdio":
         mcp.run()
     elif transport == "sse":
+        import atexit
+
         import anyio
         import uvicorn
 
@@ -685,6 +692,13 @@ def main(
 
         if api_key:
             app = _wrap_with_api_key_auth(app, api_key)
+
+        def _shutdown():
+            for engine in _engines.values():
+                engine.db.close()
+            _engines.clear()
+
+        atexit.register(_shutdown)
 
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
