@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -234,3 +235,36 @@ class TestPruning:
         pruned = db.prune_stale_memories(max_age_hours=720, max_importance=3)
         assert pruned == 0
         assert db.get_memory(stored.id) is not None
+
+
+class TestThreadSafety:
+    def test_concurrent_stores(self, tmp_db_dir):
+        db = MemoryDB(project="threadsafe", db_dir=tmp_db_dir)
+        errors = []
+
+        def store_batch(start):
+            try:
+                for i in range(20):
+                    db.store_memory(Memory(content=f"Thread {start} memory {i}"))
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=store_batch, args=(t,)) for t in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert not errors, f"Errors: {errors}"
+        mems = db.list_memories(limit=200)
+        assert len(mems) == 100
+
+    def test_close_releases_connection(self, tmp_db_dir):
+        db = MemoryDB(project="closetest", db_dir=tmp_db_dir)
+        db.store_memory(Memory(content="test"))
+        db.close()
+        assert db._conn is None
+
+    def test_context_manager(self, tmp_db_dir):
+        with MemoryDB(project="ctxtest", db_dir=tmp_db_dir) as db:
+            db.store_memory(Memory(content="test"))
+        assert db._conn is None
