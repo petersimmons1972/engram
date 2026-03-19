@@ -236,3 +236,11 @@ class TestMetadataVersion:
         engine.store(Memory(content="Test version storage"))
 
         assert db.get_meta("embedder_version") == "v1-test"
+
+
+class TestOllamaReachableErrorHandling:
+    def test_returns_false_when_httpx_missing(self, monkeypatch):
+        """When httpx is not available, _ollama_reachable returns False."""
+        import engram.embeddings as emb
+        monkeypatch.setattr(emb, "_httpx", None)
+        assert emb._ollama_reachable("http://localhost:11434") is False
