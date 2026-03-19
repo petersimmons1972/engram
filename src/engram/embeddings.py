@@ -194,6 +194,8 @@ def from_blob(blob: bytes) -> np.ndarray:
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     if len(a) == 0 or len(b) == 0:
         return 0.0
+    if len(a) != len(b):
+        return 0.0
     dot = np.dot(a, b)
     norm = np.linalg.norm(a) * np.linalg.norm(b)
     if norm == 0:

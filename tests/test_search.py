@@ -142,6 +142,14 @@ class TestBM25OnlyWeights:
             assert results[0].score_breakdown["vector"] == 0.0
 
 
+class TestStoreDedup:
+    def test_hash_dedup_prevents_duplicate_chunks(self, engine):
+        engine.store(Memory(content="Exact duplicate content for hash test"))
+        engine.store(Memory(content="Exact duplicate content for hash test"))
+        stats = engine.db.get_stats()
+        assert stats.total_chunks == 1
+
+
 class TestFeedback:
     def test_positive_feedback_boosts_edges(self, engine):
         m1 = Memory(content="Memory A")

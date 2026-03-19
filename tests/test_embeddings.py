@@ -97,6 +97,13 @@ class TestBlobSerialization:
         assert cosine_similarity(full, empty) == 0.0
 
 
+class TestCosineSimilarityDimensionMismatch:
+    def test_mismatched_dimensions_returns_zero(self):
+        a = np.array([1.0, 2.0, 3.0], dtype=np.float32)
+        b = np.array([1.0, 2.0], dtype=np.float32)
+        assert cosine_similarity(a, b) == 0.0
+
+
 class TestMetadataEnforcement:
     def test_first_store_sets_metadata(self, tmp_path: Path):
         db = MemoryDB(project="meta-test", db_dir=tmp_path)

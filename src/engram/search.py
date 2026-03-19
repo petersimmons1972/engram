@@ -4,7 +4,7 @@ import logging
 import math
 from datetime import datetime, timezone
 
-from .chunker import chunk_hash, chunk_text, is_duplicate
+from .chunker import chunk_hash, chunk_text
 from .db import MemoryDB
 from .embeddings import EmbeddingProvider, NullEmbedder, cosine_similarity, from_blob, to_blob
 from .errors import EmbeddingConfigMismatchError
@@ -69,7 +69,6 @@ class SearchEngine:
         memory = self.db.store_memory(memory)
 
         chunks = chunk_text(memory.content)
-        existing_texts = self.db.get_all_chunk_texts(limit=5000)
 
         texts_to_embed: list[str] = []
         chunk_objects: list[Chunk] = []
@@ -78,19 +77,10 @@ class SearchEngine:
             h = chunk_hash(text)
             if self.db.chunk_hash_exists(h):
                 continue
-            if is_duplicate(text, existing_texts):
-                continue
-
             chunk_objects.append(
-                Chunk(
-                    memory_id=memory.id,
-                    chunk_text=text,
-                    chunk_index=i,
-                    chunk_hash=h,
-                )
+                Chunk(memory_id=memory.id, chunk_text=text, chunk_index=i, chunk_hash=h)
             )
             texts_to_embed.append(text)
-            existing_texts.append(text)
 
         if texts_to_embed and self.has_vectors:
             embeddings = self.embedder.embed_batch(texts_to_embed)
