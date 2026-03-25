@@ -147,7 +147,41 @@ This starts all four services. Engram listens on `http://localhost:8788/sse`.
 
 ### Open-WebUI Setup (First Boot)
 
-Open-WebUI acts as an authenticated proxy between Engram and Ollama. On first boot, you need to create an admin account and generate an API key:
+Open-WebUI acts as an authenticated proxy between Engram and Ollama. Choose one of two setup methods:
+
+#### Option A: Automatic (Headless)
+
+Add these to your `.env` file **before first boot**:
+
+```bash
+WEBUI_ADMIN_EMAIL=admin@local.dev
+WEBUI_ADMIN_PASSWORD=your-secure-password
+WEBUI_SECRET_KEY=your-jwt-secret
+```
+
+Then generate an API key via the API:
+
+```bash
+# Sign in and get a JWT
+TOKEN=$(curl -s http://localhost:3000/api/v1/auths/signin \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@local.dev","password":"your-secure-password"}' \
+  | jq -r '.token')
+
+# Generate a persistent API key
+curl -s http://localhost:3000/api/v1/auths/api_key \
+  -H "Authorization: Bearer $TOKEN" -X POST | jq -r '.api_key'
+```
+
+Add the resulting `sk-...` key to your `.env`:
+
+```bash
+OLLAMA_API_KEY=sk-your-key-here
+```
+
+Then restart: `docker compose restart engram`
+
+#### Option B: Browser
 
 1. Open http://localhost:3000
 2. Create an admin account (the first signup automatically becomes admin)
