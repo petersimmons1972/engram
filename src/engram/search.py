@@ -83,9 +83,18 @@ class SearchEngine:
             texts_to_embed.append(text)
 
         if texts_to_embed and self.has_vectors:
-            embeddings = self.embedder.embed_batch(texts_to_embed)
-            for chunk_obj, emb in zip(chunk_objects, embeddings):
-                chunk_obj.embedding = to_blob(emb)
+            try:
+                embeddings = self.embedder.embed_batch(texts_to_embed)
+                for chunk_obj, emb in zip(chunk_objects, embeddings):
+                    chunk_obj.embedding = to_blob(emb)
+            except Exception as e:
+                # Embedding failed — don't create orphan memory with no embeddings.
+                # Rollback by deleting the memory we just created.
+                self.db.delete_memory_atomic(memory.id)
+                raise ValueError(
+                    f"Failed to embed chunks for memory {memory.id}. "
+                    f"Memory deleted to prevent orphaned record. Error: {str(e)}"
+                ) from e
 
         if chunk_objects:
             self.db.store_chunks(chunk_objects)
