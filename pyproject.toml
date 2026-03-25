@@ -47,7 +47,9 @@ all = ["openai>=1.30.0", "httpx>=0.24", "numpy>=1.26.0", "psycopg[pool]>=3.1.0"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
     "ruff>=0.4",
+    "mypy>=1.8",
     "numpy>=1.26.0",
     "psycopg[pool]>=3.1.0",
 ]
@@ -67,4 +69,16 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["E", "F", "I", "W", "B", "UP", "RUF"]
+ignore = ["B008"]  # FastMCP uses function calls in default args
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_return_any = true
+
+[tool.coverage.run]
+source = ["src/engram"]
+omit = ["tests/*"]
