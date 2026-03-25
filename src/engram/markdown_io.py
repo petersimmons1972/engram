@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
+import uuid
 import zipfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -48,10 +50,31 @@ def memory_to_markdown(memory: Memory) -> str:
         "project": memory.project,
     }
 
-    # Use YAML dump with safe_dump for clean output
-    yaml_str = yaml.dump(frontmatter, default_flow_style=False, sort_keys=False)
+    # Use safe_dump to ensure consistent round-trip serialization (issue #49)
+    yaml_str = yaml.safe_dump(frontmatter, default_flow_style=False, sort_keys=False)
 
     return f"---\n{yaml_str}---\n\n{memory.content}\n"
+
+
+def _parse_timestamp(value: str | datetime | date) -> datetime:
+    """Parse a timestamp from YAML frontmatter, handling str, datetime, and date types.
+
+    yaml.safe_load may return:
+    - str: ISO format like '2026-03-25T10:00:00+00:00'
+    - datetime: when the value looks like a datetime without quotes
+    - date: when the value looks like a bare date (e.g., 2026-03-25)
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    # str
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return datetime.now(timezone.utc)
 
 
 def markdown_to_memory(markdown_content: str, project: str = "default") -> Memory | None:
@@ -60,18 +83,15 @@ def markdown_to_memory(markdown_content: str, project: str = "default") -> Memor
     Returns None if parsing fails.
     """
     try:
-        # Split frontmatter from content
-        if not markdown_content.startswith("---"):
-            logger.warning("Markdown does not start with frontmatter")
+        # Split frontmatter from content using regex to match --- at line boundaries
+        # This avoids breaking on --- appearing inside YAML values or content
+        fm_match = re.match(r"\A---\n(.*?\n)---\n(.*)\Z", markdown_content, re.DOTALL)
+        if not fm_match:
+            logger.warning("Markdown does not contain valid YAML frontmatter block")
             return None
 
-        parts = markdown_content.split("---", 2)
-        if len(parts) < 3:
-            logger.warning("Invalid markdown format: could not find closing frontmatter delimiter")
-            return None
-
-        yaml_str = parts[1]
-        content = parts[2].strip()
+        yaml_str = fm_match.group(1)
+        content = fm_match.group(2).strip()
 
         # Parse YAML frontmatter
         try:
@@ -91,8 +111,11 @@ def markdown_to_memory(markdown_content: str, project: str = "default") -> Memor
         except ValueError:
             memory_type = MemoryType.CONTEXT
 
+        # Issue #52: Generate a new ID if none is present in frontmatter
+        memory_id = frontmatter.get("id", "") or uuid.uuid4().hex
+
         memory = Memory(
-            id=frontmatter.get("id", ""),  # Will be regenerated if empty
+            id=memory_id,
             content=content,
             memory_type=memory_type,
             project=frontmatter.get("project", project),
@@ -101,21 +124,11 @@ def markdown_to_memory(markdown_content: str, project: str = "default") -> Memor
         )
 
         # Update timestamps if present in frontmatter
+        # Issue #49: yaml.safe_load may return str, datetime, or date objects
         if "created" in frontmatter:
-            try:
-                memory.created_at = datetime.fromisoformat(
-                    frontmatter["created"].replace("Z", "+00:00")
-                )
-            except (ValueError, AttributeError):
-                pass
-
+            memory.created_at = _parse_timestamp(frontmatter["created"])
         if "last_accessed" in frontmatter:
-            try:
-                memory.last_accessed = datetime.fromisoformat(
-                    frontmatter["last_accessed"].replace("Z", "+00:00")
-                )
-            except (ValueError, AttributeError):
-                pass
+            memory.last_accessed = _parse_timestamp(frontmatter["last_accessed"])
 
         return memory
 
