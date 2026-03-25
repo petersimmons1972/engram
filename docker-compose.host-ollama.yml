@@ -12,23 +12,33 @@
 services:
   engram:
     environment:
-      - OLLAMA_URL=http://host.docker.internal:11434
+      - OLLAMA_URL=http://open-webui:8080/ollama
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
-    # Remove ollama dependency - using host Ollama instead
-
-  # Disable Docker Ollama service - using host instead
-  ollama:
-    profiles: ["disabled"]
-
-  ollama-init:
-    profiles: ["disabled"]
+      open-webui:
+        condition: service_started
+    # Route through Open-WebUI instead of Ollama directly
 
   open-webui:
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
     depends_on:
+      ollama:
+        condition: service_started
       postgres:
         condition: service_healthy
-    # Remove ollama dependency - using host Ollama instead
+    # Point Open-WebUI at host Ollama instead of Docker Ollama
+    # Override ollama dependency to service_started (no-op container has no healthcheck)
+
+  # Replace Docker Ollama with a no-op container that exits immediately.
+  # This satisfies depends_on from open-webui without running a real Ollama.
+  # Open-WebUI connects to host Ollama via host.docker.internal instead.
+  ollama:
+    image: busybox:latest
+    entrypoint: ["true"]
+    restart: "no"
+
+  ollama-init:
+    profiles: ["disabled"]

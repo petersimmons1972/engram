@@ -60,19 +60,20 @@ services:
     environment:
       - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
       - ENGRAM_EMBEDDER=ollama
-      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_URL=http://open-webui:8080/ollama
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
       - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
     depends_on:
       postgres:
         condition: service_healthy
-    # Note: Ollama dependency handled by docker-compose.yml (local) or host-ollama override.
-    # Engram has built-in retry logic for Ollama connection failures.
+      open-webui:
+        condition: service_started
     restart: unless-stopped
 
 
-  # Optional: Open WebUI for browsing Ollama models and testing embeddings.
-  # Useful for development/debugging, not required for Engram operation.
-  # Start with: docker compose --profile ui up -d
+  # Open WebUI: auth proxy for Ollama access. Engram routes embedding
+  # requests through Open-WebUI with Bearer token authentication.
+  # First boot: visit http://localhost:3000, create admin, generate API key.
   open-webui:
     container_name: engram-open-webui
     image: ghcr.io/open-webui/open-webui:main
@@ -80,12 +81,14 @@ services:
       - "3000:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
+      - WEBUI_AUTH=true
+      - ENABLE_SIGNUP=true
+      - DEFAULT_USER_ROLE=user
     volumes:
       - open-webui-data:/app/backend/data
     depends_on:
       ollama:
         condition: service_healthy
-    profiles: ["ui"]
     restart: unless-stopped
 
   # Optional: TLS termination for production SSE deployments.
