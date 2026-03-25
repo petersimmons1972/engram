@@ -24,6 +24,43 @@ Chainguard Images are distroless, signed, vulnerability-scanned, and minimal. Th
 2. **DIY hardened Ollama Dockerfile:** Would require maintaining a custom build and binary. Upstream maintains it better.
 3. **No Ollama, API-only embeddings:** Would lock memory search to OpenAI or other external services. Local embeddings are the goal.
 
+## GPU Support (Ollama)
+
+The Ollama image (`ollama/ollama:latest`) supports GPU acceleration out of the box:
+
+### NVIDIA GPUs
+```bash
+# Add to docker-compose.yml for a service:
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: 1
+          capabilities: [gpu]
+```
+
+### AMD GPUs
+```bash
+# Use docker run with:
+docker run --device=/dev/kfd --device=/dev/dri ollama/ollama:latest
+```
+
+Or in docker-compose.yml:
+```yaml
+devices:
+  - /dev/kfd:/dev/kfd
+  - /dev/dri:/dev/dri
+```
+
+### Mac M-series (M1/M2/M3/M4)
+Ollama automatically detects and uses Metal acceleration. No configuration needed. The Docker image runs via Docker Desktop, which has Metal support built-in.
+
+### CPU-only (no GPU)
+Ollama automatically falls back to CPU inference. Slower but functional.
+
+**Current Setup:** No GPU configuration in docker-compose.yml. Ollama will auto-detect available hardware when the container starts. To enable GPU, uncomment the appropriate section above based on your hardware.
+
 ## Maintenance
 
 When new Chainguard images become available (especially ML runtimes), audit this policy and upgrade.
