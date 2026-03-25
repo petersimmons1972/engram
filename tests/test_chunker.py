@@ -16,8 +16,9 @@ class TestChunkText:
         assert chunk_text("   ") == []
 
     def test_long_text_splits_into_multiple(self):
-        sentences = [f"Sentence number {i} is here." for i in range(50)]
+        sentences = [f"Sentence number {i} is here." for i in range(200)]
         text = " ".join(sentences)
+        assert len(text) > 2000  # must exceed lazy chunking threshold
         chunks = chunk_text(text, max_tokens=100)
         assert len(chunks) > 1
 
@@ -96,6 +97,60 @@ class TestIsDuplicate:
 
     def test_empty_existing(self):
         assert is_duplicate("Anything", []) is False
+
+
+class TestLazyChunking:
+    """B5: Content under 2000 chars should skip chunking and be stored as a single chunk."""
+
+    def test_short_content_produces_single_chunk(self):
+        """500-char content with sentences -> exactly 1 chunk even with small max_tokens."""
+        sentences = [f"Fact number {i}." for i in range(30)]
+        text = " ".join(sentences)
+        assert len(text) < 2000
+        # With a small max_tokens, the chunker would normally split this.
+        # Lazy chunking should skip splitting entirely for content under 2000 chars.
+        chunks = chunk_text(text, max_tokens=20)
+        assert len(chunks) == 1, f"Short content should produce 1 chunk, got {len(chunks)}"
+        assert chunks[0] == text
+
+    def test_long_content_still_chunks(self):
+        """10000-char content -> more than 1 chunk."""
+        sentences = [
+            f"Sentence number {i} is a fairly long sentence for testing purposes."
+            for i in range(200)
+        ]
+        text = " ".join(sentences)
+        assert len(text) > 10000
+        chunks = chunk_text(text)
+        assert len(chunks) > 1
+
+    def test_threshold_boundary(self):
+        """2000 chars -> 1 chunk. 2001+ chars -> chunking algorithm runs."""
+        # Build text of exactly ~2000 chars with sentence boundaries
+        sentences = []
+        total = 0
+        i = 0
+        while total + len(f"Sentence number {i}.") + 1 <= 2000:
+            s = f"Sentence number {i}."
+            sentences.append(s)
+            total += len(s) + (1 if sentences else 0)
+            i += 1
+        text_at = " ".join(sentences)
+        assert len(text_at) <= 2000
+        # Even with tiny max_tokens, should produce 1 chunk (lazy skip)
+        chunks_at = chunk_text(text_at, max_tokens=20)
+        assert len(chunks_at) == 1, f"2000 chars should produce 1 chunk, got {len(chunks_at)}"
+
+        # 2001+ chars with sentence boundaries: chunking algorithm runs
+        sentences_over = list(sentences)
+        while len(" ".join(sentences_over)) <= 2000:
+            sentences_over.append(f"Sentence number {i}.")
+            i += 1
+        text_over = " ".join(sentences_over)
+        assert len(text_over) > 2000
+        chunks_over = chunk_text(text_over, max_tokens=20)
+        # With max_tokens=20 (80 chars), content >2000 chars should produce multiple chunks
+        assert len(chunks_over) > 1, f"Content over 2000 chars should chunk, got {len(chunks_over)}"
 
 
 class TestChunkLengthAccuracy:

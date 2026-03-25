@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import re
 
+LAZY_CHUNK_THRESHOLD = 2000  # characters
+
 
 def chunk_text(
     text: str,
@@ -12,9 +14,15 @@ def chunk_text(
     """Split text into overlapping chunks at sentence boundaries.
 
     Uses a rough 1 token ~ 4 chars approximation to avoid a tokenizer dependency.
+    Content under LAZY_CHUNK_THRESHOLD characters is returned as a single chunk
+    to avoid unnecessary splitting of short memories.
     """
     if not text.strip():
         return []
+
+    # Lazy chunking: short content is a single chunk
+    if len(text) <= LAZY_CHUNK_THRESHOLD:
+        return [text]
 
     chars_per_token = 4
     max_chars = max_tokens * chars_per_token
