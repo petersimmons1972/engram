@@ -277,8 +277,8 @@ class SearchEngine:
             "memories_affected": total_affected,
         }
 
-    def memify(self) -> dict:
-        """Memory enhancement pass -- Cognee's memify concept.
+    def consolidate(self) -> dict:
+        """Memory consolidation pass — dedup, decay, and prune.
 
         Three stages:
         1. Deduplicate chunks (by hash)

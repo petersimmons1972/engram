@@ -1,4 +1,4 @@
-"""Stress tests for memory_consolidate (engram's memify system).
+"""Stress tests for memory_consolidate (engram's consolidation system).
 
 Validates all three consolidation stages under accumulated load:
 deduplication, edge decay/pruning, and stale memory pruning.
@@ -56,7 +56,7 @@ class TestChunkDeduplication:
             )
         conn.commit()
 
-        result = stress_engine.memify()
+        result = stress_engine.consolidate()
         assert result["chunks_deduped"] >= 19
 
     def test_dedup_preserves_unique_chunks(self, stress_engine: SearchEngine):
@@ -64,7 +64,7 @@ class TestChunkDeduplication:
         for i in range(100):
             stress_engine.store(Memory(content=f"Unique memory number {i} about topic {i * 7}"))
 
-        stress_engine.memify()
+        stress_engine.consolidate()
         stats_after = stress_engine.db.get_stats()
 
         assert stats_after.total_chunks >= 100
@@ -87,7 +87,7 @@ class TestEdgeDecayAndPruning:
             )
             stress_engine.db.store_relationship(rel)
 
-        result = stress_engine.memify()
+        result = stress_engine.consolidate()
 
         assert result["edges_decayed"] >= 9
         assert result["edges_pruned"] >= 1
@@ -104,7 +104,7 @@ class TestEdgeDecayAndPruning:
         )
         stress_engine.db.store_relationship(rel)
 
-        stress_engine.memify()
+        stress_engine.consolidate()
 
         connected = stress_engine.db.get_connected(m1.id)
         assert len(connected) == 1
@@ -124,7 +124,7 @@ class TestEdgeDecayAndPruning:
             )
             stress_engine.db.store_relationship(rel)
 
-        result = stress_engine.memify()
+        result = stress_engine.consolidate()
         assert result["edges_decayed"] == 50
 
 
@@ -144,7 +144,7 @@ class TestStalePruning:
 
         conn.commit()
 
-        result = stress_engine.memify()
+        result = stress_engine.consolidate()
         assert result["stale_memories_pruned"] >= 25
 
     def test_important_old_memories_survive(self, stress_engine: SearchEngine):
@@ -162,7 +162,7 @@ class TestStalePruning:
 
         conn.commit()
 
-        result = stress_engine.memify()
+        result = stress_engine.consolidate()
         assert result["stale_memories_pruned"] == 0
 
         stats = stress_engine.db.get_stats()
@@ -184,7 +184,7 @@ class TestStalePruning:
 
         conn.commit()
 
-        result = stress_engine.memify()
+        result = stress_engine.consolidate()
         assert result["stale_memories_pruned"] == 0
 
 
@@ -194,8 +194,8 @@ class TestIdempotency:
         for i in range(50):
             stress_engine.store(Memory(content=f"Memory {i} for idempotency test"))
 
-        stress_engine.memify()
-        result2 = stress_engine.memify()
+        stress_engine.consolidate()
+        result2 = stress_engine.consolidate()
 
         assert result2["chunks_deduped"] == 0
         assert result2["edges_pruned"] == 0
@@ -233,7 +233,7 @@ class TestPerformanceBenchmark:
             stress_engine.db.store_relationship(rel)
 
         start = time.perf_counter()
-        result = stress_engine.memify()
+        result = stress_engine.consolidate()
         elapsed = time.perf_counter() - start
 
         print("\n=== Consolidation Benchmark ===")

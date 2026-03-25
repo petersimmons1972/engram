@@ -567,7 +567,7 @@ def memory_feedback(
 
 @mcp.tool()
 def memory_consolidate(project: str = "") -> dict:
-    """Run a memory enhancement pass (inspired by Cognee's memify).
+    """Run a memory consolidation pass — dedup, decay, and prune.
 
     Three stages:
     1. Deduplicates chunks by hash to remove exact duplicates.
@@ -586,7 +586,7 @@ def memory_consolidate(project: str = "") -> dict:
     """
     logger.debug("memory_consolidate called: project=%s", project)
     engine = _get_engine(project or None)
-    result = engine.memify()
+    result = engine.consolidate()
     return {"status": "consolidated", **result}
 
 
