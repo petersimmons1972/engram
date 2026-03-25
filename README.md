@@ -115,11 +115,12 @@ Without embeddings, you still get keyword search, recency scoring, and the full 
 
 ## Installation
 
-Engram runs exclusively via Docker and Compose. A standard installation starts three required services:
+Engram runs exclusively via Docker and Compose. A standard installation starts four required services:
 
 1. **PostgreSQL** — Persistent database (Docker volume: `pgdata`)
 2. **Ollama** — Local embedding model (Docker volume: `ollama-data`)
-3. **Engram** — MCP server (port 8788)
+3. **Open-WebUI** — Auth proxy for Ollama (port 3000)
+4. **Engram** — MCP server (port 8788)
 
 ### Prerequisites
 
@@ -136,13 +137,30 @@ cd engram
 docker compose up -d
 ```
 
-This starts all three services. Engram listens on `http://localhost:8788/sse`.
+This starts all four services. Engram listens on `http://localhost:8788/sse`.
 
 > **First run?** Ollama needs to pull the embedding model. Run once to initialize:
 > ```bash
 > docker compose --profile init run --rm ollama-init
 > ```
 > This pulls `nomic-embed-text`. Future runs start faster.
+
+### Open-WebUI Setup (First Boot)
+
+Open-WebUI acts as an authenticated proxy between Engram and Ollama. On first boot, you need to create an admin account and generate an API key:
+
+1. Open http://localhost:3000
+2. Create an admin account (the first signup automatically becomes admin)
+3. Go to **Settings > Account > API Keys**
+4. Generate a new API key (starts with `sk-...`)
+5. Add it to your `.env` file:
+   ```bash
+   OLLAMA_API_KEY=sk-your-key-here
+   ```
+6. Restart Engram to pick up the key:
+   ```bash
+   docker compose restart engram
+   ```
 
 ### Configuration
 
@@ -153,7 +171,8 @@ Create a `.env` file in the engram directory for customization:
 ENGRAM_API_KEY=your-secret-token              # For network authentication
 ENGRAM_EMBEDDER=ollama                         # Auto-detected; force with: openai, ollama, none
 OPENAI_API_KEY=sk-...                          # If using OpenAI embeddings
-OLLAMA_URL=http://ollama:11434                 # Docker service-to-service (default)
+OLLAMA_API_KEY=sk-...                          # Open-WebUI API key for Ollama proxy auth
+OLLAMA_URL=http://open-webui:8080/ollama       # Routes through Open-WebUI (default)
 POSTGRES_PASSWORD=change-me-in-production      # Default: engram
 ENGRAM_PORT=8788                               # HTTP port (default)
 ```
@@ -325,7 +344,8 @@ Each file is editable, greppable, version-controllable. You can:
 |----------------------|--------------------------|------------------------------------------------------|
 | `ENGRAM_EMBEDDER`    | *(auto-detect)*          | Force embedding mode: `openai`, `ollama`, or `none`  |
 | `OPENAI_API_KEY`     | *(unset)*                | OpenAI key for vector embeddings                     |
-| `OLLAMA_URL`         | `http://ollama:11434`    | Ollama server address (Docker DNS by default)        |
+| `OLLAMA_URL`         | `http://open-webui:8080/ollama` | Ollama endpoint — routed through Open-WebUI   |
+| `OLLAMA_API_KEY`     | *(unset)*                | Open-WebUI API key for Bearer auth                   |
 | `ENGRAM_PROJECT`     | `default`                | Default project namespace                            |
 | `ENGRAM_API_KEY`     | *(unset)*                | Bearer token for SSE authentication                  |
 | `DATABASE_URL`       | *(unset)*                | PostgreSQL connection string (Docker mode)           |
