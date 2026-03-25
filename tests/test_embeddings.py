@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from engram.db import MemoryDB
-from engram.embeddings import NullEmbedder, cosine_similarity, create_embedder, from_blob, to_blob
+from engram.embeddings import NullEmbedder, OllamaEmbedder, cosine_similarity, create_embedder, from_blob, to_blob
 from engram.errors import EmbeddingConfigMismatchError
 from engram.search import SearchEngine
 from engram.types import Memory
@@ -236,6 +236,32 @@ class TestMetadataVersion:
         engine.store(Memory(content="Test version storage"))
 
         assert db.get_meta("embedder_version") == "v1-test"
+
+
+class TestOllamaAuth:
+    def test_ollama_embedder_accepts_api_key(self):
+        """OllamaEmbedder should accept an optional api_key parameter."""
+        emb = OllamaEmbedder(base_url="http://localhost:11434", api_key="sk-test-123")
+        assert emb._headers.get("Authorization") == "Bearer sk-test-123"
+
+    def test_ollama_embedder_no_auth_header_without_key(self):
+        """OllamaEmbedder should not include auth header when no key is provided."""
+        emb = OllamaEmbedder(base_url="http://localhost:11434")
+        assert "Authorization" not in emb._headers
+
+    def test_create_embedder_passes_ollama_api_key(self, monkeypatch):
+        """create_embedder should pass OLLAMA_API_KEY to OllamaEmbedder."""
+        monkeypatch.setenv("OLLAMA_API_KEY", "sk-from-env")
+        emb = create_embedder(provider="ollama", ollama_url="http://localhost:11434")
+        assert isinstance(emb, OllamaEmbedder)
+        assert emb._headers.get("Authorization") == "Bearer sk-from-env"
+
+    def test_create_embedder_no_ollama_api_key(self, monkeypatch):
+        """create_embedder should work without OLLAMA_API_KEY."""
+        monkeypatch.delenv("OLLAMA_API_KEY", raising=False)
+        emb = create_embedder(provider="ollama", ollama_url="http://localhost:11434")
+        assert isinstance(emb, OllamaEmbedder)
+        assert "Authorization" not in emb._headers
 
 
 class TestOllamaReachableErrorHandling:

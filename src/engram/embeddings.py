@@ -113,14 +113,14 @@ class OllamaEmbedder:
     """Ollama nomic-embed-text via local REST API (768 dimensions).
 
     Calls Ollama's /api/embed endpoint directly with httpx -- no ollama
-    Python package needed.
+    Python package needed. Supports optional Bearer auth for Open-WebUI proxy.
     """
 
     name = "ollama/nomic-embed-text"
     dimensions = 768
     version = "v1.5"
 
-    def __init__(self, base_url: str = "http://localhost:11434"):
+    def __init__(self, base_url: str = "http://localhost:11434", api_key: str | None = None):
         if _httpx is None:
             raise ImportError(
                 "httpx is required for Ollama embeddings: pip install engram[ollama]"
@@ -129,11 +129,15 @@ class OllamaEmbedder:
         if not _validate_ollama_url(base_url):
             raise ValueError(f"Blocked Ollama URL (potential SSRF): {base_url}")
         self._base_url = base_url.rstrip("/")
+        self._headers: dict[str, str] = {}
+        if api_key:
+            self._headers["Authorization"] = f"Bearer {api_key}"
 
     def embed(self, text: str) -> np.ndarray:
         resp = _httpx.post(
             f"{self._base_url}/api/embed",
             json={"model": "nomic-embed-text", "input": text},
+            headers=self._headers,
             timeout=30.0,
         )
         resp.raise_for_status()
@@ -147,6 +151,7 @@ class OllamaEmbedder:
             resp = _httpx.post(
                 f"{self._base_url}/api/embed",
                 json={"model": "nomic-embed-text", "input": batch},
+                headers=self._headers,
                 timeout=60.0,
             )
             resp.raise_for_status()
@@ -201,16 +206,18 @@ def create_embedder(
 
     if provider == "ollama":
         url = os.environ.get("OLLAMA_URL", ollama_url)
-        return OllamaEmbedder(base_url=url)
+        ollama_key = os.environ.get("OLLAMA_API_KEY")
+        return OllamaEmbedder(base_url=url, api_key=ollama_key)
 
     if provider == "none":
         return NullEmbedder()
 
     # Auto-detect
     auto_url = os.environ.get("OLLAMA_URL", ollama_url)
-    if _ollama_reachable(auto_url):
+    ollama_key = os.environ.get("OLLAMA_API_KEY")
+    if _ollama_reachable(auto_url, api_key=ollama_key):
         logger.info("Auto-detected Ollama at %s, using local embeddings", auto_url)
-        return OllamaEmbedder(base_url=auto_url)
+        return OllamaEmbedder(base_url=auto_url, api_key=ollama_key)
 
     key = api_key or os.environ.get("OPENAI_API_KEY")
     if key:
@@ -221,13 +228,16 @@ def create_embedder(
     return NullEmbedder()
 
 
-def _ollama_reachable(base_url: str) -> bool:
+def _ollama_reachable(base_url: str, api_key: str | None = None) -> bool:
     """Quick check if Ollama is running and has nomic-embed-text."""
     if _httpx is None:
         logger.debug("httpx not installed — Ollama auto-detect skipped")
         return False
     try:
-        resp = _httpx.get(f"{base_url}/api/tags", timeout=2.0)
+        headers: dict[str, str] = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+        resp = _httpx.get(f"{base_url}/api/tags", headers=headers, timeout=2.0)
         if resp.status_code == 200:
             models = [m.get("name", "") for m in resp.json().get("models", [])]
             return any("nomic-embed-text" in m for m in models)
