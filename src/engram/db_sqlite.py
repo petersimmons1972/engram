@@ -383,6 +383,22 @@ class SqliteBackend:
             ).fetchall()
             return [r["chunk_text"] for r in rows]
 
+    def get_chunks_for_memories(self, memory_ids: list[str]) -> list[Chunk]:
+        """Load chunks with embeddings for specific memory IDs only."""
+        if not memory_ids:
+            return []
+        with self._lock:
+            conn = self._get_conn()
+            placeholders = ",".join("?" for _ in memory_ids)
+            rows = conn.execute(
+                f"""SELECT c.* FROM chunks c
+                   WHERE c.memory_id IN ({placeholders})
+                   AND c.embedding IS NOT NULL
+                   ORDER BY c.chunk_index""",
+                memory_ids,
+            ).fetchall()
+            return [self._row_to_chunk(r) for r in rows]
+
     def chunk_hash_exists(self, chunk_hash: str) -> bool:
         with self._lock:
             conn = self._get_conn()

@@ -139,10 +139,29 @@ class SearchEngine:
         # Layer 2: Vector / Semantic (skipped for NullEmbedder)
         if self.has_vectors:
             query_vec = self.embedder.embed(query)
-            all_chunks = self.db.get_all_chunks_with_embeddings()
 
+            # FTS-first: load embeddings only for FTS candidate memories
+            fts_memory_ids = [mem.id for mem, _ in fts_results] if fts_results else []
+            need_fallback = len(fts_memory_ids) < top_k
+
+            if fts_memory_ids:
+                fts_chunks = self.db.get_chunks_for_memories(fts_memory_ids)
+            else:
+                fts_chunks = []
+
+            # If FTS didn't return enough candidates, fall back to full scan
+            # for remaining slots to catch semantic-only matches
+            if need_fallback:
+                all_chunks = self.db.get_all_chunks_with_embeddings()
+                fts_chunk_ids = {c.id for c in fts_chunks}
+                fallback_chunks = [c for c in all_chunks if c.id not in fts_chunk_ids]
+            else:
+                fallback_chunks = []
+
+            # Score all candidate chunks (FTS candidates + fallback)
+            all_candidate_chunks = fts_chunks + fallback_chunks
             chunk_scores: list[tuple[Chunk, float]] = []
-            for chunk in all_chunks:
+            for chunk in all_candidate_chunks:
                 if chunk.embedding is None:
                     continue
                 chunk_vec = from_blob(chunk.embedding)

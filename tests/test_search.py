@@ -357,3 +357,79 @@ class TestGoldenQueryRegression:
         results = engine.recall("port 3000 error conflict dev server")
         assert len(results) >= 1
         assert "3000" in results[0].memory.content
+
+
+class TestFTSFirst:
+    """B4: FTS-first retrieval — vector search scoped to FTS candidates only."""
+
+    def test_fts_candidates_limit_vector_scope(self, tmp_path):
+        """Store many memories. Recall should NOT load all embeddings."""
+        from unittest.mock import patch
+
+        from engram.db import MemoryDB
+        from engram.search import SearchEngine
+
+        db = MemoryDB(project="ftsscope", db_dir=tmp_path)
+
+        from tests.conftest import FakeEmbedder
+        embedder = FakeEmbedder()
+        engine = SearchEngine(db=db, embedder=embedder)
+
+        # Store 30 memories with unique words so FTS can find them
+        for i in range(30):
+            engine.store(Memory(content=f"Memory number {i} about topic alpha bravo charlie"))
+
+        # Patch get_all_chunks_with_embeddings to detect if it's called
+        original = db.get_all_chunks_with_embeddings
+        with patch.object(db, "get_all_chunks_with_embeddings", wraps=original) as spy:
+            results = engine.recall("alpha bravo charlie", top_k=5)
+            assert len(results) >= 1
+            # The key assertion: get_all_chunks_with_embeddings must NOT be called
+            # when FTS returns enough candidates
+            spy.assert_not_called()
+
+    def test_fts_first_still_returns_semantic_matches(self, engine):
+        """Vector re-rank must still work on FTS candidates."""
+        engine.store(Memory(content="PostgreSQL is our database"))
+        engine.store(Memory(content="We use Postgres for persistence"))
+
+        results = engine.recall("relational database choice")
+        # At least one should be returned (BM25 finds "database", vector helps rank)
+        assert len(results) >= 1
+        top_content = " ".join(r.memory.content for r in results)
+        assert "database" in top_content.lower() or "Postgres" in top_content
+
+    def test_bm25_only_mode_unchanged(self, tmp_path):
+        """NullEmbedder path must still work with FTS-first."""
+        from engram.db import MemoryDB
+        from engram.embeddings import NullEmbedder
+        from engram.search import SearchEngine
+
+        db = MemoryDB(project="bm25only", db_dir=tmp_path)
+        engine = SearchEngine(db=db, embedder=NullEmbedder())
+
+        engine.store(Memory(content="BM25 only mode testing with unique words"))
+        results = engine.recall("BM25 testing unique")
+        assert len(results) >= 1
+        assert "BM25" in results[0].memory.content
+
+    def test_vector_fallback_when_fts_insufficient(self, engine):
+        """When FTS returns < top_k, vector fills remaining slots."""
+        # Store a memory with no lexical overlap with the query
+        engine.store(Memory(content="The cat sat on the mat quietly"))
+        # Store a memory with lexical overlap
+        engine.store(Memory(content="Dogs are loyal animals and great pets"))
+
+        # Query that partially matches one but not both via BM25
+        results = engine.recall("loyal pets animals", top_k=5)
+        assert len(results) >= 1
+        # The lexical match should be found
+        assert any("loyal" in r.memory.content for r in results)
+
+    def test_get_chunks_for_memories_method_exists(self, tmp_path):
+        """DB backend must have get_chunks_for_memories method."""
+        from engram.db import MemoryDB
+        db = MemoryDB(project="methodcheck", db_dir=tmp_path)
+        assert hasattr(db, "get_chunks_for_memories"), (
+            "SqliteBackend must implement get_chunks_for_memories(memory_ids)"
+        )
