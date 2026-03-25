@@ -3,45 +3,12 @@
 # See: https://edu.chainguard.dev/chainguard/chainguard-images/faq/
 
 services:
-  # Optional: Uncomment to run Ollama in Docker. By default, this assumes Ollama
-  # is running on the host at localhost:11434 (systemd or native binary).
-  # To use the Docker Ollama service instead:
-  # 1. Comment out OLLAMA_URL in the engram service environment
-  # 2. Uncomment the ollama service below
-  # 3. Update engram depends_on to include ollama
-  # 4. Set OLLAMA_URL=http://ollama:11434 in engram environment
-  #
-  # ollama:
-  #   image: ollama/ollama:latest
-  #   volumes:
-  #     - ollama-data:/root/.ollama
-  #   ports:
-  #     - "11434:11434"
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-  engram:
-    build: .
-    ports:
-      - "${ENGRAM_PORT:-8788}:8788"
-    environment:
-      - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
-      - ENGRAM_EMBEDDER=ollama
-      - OLLAMA_URL=http://localhost:11434
-      - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
-    depends_on:
-      postgres:
-        condition: service_healthy
-    # Note: OLLAMA_URL=http://localhost:11434 assumes Ollama is running on the host.
-    # To use Docker Ollama instead, uncomment the ollama service above, set
-    # OLLAMA_URL=http://ollama:11434, and add ollama to depends_on below.
-    restart: unless-stopped
+  # Three required services: postgres, ollama, engram
+  # For GPU support, use: docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
+  # For host Ollama: docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d
 
   postgres:
+    container_name: engram-postgres
     image: cgr.dev/chainguard/postgres:latest
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -56,24 +23,75 @@ services:
       retries: 5
     restart: unless-stopped
 
+  ollama:
+    container_name: engram-ollama
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Initialize Ollama with nomic-embed-text model (required for vector embeddings).
+  # Run once: docker compose --profile init run --rm ollama-init
+  ollama-init:
+    container_name: engram-ollama-init
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    entrypoint: /bin/sh
+    command: -c "ollama pull nomic-embed-text && echo 'Model nomic-embed-text ready'"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    profiles: ["init"]
+    restart: no
+
+  engram:
+    container_name: engram-app
+    build: .
+    ports:
+      - "${ENGRAM_PORT:-8788}:8788"
+    environment:
+      - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
+      - ENGRAM_EMBEDDER=ollama
+      - OLLAMA_URL=http://ollama:11434
+      - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Note: Ollama dependency handled by docker-compose.yml (local) or host-ollama override.
+    # Engram has built-in retry logic for Ollama connection failures.
+    restart: unless-stopped
+
 
   # Optional: Open WebUI for browsing Ollama models and testing embeddings.
   # Useful for development/debugging, not required for Engram operation.
   # Start with: docker compose --profile ui up -d
   open-webui:
+    container_name: engram-open-webui
     image: ghcr.io/open-webui/open-webui:main
     ports:
       - "3000:8080"
     environment:
-      - OLLAMA_BASE_URL=http://localhost:11434
+      - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
       - open-webui-data:/app/backend/data
+    depends_on:
+      ollama:
+        condition: service_healthy
     profiles: ["ui"]
     restart: unless-stopped
 
   # Optional: TLS termination for production SSE deployments.
   # Uncomment and configure Caddyfile with your domain.
   # caddy:
+  #   container_name: engram-caddy
   #   image: cgr.dev/chainguard/caddy:latest
   #   ports:
   #     - "443:443"
@@ -86,6 +104,7 @@ services:
   #   restart: unless-stopped
 
   test-postgres:
+    container_name: engram-test-postgres
     image: postgres:16-alpine
     profiles: ["test"]
     environment:

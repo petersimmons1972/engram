@@ -1,0 +1,34 @@
+# Use system/host Ollama instead of Docker service
+# Usage: docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d
+#
+# Use this if you're running Ollama natively on your host machine.
+# The Engram container will connect to host Ollama via Docker's host.docker.internal.
+#
+# Prerequisites:
+#   1. Ollama running on host: ollama serve
+#   2. Model pulled on host: ollama pull nomic-embed-text
+#   3. Then start Engram: docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d
+
+services:
+  engram:
+    environment:
+      - OLLAMA_URL=http://host.docker.internal:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Remove ollama dependency - using host Ollama instead
+
+  # Disable Docker Ollama service - using host instead
+  ollama:
+    profiles: ["disabled"]
+
+  ollama-init:
+    profiles: ["disabled"]
+
+  open-webui:
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Remove ollama dependency - using host Ollama instead
