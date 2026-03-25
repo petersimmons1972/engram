@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from engram.search import SearchEngine
 from engram.types import Memory, MemoryType, Relationship, RelationType
 
@@ -256,6 +258,75 @@ class TestSimplifiedScoring:
         # should be approximately (1.0 - WEIGHT_RECENCY) * 1.0 + WEIGHT_RECENCY * recency
         # The key check: no weight goes to graph, and vector weight goes to BM25
         assert "graph" not in bd, "graph should not be in score_breakdown"
+
+
+class TestTransactionalStore:
+    """B6: Transactional store — atomic memory+chunks+embeddings with rollback."""
+
+    def test_failed_embedding_leaves_no_orphan(self, tmp_path):
+        """Mock embedder to raise. Assert no orphan memory or chunks in DB."""
+        from unittest.mock import MagicMock
+
+        from engram.db import MemoryDB
+        from engram.search import SearchEngine
+
+        db = MemoryDB(project="txntest1", db_dir=tmp_path)
+        embedder = MagicMock()
+        embedder.name = "mock/embedder"
+        embedder.dimensions = 64
+        embedder.version = "v1-mock"
+        engine = SearchEngine(db=db, embedder=embedder)
+
+        # Make embed_batch raise after memory is stored
+        embedder.embed_batch.side_effect = RuntimeError("Embedding service down")
+
+        mem = Memory(content="This should not persist if embedding fails")
+        with pytest.raises(ValueError, match="Failed to store memory"):
+            engine.store(mem)
+
+        # No orphan memory or chunks should remain
+        stats = db.get_stats()
+        assert stats.total_memories == 0, f"Orphan memory found: {stats.total_memories}"
+        assert stats.total_chunks == 0, f"Orphan chunks found: {stats.total_chunks}"
+
+    def test_failed_chunk_store_rolls_back_memory(self, tmp_path):
+        """Mock db.store_chunks to raise. Assert memory is also gone."""
+        from unittest.mock import patch
+
+        from engram.db import MemoryDB
+        from engram.search import SearchEngine
+        from tests.conftest import FakeEmbedder
+
+        db = MemoryDB(project="txntest2", db_dir=tmp_path)
+        engine = SearchEngine(db=db, embedder=FakeEmbedder())
+
+        with patch.object(db, "store_chunks", side_effect=RuntimeError("DB write error")):
+            with pytest.raises((RuntimeError, ValueError)):
+                engine.store(Memory(content="This should not persist if chunk store fails"))
+
+        # Memory should be rolled back too
+        stats = db.get_stats()
+        assert stats.total_memories == 0, f"Orphan memory found: {stats.total_memories}"
+
+    def test_successful_store_is_atomic(self, tmp_path):
+        """Store succeeds: both memory and chunks appear together."""
+        from engram.db import MemoryDB
+        from engram.search import SearchEngine
+        from tests.conftest import FakeEmbedder
+
+        db = MemoryDB(project="txntest3", db_dir=tmp_path)
+        engine = SearchEngine(db=db, embedder=FakeEmbedder())
+
+        stored = engine.store(Memory(content="Atomic store test memory"))
+        stats = db.get_stats()
+        assert stats.total_memories == 1
+        assert stats.total_chunks >= 1
+
+        # Delete should remove both
+        db.delete_memory_atomic(stored.id)
+        stats2 = db.get_stats()
+        assert stats2.total_memories == 0
+        assert stats2.total_chunks == 0
 
 
 class TestGoldenQueryRegression:

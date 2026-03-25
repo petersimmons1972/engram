@@ -62,41 +62,44 @@ class SearchEngine:
             )
 
     def store(self, memory: Memory) -> Memory:
-        """Store a memory: chunk it, embed it (if provider available), index it."""
+        """Store a memory: chunk it, embed it (if provider available), index it.
+
+        The entire operation is transactional: if ANY step fails (embedding,
+        chunk storage), the memory is rolled back to prevent orphans.
+        """
         self._check_embedder_metadata()
 
         memory = self.db.store_memory(memory)
 
-        chunks = chunk_text(memory.content)
+        try:
+            chunks = chunk_text(memory.content)
 
-        texts_to_embed: list[str] = []
-        chunk_objects: list[Chunk] = []
+            texts_to_embed: list[str] = []
+            chunk_objects: list[Chunk] = []
 
-        for i, text in enumerate(chunks):
-            h = chunk_hash(text)
-            if self.db.chunk_hash_exists(h):
-                continue
-            chunk_objects.append(
-                Chunk(memory_id=memory.id, chunk_text=text, chunk_index=i, chunk_hash=h)
-            )
-            texts_to_embed.append(text)
+            for i, text in enumerate(chunks):
+                h = chunk_hash(text)
+                if self.db.chunk_hash_exists(h):
+                    continue
+                chunk_objects.append(
+                    Chunk(memory_id=memory.id, chunk_text=text, chunk_index=i, chunk_hash=h)
+                )
+                texts_to_embed.append(text)
 
-        if texts_to_embed and self.has_vectors:
-            try:
+            if texts_to_embed and self.has_vectors:
                 embeddings = self.embedder.embed_batch(texts_to_embed)
                 for chunk_obj, emb in zip(chunk_objects, embeddings):
                     chunk_obj.embedding = to_blob(emb)
-            except Exception as e:
-                # Embedding failed — don't create orphan memory with no embeddings.
-                # Rollback by deleting the memory we just created.
-                self.db.delete_memory_atomic(memory.id)
-                raise ValueError(
-                    f"Failed to embed chunks for memory {memory.id}. "
-                    f"Memory deleted to prevent orphaned record. Error: {str(e)}"
-                ) from e
 
-        if chunk_objects:
-            self.db.store_chunks(chunk_objects)
+            if chunk_objects:
+                self.db.store_chunks(chunk_objects)
+        except Exception as e:
+            # Any failure after memory creation: roll back to prevent orphans
+            self.db.delete_memory_atomic(memory.id)
+            raise ValueError(
+                f"Failed to store memory {memory.id}. "
+                f"Memory deleted to prevent orphaned record. Error: {e}"
+            ) from e
 
         return memory
 
