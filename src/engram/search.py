@@ -17,10 +17,9 @@ from .types import (
 
 logger = logging.getLogger(__name__)
 
-WEIGHT_VECTOR = 0.45
-WEIGHT_BM25 = 0.25
+WEIGHT_VECTOR = 0.50
+WEIGHT_BM25 = 0.35
 WEIGHT_RECENCY = 0.15
-WEIGHT_GRAPH = 0.15
 
 DECAY_RATE = 0.01  # per hour
 
@@ -110,30 +109,29 @@ class SearchEngine:
         min_importance: int | None = None,
         graph_hops: int = 1,
     ) -> list[SearchResult]:
-        """Three-layer recall: BM25 + vector + recency, then graph expansion."""
+        """Three-signal recall: BM25 + vector + recency. Graph is enrichment only."""
 
         candidates: dict[str, _Candidate] = {}
 
         if self._is_null:
-            non_vector = WEIGHT_BM25 + WEIGHT_RECENCY + WEIGHT_GRAPH
+            # NullEmbedder: redistribute vector weight to BM25 (recency keeps its weight)
             w_vector = 0.0
-            w_bm25 = WEIGHT_BM25 + WEIGHT_VECTOR * (WEIGHT_BM25 / non_vector)
-            w_recency = WEIGHT_RECENCY + WEIGHT_VECTOR * (WEIGHT_RECENCY / non_vector)
-            w_graph = WEIGHT_GRAPH + WEIGHT_VECTOR * (WEIGHT_GRAPH / non_vector)
+            w_bm25 = WEIGHT_BM25 + WEIGHT_VECTOR  # BM25 gets all non-recency, non-vector weight
+            w_recency = WEIGHT_RECENCY
         else:
             w_vector = WEIGHT_VECTOR
             w_bm25 = WEIGHT_BM25
             w_recency = WEIGHT_RECENCY
-            w_graph = WEIGHT_GRAPH
 
         # Layer 1: FTS5 / BM25
         fts_results = self.db.fts_search(query, limit=top_k * 2)
         if fts_results:
             max_bm25 = max(score for _, score in fts_results)
             min_bm25 = min(score for _, score in fts_results)
-            score_range = (max_bm25 - min_bm25) if max_bm25 != min_bm25 else 1.0
+            score_range = max_bm25 - min_bm25
             for mem, score in fts_results:
-                norm_score = (score - min_bm25) / score_range
+                # Single result or all same score: normalize to 1.0 (not 0.0)
+                norm_score = (score - min_bm25) / score_range if score_range > 0 else 1.0
                 cand = candidates.setdefault(mem.id, _Candidate(memory=mem))
                 cand.bm25_score = norm_score
                 cand.matched_chunk = mem.content[:200]
@@ -187,19 +185,15 @@ class SearchEngine:
             hours = max((now - mem.last_accessed).total_seconds() / 3600, 0.01)
             recency_score = math.exp(-DECAY_RATE * hours)
 
-            # Layer 4: Graph connectivity boost (Cognee-inspired)
-            conn_count = self.db.get_connection_count(mem.id)
-            graph_score = min(1.0, conn_count / 5.0)
-
             composite = (
                 w_vector * cand.vector_score
                 + w_bm25 * cand.bm25_score
                 + w_recency * recency_score
-                + w_graph * graph_score
             )
 
-            # Importance multiplier: importance 0 => 2x, importance 4 => 0.6x
-            importance_mult = 2.0 - (mem.importance * 0.35)
+            # Importance multiplier: bounded to <= 2x variance
+            # importance 0 => 1.3x, importance 4 => 0.7x (1.86x variance)
+            importance_mult = 1.3 - (mem.importance * 0.15)
             final_score = composite * importance_mult
 
             scored.append(
@@ -210,7 +204,6 @@ class SearchEngine:
                         "vector": round(cand.vector_score, 4),
                         "bm25": round(cand.bm25_score, 4),
                         "recency": round(recency_score, 4),
-                        "graph": round(graph_score, 4),
                         "importance_mult": round(importance_mult, 2),
                     },
                     matched_chunk=cand.matched_chunk,
