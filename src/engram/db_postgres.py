@@ -72,6 +72,7 @@ CREATE TABLE IF NOT EXISTS relationships (
     target_id TEXT NOT NULL,
     rel_type TEXT NOT NULL DEFAULT 'relates_to',
     strength DOUBLE PRECISION NOT NULL DEFAULT 1.0,
+    project TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL,
     FOREIGN KEY (source_id) REFERENCES memories(id) ON DELETE CASCADE,
     FOREIGN KEY (target_id) REFERENCES memories(id) ON DELETE CASCADE
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS relationships (
 
 CREATE INDEX IF NOT EXISTS idx_rel_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_rel_target ON relationships(target_id);
+CREATE INDEX IF NOT EXISTS idx_rel_project ON relationships(project);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_pair
     ON relationships(source_id, target_id, rel_type);
 
@@ -88,7 +90,7 @@ CREATE TABLE IF NOT EXISTS project_meta (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 class PostgresBackend:
@@ -128,9 +130,24 @@ class PostgresBackend:
                 "SELECT value FROM project_meta WHERE key = 'schema_version'"
             ).fetchone()
             current = int(row["value"]) if row else 1
-            if current < CURRENT_SCHEMA_VERSION:
-                # Future migrations go here
-                pass
+            if current < 3:
+                # Add project column to relationships table for cross-project isolation (#75)
+                try:
+                    conn.execute(
+                        "ALTER TABLE relationships ADD COLUMN project TEXT NOT NULL DEFAULT ''"
+                    )
+                except Exception:
+                    pass  # Column already exists (fresh DB created with new schema)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_rel_project ON relationships(project)"
+                )
+                # Backfill existing relationships with the project from their source memory
+                conn.execute(
+                    """UPDATE relationships SET project = (
+                           SELECT m.project FROM memories m WHERE m.id = relationships.source_id
+                       ) WHERE project = ''"""
+                )
+                conn.commit()
             conn.execute(
                 "INSERT INTO project_meta (key, value) VALUES ('schema_version', %s) "
                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -388,11 +405,12 @@ class PostgresBackend:
                 raise ValueError(f"Source memory '{rel.source_id}' does not exist")
             if not tgt:
                 raise ValueError(f"Target memory '{rel.target_id}' does not exist")
+            rel.project = self.project
 
             conn.execute(
                 """INSERT INTO relationships
-                   (id, source_id, target_id, rel_type, strength, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s)
+                   (id, source_id, target_id, rel_type, strength, project, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (source_id, target_id, rel_type)
                    DO UPDATE SET strength = EXCLUDED.strength""",
                 (
@@ -401,6 +419,7 @@ class PostgresBackend:
                     rel.target_id,
                     rel.rel_type.value,
                     rel.strength,
+                    rel.project,
                     rel.created_at,
                 ),
             )
@@ -422,14 +441,14 @@ class PostgresBackend:
 
                 outgoing = conn.execute(
                     "SELECT target_id, rel_type, strength "
-                    "FROM relationships WHERE source_id = ANY(%s)",
-                    (frontier,),
+                    "FROM relationships WHERE source_id = ANY(%s) AND project = %s",
+                    (frontier, self.project),
                 ).fetchall()
 
                 incoming = conn.execute(
                     "SELECT source_id, rel_type, strength "
-                    "FROM relationships WHERE target_id = ANY(%s)",
-                    (frontier,),
+                    "FROM relationships WHERE target_id = ANY(%s) AND project = %s",
+                    (frontier, self.project),
                 ).fetchall()
 
                 for row in outgoing:
@@ -490,8 +509,8 @@ class PostgresBackend:
         with self.pool.connection() as conn:
             row = conn.execute(
                 "SELECT COUNT(*) AS c FROM relationships "
-                "WHERE source_id = %s OR target_id = %s",
-                (memory_id, memory_id),
+                "WHERE (source_id = %s OR target_id = %s) AND project = %s",
+                (memory_id, memory_id, self.project),
             ).fetchone()
             return row["c"]
 
@@ -501,15 +520,16 @@ class PostgresBackend:
         with self.pool.connection() as conn:
             decayed_row = conn.execute(
                 "WITH updated AS ("
-                "  UPDATE relationships SET strength = GREATEST(0.0, strength - %s) RETURNING id"
+                "  UPDATE relationships SET strength = GREATEST(0.0, strength - %s)"
+                "  WHERE project = %s RETURNING id"
                 ") SELECT count(*) AS c FROM updated",
-                (decay_factor,),
+                (decay_factor, self.project),
             ).fetchone()
             pruned_row = conn.execute(
                 "WITH deleted AS ("
-                "  DELETE FROM relationships WHERE strength < %s RETURNING id"
+                "  DELETE FROM relationships WHERE strength < %s AND project = %s RETURNING id"
                 ") SELECT count(*) AS c FROM deleted",
-                (min_strength,),
+                (min_strength, self.project),
             ).fetchone()
             conn.commit()
             return decayed_row["c"], pruned_row["c"]

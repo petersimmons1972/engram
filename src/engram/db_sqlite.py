@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS relationships (
     target_id TEXT NOT NULL,
     rel_type TEXT NOT NULL DEFAULT 'relates_to',
     strength REAL NOT NULL DEFAULT 1.0,
+    project TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     FOREIGN KEY (source_id) REFERENCES memories(id) ON DELETE CASCADE,
     FOREIGN KEY (target_id) REFERENCES memories(id) ON DELETE CASCADE
@@ -85,6 +86,7 @@ CREATE TABLE IF NOT EXISTS relationships (
 
 CREATE INDEX IF NOT EXISTS idx_rel_source ON relationships(source_id);
 CREATE INDEX IF NOT EXISTS idx_rel_target ON relationships(target_id);
+CREATE INDEX IF NOT EXISTS idx_rel_project ON relationships(project);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_rel_pair ON relationships(source_id, target_id, rel_type);
 
 CREATE TABLE IF NOT EXISTS project_meta (
@@ -97,7 +99,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
 """
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 class SqliteBackend:
@@ -145,6 +147,23 @@ class SqliteBackend:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project)")
+            conn.commit()
+        if current < 3:
+            # Add project column to relationships table for cross-project isolation (#75)
+            try:
+                conn.execute(
+                    "ALTER TABLE relationships"
+                    " ADD COLUMN project TEXT NOT NULL DEFAULT ''"
+                )
+            except sqlite3.OperationalError:
+                pass  # Column already exists (fresh DB created with new schema)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rel_project ON relationships(project)")
+            # Backfill existing relationships with the project from their source memory
+            conn.execute(
+                """UPDATE relationships SET project = (
+                       SELECT m.project FROM memories m WHERE m.id = relationships.source_id
+                   ) WHERE project = ''"""
+            )
             conn.commit()
         conn.execute("INSERT OR REPLACE INTO project_meta (key, value) VALUES ('schema_version', ?)",
                      (str(CURRENT_SCHEMA_VERSION),))
@@ -400,16 +419,18 @@ class SqliteBackend:
                 raise ValueError(f"Source memory '{rel.source_id}' does not exist")
             if not tgt:
                 raise ValueError(f"Target memory '{rel.target_id}' does not exist")
+            rel.project = self.project
             try:
                 conn.execute(
                     """INSERT INTO relationships (id, source_id, target_id, rel_type,
-                       strength, created_at) VALUES (?, ?, ?, ?, ?, ?)""",
+                       strength, project, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (
                         rel.id,
                         rel.source_id,
                         rel.target_id,
                         rel.rel_type.value,
                         rel.strength,
+                        rel.project,
                         rel.created_at.isoformat(),
                     ),
                 )
@@ -441,14 +462,16 @@ class SqliteBackend:
 
                 outgoing = conn.execute(
                     f"""SELECT r.target_id, r.rel_type, r.strength
-                        FROM relationships r WHERE r.source_id IN ({placeholders})""",
-                    frontier,
+                        FROM relationships r WHERE r.source_id IN ({placeholders})
+                        AND r.project = ?""",
+                    [*frontier, self.project],
                 ).fetchall()
 
                 incoming = conn.execute(
                     f"""SELECT r.source_id, r.rel_type, r.strength
-                        FROM relationships r WHERE r.target_id IN ({placeholders})""",
-                    frontier,
+                        FROM relationships r WHERE r.target_id IN ({placeholders})
+                        AND r.project = ?""",
+                    [*frontier, self.project],
                 ).fetchall()
 
                 for row in outgoing:
@@ -505,8 +528,8 @@ class SqliteBackend:
             conn = self._get_conn()
             row = conn.execute(
                 """SELECT COUNT(*) as c FROM relationships
-                   WHERE source_id = ? OR target_id = ?""",
-                (memory_id, memory_id),
+                   WHERE (source_id = ? OR target_id = ?) AND project = ?""",
+                (memory_id, memory_id, self.project),
             ).fetchone()
             return row["c"]
 
@@ -518,12 +541,12 @@ class SqliteBackend:
         with self._lock:
             conn = self._get_conn()
             decayed = conn.execute(
-                "UPDATE relationships SET strength = MAX(0.0, strength - ?)",
-                (decay_factor,),
+                "UPDATE relationships SET strength = MAX(0.0, strength - ?) WHERE project = ?",
+                (decay_factor, self.project),
             ).rowcount
             pruned = conn.execute(
-                "DELETE FROM relationships WHERE strength < ?",
-                (min_strength,),
+                "DELETE FROM relationships WHERE strength < ? AND project = ?",
+                (min_strength, self.project),
             ).rowcount
             conn.commit()
             return decayed, pruned

@@ -408,7 +408,60 @@ class TestSchemaMigration:
         db.close()
         db2 = MemoryDB(project="olddb", db_dir=tmp_db_dir)
         version = db2.get_meta("schema_version")
-        assert version == "2"
+        assert version == "3"
+
+
+class TestRelationshipIsolation:
+    def test_relationship_stores_project_column(self, tmp_db_dir):
+        """After storing a relationship, the DB row must have a project column
+        matching the engine's project."""
+        db = MemoryDB(project="alpha", db_dir=tmp_db_dir)
+        m1 = db.store_memory(Memory(content="Alpha memory one"))
+        m2 = db.store_memory(Memory(content="Alpha memory two"))
+        rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
+        db.store_relationship(rel)
+
+        # Query raw DB to verify the project column exists and matches
+        conn = db._get_conn()
+        row = conn.execute("SELECT project FROM relationships WHERE id = ?", (rel.id,)).fetchone()
+        assert row is not None, "Relationship row not found"
+        assert row["project"] == "alpha"
+
+    def test_relationship_invisible_cross_project(self, tmp_db_dir):
+        """Relationships in project A must not appear when querying from project B."""
+        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
+        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
+
+        # Create and connect memories in alpha
+        m1 = db_a.store_memory(Memory(content="Alpha mem one"))
+        m2 = db_a.store_memory(Memory(content="Alpha mem two"))
+        rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
+        db_a.store_relationship(rel)
+
+        # Create memories in beta
+        m3 = db_b.store_memory(Memory(content="Beta mem one"))
+
+        # From beta's perspective, get_connected should find nothing for beta's memory
+        connected = db_b.get_connected(m3.id, max_hops=2)
+        assert len(connected) == 0
+
+    def test_get_connection_count_scoped_to_project(self, tmp_db_dir):
+        """Connection count must be scoped to the project."""
+        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
+        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
+
+        # Create and connect memories in alpha
+        m1 = db_a.store_memory(Memory(content="Alpha A"))
+        m2 = db_a.store_memory(Memory(content="Alpha B"))
+        rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
+        db_a.store_relationship(rel)
+
+        # Alpha should see 1 connection for m1
+        assert db_a.get_connection_count(m1.id) == 1
+
+        # Beta's memories should have 0 connections
+        m3 = db_b.store_memory(Memory(content="Beta A"))
+        assert db_b.get_connection_count(m3.id) == 0
 
 
 class TestGetConnPragmaFailure:

@@ -64,6 +64,7 @@ class Relationship(BaseModel):
     target_id: str
     rel_type: RelationType = RelationType.RELATES_TO
     strength: float = Field(default=1.0, ge=0.0, le=1.0)
+    project: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
