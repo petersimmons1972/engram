@@ -590,6 +590,123 @@ def memory_consolidate(project: str = "") -> dict:
     return {"status": "consolidated", **result}
 
 
+@mcp.tool()
+def memory_dump(project: str = "", output_path: str = "./memory-dump") -> dict:
+    """Export all memories from a project as markdown files.
+
+    Creates a directory with all memories serialized as .md files with YAML frontmatter.
+    Use this for backups or when uninstalling Engram.
+
+    Args:
+        project: Project namespace to dump (e.g. "my-app"). Empty = "default".
+        output_path: Directory to write markdown files. Default: ./memory-dump
+
+    Returns:
+        Count of memories dumped and output directory path.
+    """
+    from .markdown_io import dump_memories_to_directory
+
+    logger.debug("memory_dump called: project=%s, output=%s", project, output_path)
+    engine = _get_engine(project or None)
+
+    # List all memories in the project
+    memories = engine.db.list_memories(limit=10_000)
+
+    if not memories:
+        return {
+            "status": "no_memories",
+            "project": engine.db.project,
+            "count": 0,
+            "message": f"No memories found in project '{engine.db.project}'",
+        }
+
+    # Dump to markdown
+    count = dump_memories_to_directory(memories, output_path)
+
+    return {
+        "status": "dumped",
+        "project": engine.db.project,
+        "count": count,
+        "output_path": str(output_path),
+    }
+
+
+@mcp.tool()
+def memory_ingest(
+    project: str = "",
+    directory: str = "./memory-ingest",
+    memory_type: str = "",
+    importance: int = 2,
+) -> dict:
+    """Import markdown files from a directory as memories.
+
+    Reads all .md files with YAML frontmatter from a directory and stores them as memories.
+    Also creates an install-time snapshot zip containing original files and memory snapshot.
+
+    Args:
+        project: Project namespace to ingest into (e.g. "my-app"). Empty = "default".
+        directory: Directory containing markdown files to import.
+        memory_type: Optional type filter - only ingest memories of this type.
+        importance: Optional importance override for all ingested memories.
+
+    Returns:
+        Count of memories ingested, path to snapshot zip, and any failed files.
+    """
+    from pathlib import Path
+
+    from .markdown_io import create_snapshot_zip, ingest_memories_from_directory
+
+    logger.debug("memory_ingest called: project=%s, directory=%s", project, directory)
+    engine = _get_engine(project or None)
+
+    # Parse markdown files
+    memories, failed = ingest_memories_from_directory(directory, project=engine.db.project)
+
+    if not memories:
+        return {
+            "status": "no_memories",
+            "project": engine.db.project,
+            "count": 0,
+            "failed": len(failed),
+            "message": f"No memories to ingest from {directory}",
+        }
+
+    # Apply type filter if specified
+    if memory_type:
+        try:
+            mt = MemoryType(memory_type)
+            memories = [m for m in memories if m.memory_type == mt]
+        except ValueError:
+            pass
+
+    # Apply importance override if specified
+    if importance and importance != 2:
+        for m in memories:
+            m.importance = max(0, min(4, importance))
+
+    # Store all memories
+    stored_count = 0
+    for memory in memories:
+        try:
+            engine.store(memory)
+            stored_count += 1
+        except Exception as e:
+            logger.error(f"Failed to store memory: {e}")
+
+    # Create snapshot zip
+    snapshot_zip = create_snapshot_zip(directory, memories, ".")
+    logger.info(f"Created snapshot zip: {snapshot_zip}")
+
+    return {
+        "status": "ingested",
+        "project": engine.db.project,
+        "count": stored_count,
+        "failed": len(failed),
+        "failed_files": failed,
+        "snapshot_zip": str(snapshot_zip),
+    }
+
+
 @mcp.prompt()
 def onboarding(project: str = "") -> str:
     """Get a quick-start guide for using engram effectively. Call this if you're

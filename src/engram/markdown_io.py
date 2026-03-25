@@ -1,0 +1,251 @@
+"""Markdown serialization and deserialization for memory dump/ingest.
+
+Handles bidirectional conversion between Memory objects and markdown files with YAML frontmatter.
+Also creates install-time snapshot zips to prove data preservation at ingest time.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import shutil
+import zipfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+from .types import Memory, MemoryType
+
+logger = logging.getLogger(__name__)
+
+
+def memory_to_markdown(memory: Memory) -> str:
+    """Convert a Memory object to markdown with YAML frontmatter.
+
+    Format:
+        ---
+        id: abc123
+        type: decision
+        tags: [auth, security]
+        importance: 1
+        created: 2026-03-25T10:00:00Z
+        last_accessed: 2026-03-25T12:00:00Z
+        ---
+
+        # Memory content (title is first line if available)
+
+        Rest of the content...
+    """
+    frontmatter = {
+        "id": memory.id,
+        "type": memory.memory_type.value,
+        "tags": memory.tags,
+        "importance": memory.importance,
+        "created": memory.created_at.isoformat(),
+        "last_accessed": memory.last_accessed.isoformat(),
+        "project": memory.project,
+    }
+
+    # Use YAML dump with safe_dump for clean output
+    yaml_str = yaml.dump(frontmatter, default_flow_style=False, sort_keys=False)
+
+    return f"---\n{yaml_str}---\n\n{memory.content}\n"
+
+
+def markdown_to_memory(markdown_content: str, project: str = "default") -> Memory | None:
+    """Parse markdown with YAML frontmatter back into a Memory object.
+
+    Returns None if parsing fails.
+    """
+    try:
+        # Split frontmatter from content
+        if not markdown_content.startswith("---"):
+            logger.warning("Markdown does not start with frontmatter")
+            return None
+
+        parts = markdown_content.split("---", 2)
+        if len(parts) < 3:
+            logger.warning("Invalid markdown format: could not find closing frontmatter delimiter")
+            return None
+
+        yaml_str = parts[1]
+        content = parts[2].strip()
+
+        # Parse YAML frontmatter
+        try:
+            frontmatter = yaml.safe_load(yaml_str)
+        except yaml.YAMLError as e:
+            logger.warning("Failed to parse YAML frontmatter: %s", e)
+            return None
+
+        if not isinstance(frontmatter, dict):
+            logger.warning("Frontmatter did not parse to a dict")
+            return None
+
+        # Extract fields with defaults
+        memory_type_str = frontmatter.get("type", "context")
+        try:
+            memory_type = MemoryType(memory_type_str)
+        except ValueError:
+            memory_type = MemoryType.CONTEXT
+
+        memory = Memory(
+            id=frontmatter.get("id", ""),  # Will be regenerated if empty
+            content=content,
+            memory_type=memory_type,
+            project=frontmatter.get("project", project),
+            tags=frontmatter.get("tags", []),
+            importance=int(frontmatter.get("importance", 2)),
+        )
+
+        # Update timestamps if present in frontmatter
+        if "created" in frontmatter:
+            try:
+                memory.created_at = datetime.fromisoformat(
+                    frontmatter["created"].replace("Z", "+00:00")
+                )
+            except (ValueError, AttributeError):
+                pass
+
+        if "last_accessed" in frontmatter:
+            try:
+                memory.last_accessed = datetime.fromisoformat(
+                    frontmatter["last_accessed"].replace("Z", "+00:00")
+                )
+            except (ValueError, AttributeError):
+                pass
+
+        return memory
+
+    except Exception as e:
+        logger.error("Error parsing markdown: %s", e)
+        return None
+
+
+def dump_memories_to_directory(memories: list[Memory], output_dir: str | Path) -> int:
+    """Dump all memories as markdown files to a directory.
+
+    Returns the count of memories written.
+    """
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    count = 0
+    for i, memory in enumerate(memories, 1):
+        # Sanitize filename: use project-type-id
+        filename = f"{i:03d}-{memory.memory_type.value}-{memory.id[:8]}.md"
+        filepath = output_path / filename
+
+        try:
+            markdown = memory_to_markdown(memory)
+            filepath.write_text(markdown, encoding="utf-8")
+            count += 1
+            logger.debug(f"Wrote memory {memory.id} to {filepath}")
+        except Exception as e:
+            logger.error(f"Failed to write memory {memory.id}: {e}")
+
+    logger.info(f"Dumped {count} memories to {output_path}")
+    return count
+
+
+def ingest_memories_from_directory(
+    source_dir: str | Path, project: str = "default"
+) -> tuple[list[Memory], list[str]]:
+    """Ingest markdown files from a directory into Memory objects.
+
+    Returns (memories_list, failed_files).
+    """
+    source_path = Path(source_dir)
+
+    if not source_path.exists():
+        logger.error(f"Source directory does not exist: {source_path}")
+        return [], []
+
+    memories = []
+    failed_files = []
+
+    # Find all .md files
+    md_files = sorted(source_path.glob("*.md"))
+    logger.info(f"Found {len(md_files)} markdown files in {source_path}")
+
+    for md_file in md_files:
+        try:
+            content = md_file.read_text(encoding="utf-8")
+            memory = markdown_to_memory(content, project=project)
+
+            if memory:
+                memories.append(memory)
+                logger.debug(f"Ingested {md_file.name}")
+            else:
+                failed_files.append(md_file.name)
+                logger.warning(f"Failed to parse {md_file.name}")
+
+        except Exception as e:
+            failed_files.append(md_file.name)
+            logger.error(f"Error reading {md_file.name}: {e}")
+
+    logger.info(f"Ingested {len(memories)} memories, {len(failed_files)} failed")
+    return memories, failed_files
+
+
+def create_snapshot_zip(
+    source_dir: str | Path,
+    memories: list[Memory],
+    output_dir: str | Path,
+) -> Path:
+    """Create an install-time snapshot zip containing source files, manifest, and memory snapshot.
+
+    Returns path to the created zip file.
+
+    Zip structure:
+        source-files/
+            <original files from source_dir>
+        manifest.json
+        memory-snapshot.json
+    """
+    source_path = Path(source_dir)
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    # Generate timestamp-based filename: memory-backup-YYYY-MM-DDTHH-MM-SSZ.zip
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(":", "-") + "Z"
+    zip_filename = f"memory-backup-{timestamp}.zip"
+    zip_path = output_path / zip_filename
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Add all source files to source-files/ prefix
+        if source_path.exists():
+            for file_path in source_path.rglob("*"):
+                if file_path.is_file():
+                    arcname = f"source-files/{file_path.relative_to(source_path)}"
+                    zf.write(file_path, arcname=arcname)
+                    logger.debug(f"Added {arcname} to zip")
+
+        # Create and add manifest.json
+        manifest: dict[str, Any] = {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "source_directory": str(source_path),
+            "file_count": sum(1 for _ in source_path.rglob("*") if _.is_file()),
+            "memory_count": len(memories),
+        }
+        zf.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+        # Create and add memory snapshot
+        memory_snapshot = [
+            {
+                "id": m.id,
+                "type": m.memory_type.value,
+                "tags": m.tags,
+                "importance": m.importance,
+                "created": m.created_at.isoformat(),
+                "project": m.project,
+                "content_length": len(m.content),
+            }
+            for m in memories
+        ]
+        zf.writestr("memory-snapshot.json", json.dumps(memory_snapshot, indent=2))
+
+    logger.info(f"Created snapshot zip: {zip_path}")
+    return zip_path
