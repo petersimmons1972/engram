@@ -1,374 +1,284 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 720" width="900" height="720">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 720" width="100%">
   <defs>
-    <!-- Background gradient -->
-    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0f1419"/>
-      <stop offset="100%" stop-color="#141b22"/>
-    </linearGradient>
-
-    <!-- Card gradients -->
-    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1e2832"/>
-      <stop offset="100%" stop-color="#182028"/>
-    </linearGradient>
-    <linearGradient id="serverGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1a2740"/>
-      <stop offset="100%" stop-color="#142035"/>
-    </linearGradient>
-    <linearGradient id="pillBlue" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#2563eb"/>
-      <stop offset="100%" stop-color="#3b82f6"/>
-    </linearGradient>
-    <linearGradient id="pillGreen" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#059669"/>
-      <stop offset="100%" stop-color="#10b981"/>
-    </linearGradient>
-    <linearGradient id="pillAmber" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#d97706"/>
-      <stop offset="100%" stop-color="#f59e0b"/>
-    </linearGradient>
-    <linearGradient id="pillRose" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#e11d48"/>
-      <stop offset="100%" stop-color="#f43f5e"/>
-    </linearGradient>
-    <linearGradient id="proposedGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1a1f2e"/>
-      <stop offset="100%" stop-color="#151a26"/>
-    </linearGradient>
-
-    <!-- Glow filters -->
-    <filter id="glowBlue" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feFlood flood-color="#3b82f6" flood-opacity="0.3"/>
-      <feComposite in2="blur" operator="in"/>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="shadow-standard" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.15"/>
     </filter>
-    <filter id="glowGreen" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="2" result="blur"/>
-      <feFlood flood-color="#10b981" flood-opacity="0.25"/>
-      <feComposite in2="blur" operator="in"/>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="shadow-elevated" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="5" dy="5" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.2"/>
     </filter>
-    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
-    </filter>
-    <filter id="softShadow" x="-5%" y="-5%" width="110%" height="115%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
-    </filter>
-
-    <!-- Arrow marker -->
-    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#3b82f6" stroke-width="1.2"/>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8C8C8C"/>
     </marker>
-    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#10b981" stroke-width="1.2"/>
+    <marker id="arrowhead-gold" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#D4A843"/>
     </marker>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .bg-ivory { fill: #1A1A2E; }
+        .text-navy { fill: #F5F0E8; }
+        .text-charcoal { fill: #E0E0E0; }
+        .text-muted { fill: #8C8C8C; }
+        .border-navy { stroke: #4A7C9B; }
+        .card-fill { fill: #2B2B3D; }
+        .header-fill { fill: #0D1B2A; }
+      }
+    </style>
   </defs>
 
   <!-- Background -->
-  <rect width="900" height="720" fill="url(#bgGrad)"/>
+  <rect class="bg-ivory" width="960" height="720" fill="#F5F0E8"/>
 
-  <!-- Subtle grid pattern -->
-  <g opacity="0.03">
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(50,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(150,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(250,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(350,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(450,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(550,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(650,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(750,0)"/>
-    <line x1="0" y1="0" x2="0" y2="720" stroke="#fff" stroke-width="0.5" transform="translate(850,0)"/>
+  <!-- Title Bar -->
+  <rect class="header-fill" x="0" y="0" width="960" height="56" fill="#1B3A5C"/>
+  <text x="480" y="36" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="24" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.05em">ENGRAM — MCP MEMORY SERVER ARCHITECTURE</text>
+
+  <!-- Section: AI Clients -->
+  <text x="40" y="86" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#8C8C8C" letter-spacing="0.08em">AI CLIENTS</text>
+  <line x1="40" y1="92" x2="620" y2="92" stroke="#1B3A5C" stroke-width="1" opacity="0.3"/>
+
+  <!-- Client pills -->
+  <g filter="url(#shadow-standard)">
+    <rect x="50" y="102" width="120" height="34" fill="#4A7C9B" rx="2"/>
+    <text x="110" y="124" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600">Cursor</text>
+  </g>
+  <g filter="url(#shadow-standard)">
+    <rect x="186" y="102" width="120" height="34" fill="#2D6A4F" rx="2"/>
+    <text x="246" y="124" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600">VS Code</text>
+  </g>
+  <g filter="url(#shadow-standard)">
+    <rect x="322" y="102" width="120" height="34" fill="#D4A843" rx="2"/>
+    <text x="382" y="124" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600">Claude Code</text>
+  </g>
+  <g filter="url(#shadow-standard)">
+    <rect x="458" y="102" width="120" height="34" fill="#C23B22" rx="2"/>
+    <text x="518" y="124" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600">Windsurf</text>
   </g>
 
-  <!-- ═══════════ TITLE ═══════════ -->
-  <text x="450" y="38" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif" font-size="18" font-weight="700" letter-spacing="0.5">ENGRAM</text>
-  <text x="450" y="55" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" letter-spacing="2" text-transform="uppercase">MCP Memory Server Architecture</text>
-
-  <!-- ═══════════ TOP LAYER: AI AGENTS ═══════════ -->
-  <!-- Section label -->
-  <text x="30" y="85" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">AI CLIENTS</text>
-  <line x1="30" y1="90" x2="580" y2="90" stroke="#1e293b" stroke-width="1"/>
-
-  <!-- Agent pills -->
-  <g filter="url(#softShadow)">
-    <rect x="42" y="100" width="120" height="34" rx="17" fill="url(#pillBlue)" opacity="0.9"/>
-    <text x="102" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Cursor</text>
-  </g>
-  <g filter="url(#softShadow)">
-    <rect x="178" y="100" width="120" height="34" rx="17" fill="url(#pillGreen)" opacity="0.9"/>
-    <text x="238" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">VS Code</text>
-  </g>
-  <g filter="url(#softShadow)">
-    <rect x="314" y="100" width="120" height="34" rx="17" fill="url(#pillAmber)" opacity="0.9"/>
-    <text x="374" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Claude Code</text>
-  </g>
-  <g filter="url(#softShadow)">
-    <rect x="450" y="100" width="120" height="34" rx="17" fill="url(#pillRose)" opacity="0.9"/>
-    <text x="510" y="121" text-anchor="middle" fill="#fff" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Windsurf</text>
+  <!-- Connecting lines down -->
+  <g stroke="#8C8C8C" stroke-width="1.5" opacity="0.4">
+    <line x1="110" y1="136" x2="110" y2="155"/>
+    <line x1="246" y1="136" x2="246" y2="155"/>
+    <line x1="382" y1="136" x2="382" y2="155"/>
+    <line x1="518" y1="136" x2="518" y2="155"/>
   </g>
 
-  <!-- ═══════════ MCP PROTOCOL CONNECTION ═══════════ -->
-  <!-- Vertical connecting lines from each pill -->
-  <g stroke="#3b82f6" stroke-width="1.5" opacity="0.5">
-    <line x1="102" y1="134" x2="102" y2="155"/>
-    <line x1="238" y1="134" x2="238" y2="155"/>
-    <line x1="374" y1="134" x2="374" y2="155"/>
-    <line x1="510" y1="134" x2="510" y2="155"/>
-  </g>
+  <!-- Protocol Bar -->
+  <rect x="50" y="155" width="528" height="28" fill="#1B3A5C" rx="2"/>
+  <text x="314" y="173" text-anchor="middle" fill="#F5F0E8" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="600" letter-spacing="0.05em">MCP PROTOCOL — STDIO | SSE</text>
 
-  <!-- Protocol bar -->
-  <rect x="42" y="155" width="528" height="28" rx="6" fill="#1a2740" stroke="#3b82f6" stroke-width="1" opacity="0.7"/>
-  <text x="306" y="173" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="11" font-weight="500" letter-spacing="0.5">MCP Protocol  ·  stdio | SSE</text>
+  <!-- Arrow down -->
+  <line x1="314" y1="183" x2="314" y2="210" stroke="#D4A843" stroke-width="1.5" marker-end="url(#arrowhead-gold)"/>
 
-  <!-- Arrow down from protocol bar -->
-  <line x1="306" y1="183" x2="306" y2="210" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#arrowBlue)" opacity="0.6"/>
-
-  <!-- ═══════════ MIDDLE LAYER: ENGRAM MCP SERVER ═══════════ -->
-  <text x="30" y="220" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">CORE SERVER</text>
-  <line x1="30" y1="225" x2="580" y2="225" stroke="#1e293b" stroke-width="1"/>
+  <!-- Section: Core Server -->
+  <text x="40" y="220" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#8C8C8C" letter-spacing="0.08em">CORE SERVER</text>
+  <line x1="40" y1="226" x2="620" y2="226" stroke="#1B3A5C" stroke-width="1" opacity="0.3"/>
 
   <!-- Main server box -->
-  <g filter="url(#shadow)">
-    <rect x="42" y="235" width="528" height="130" rx="12" fill="url(#serverGrad)" stroke="#3b82f6" stroke-width="1.5" stroke-opacity="0.5"/>
+  <g filter="url(#shadow-elevated)">
+    <rect class="card-fill" x="50" y="236" width="528" height="140" fill="#FFFFFF" stroke="#D4A843" stroke-width="3" rx="4"/>
+    <rect x="50" y="236" width="528" height="32" fill="#1B3A5C" rx="4"/>
+    <rect x="50" y="264" width="528" height="4" fill="#1B3A5C"/>
+    <text x="314" y="258" text-anchor="middle" fill="#F5F0E8" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="16" letter-spacing="0.03em">Engram MCP Server</text>
   </g>
 
-  <!-- Server title -->
-  <text x="306" y="260" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif" font-size="15" font-weight="700">Engram MCP Server</text>
-  <line x1="80" y1="270" x2="532" y2="270" stroke="#2a3a50" stroke-width="1"/>
+  <!-- Tool labels row 1 -->
+  <g font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">
+    <rect x="68" y="282" width="66" height="24" fill="none" stroke="#4A7C9B" stroke-width="1" rx="2"/>
+    <text x="101" y="298" text-anchor="middle" fill="#1B3A5C" font-weight="600">store</text>
 
-  <!-- Tool labels — row 1 -->
-  <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">
-    <rect x="68" y="282" width="66" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="101" y="298" text-anchor="middle" fill="#60a5fa">store</text>
+    <rect x="146" y="282" width="66" height="24" fill="none" stroke="#4A7C9B" stroke-width="1" rx="2"/>
+    <text x="179" y="298" text-anchor="middle" fill="#1B3A5C" font-weight="600">recall</text>
 
-    <rect x="146" y="282" width="66" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="179" y="298" text-anchor="middle" fill="#60a5fa">recall</text>
+    <rect x="224" y="282" width="72" height="24" fill="none" stroke="#2D6A4F" stroke-width="1" rx="2"/>
+    <text x="260" y="298" text-anchor="middle" fill="#1B3A5C" font-weight="600">connect</text>
 
-    <rect x="224" y="282" width="72" height="24" rx="5" fill="#0f1419" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="260" y="298" text-anchor="middle" fill="#34d399">connect</text>
+    <rect x="308" y="282" width="56" height="24" fill="none" stroke="#4A7C9B" stroke-width="1" rx="2"/>
+    <text x="336" y="298" text-anchor="middle" fill="#1B3A5C" font-weight="600">list</text>
 
-    <rect x="308" y="282" width="56" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="336" y="298" text-anchor="middle" fill="#60a5fa">list</text>
+    <rect x="376" y="282" width="68" height="24" fill="none" stroke="#D4A843" stroke-width="1" rx="2"/>
+    <text x="410" y="298" text-anchor="middle" fill="#1B3A5C" font-weight="600">correct</text>
 
-    <rect x="376" y="282" width="68" height="24" rx="5" fill="#0f1419" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="410" y="298" text-anchor="middle" fill="#fbbf24">correct</text>
-
-    <rect x="456" y="282" width="66" height="24" rx="5" fill="#0f1419" stroke="#f43f5e" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="489" y="298" text-anchor="middle" fill="#fb7185">forget</text>
+    <rect x="456" y="282" width="66" height="24" fill="none" stroke="#C23B22" stroke-width="1" rx="2"/>
+    <text x="489" y="298" text-anchor="middle" fill="#1B3A5C" font-weight="600">forget</text>
   </g>
 
-  <!-- Tool labels — row 2 -->
-  <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">
-    <rect x="118" y="316" width="66" height="24" rx="5" fill="#0f1419" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="151" y="332" text-anchor="middle" fill="#60a5fa">status</text>
+  <!-- Tool labels row 2 -->
+  <g font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">
+    <rect x="118" y="316" width="66" height="24" fill="none" stroke="#4A7C9B" stroke-width="1" rx="2"/>
+    <text x="151" y="332" text-anchor="middle" fill="#1B3A5C" font-weight="600">status</text>
 
-    <rect x="198" y="316" width="78" height="24" rx="5" fill="#0f1419" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="237" y="332" text-anchor="middle" fill="#34d399">feedback</text>
+    <rect x="198" y="316" width="78" height="24" fill="none" stroke="#2D6A4F" stroke-width="1" rx="2"/>
+    <text x="237" y="332" text-anchor="middle" fill="#1B3A5C" font-weight="600">feedback</text>
 
-    <rect x="290" y="316" width="96" height="24" rx="5" fill="#0f1419" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="338" y="332" text-anchor="middle" fill="#fbbf24">consolidate</text>
+    <rect x="290" y="316" width="96" height="24" fill="none" stroke="#D4A843" stroke-width="1" rx="2"/>
+    <text x="338" y="332" text-anchor="middle" fill="#1B3A5C" font-weight="600">consolidate</text>
 
-    <rect x="400" y="316" width="80" height="24" rx="5" fill="#0f1419" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="440" y="332" text-anchor="middle" fill="#34d399">configure</text>
+    <rect x="400" y="316" width="92" height="24" fill="none" stroke="#2D6A4F" stroke-width="1" rx="2"/>
+    <text x="446" y="332" text-anchor="middle" fill="#1B3A5C" font-weight="600">onboarding</text>
   </g>
 
-  <!-- ═══════════ CONNECTING LINES TO BOTTOM LAYER ═══════════ -->
-  <g stroke="#10b981" stroke-width="1.2" opacity="0.45" fill="none">
-    <!-- Curved paths from server to each component -->
-    <path d="M150,365 L150,395 Q150,410 150,410 L138,430" marker-end="url(#arrowGreen)"/>
-    <path d="M260,365 L260,395 Q260,410 260,410 L270,430" marker-end="url(#arrowGreen)"/>
-    <path d="M370,365 L370,395 Q370,410 370,410 L400,430" marker-end="url(#arrowGreen)"/>
-    <path d="M470,365 L470,395 Q470,410 470,410 L490,430" marker-end="url(#arrowGreen)"/>
+  <!-- Connecting lines to data layer -->
+  <g stroke="#8C8C8C" stroke-width="1.5" opacity="0.4">
+    <line x1="150" y1="376" x2="138" y2="420" marker-end="url(#arrowhead)"/>
+    <line x1="260" y1="376" x2="270" y2="420" marker-end="url(#arrowhead)"/>
+    <line x1="370" y1="376" x2="400" y2="420" marker-end="url(#arrowhead)"/>
+    <line x1="470" y1="376" x2="500" y2="420" marker-end="url(#arrowhead)"/>
   </g>
 
-  <!-- ═══════════ BOTTOM LAYER: COMPONENTS ═══════════ -->
-  <text x="30" y="420" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">DATA LAYER</text>
-  <line x1="30" y1="425" x2="580" y2="425" stroke="#1e293b" stroke-width="1"/>
+  <!-- Section: Data Layer -->
+  <text x="40" y="412" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#8C8C8C" letter-spacing="0.08em">DATA LAYER</text>
+  <line x1="40" y1="418" x2="620" y2="418" stroke="#1B3A5C" stroke-width="1" opacity="0.3"/>
 
   <!-- Component 1: Chunker -->
-  <g filter="url(#softShadow)">
-    <rect x="30" y="438" width="125" height="80" rx="10" fill="url(#cardGrad)" stroke="#10b981" stroke-width="1" stroke-opacity="0.4"/>
-    <text x="92" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Chunker</text>
-    <line x1="48" y1="470" x2="138" y2="470" stroke="#1e3a3a" stroke-width="0.8"/>
-    <text x="92" y="487" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5">Splits text into</text>
-    <text x="92" y="500" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5">semantic chunks</text>
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="40" y="430" width="125" height="80" fill="#FFFFFF" stroke="#2D6A4F" stroke-width="2" rx="4"/>
+    <text x="102" y="455" text-anchor="middle" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="13">Chunker</text>
+    <line x1="56" y1="462" x2="148" y2="462" stroke="#8C8C8C" stroke-width="0.5" opacity="0.4"/>
+    <text x="102" y="478" text-anchor="middle" fill="#2B2B2B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9.5">Splits text into</text>
+    <text x="102" y="492" text-anchor="middle" fill="#2B2B2B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9.5">semantic chunks</text>
   </g>
 
   <!-- Component 2: Embeddings -->
-  <g filter="url(#softShadow)">
-    <rect x="170" y="438" width="125" height="80" rx="10" fill="url(#cardGrad)" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.4"/>
-    <text x="232" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Embeddings</text>
-    <line x1="188" y1="470" x2="278" y2="470" stroke="#1e2a3a" stroke-width="0.8"/>
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" fill="#94a3b8">
-      <text x="200" y="487">OpenAI</text>
-      <text x="200" y="501">Ollama</text>
-      <text x="200" y="515" fill="#475569" font-style="italic">None (disabled)</text>
-    </g>
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="180" y="430" width="125" height="80" fill="#FFFFFF" stroke="#4A7C9B" stroke-width="2" rx="4"/>
+    <text x="242" y="455" text-anchor="middle" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="13">Embeddings</text>
+    <line x1="196" y1="462" x2="288" y2="462" stroke="#8C8C8C" stroke-width="0.5" opacity="0.4"/>
+    <text x="242" y="478" text-anchor="middle" fill="#2B2B2B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9.5">OpenAI · Ollama</text>
+    <text x="242" y="492" text-anchor="middle" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9.5" font-style="italic">None (disabled)</text>
   </g>
 
   <!-- Component 3: Search Engine -->
-  <g filter="url(#softShadow)">
-    <rect x="310" y="438" width="135" height="80" rx="10" fill="url(#cardGrad)" stroke="#f59e0b" stroke-width="1" stroke-opacity="0.4"/>
-    <text x="377" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Search Engine</text>
-    <line x1="328" y1="470" x2="428" y2="470" stroke="#2a2a1e" stroke-width="0.8"/>
-    <text x="377" y="487" text-anchor="middle" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5">Hybrid scoring</text>
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8.5" fill="#fbbf24" opacity="0.7">
-      <text x="330" y="503">BM25</text>
-      <text x="363" y="503">Vector</text>
-      <text x="402" y="503">Graph</text>
-      <text x="330" y="515">Recency</text>
-    </g>
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="320" y="430" width="135" height="80" fill="#FFFFFF" stroke="#D4A843" stroke-width="2" rx="4"/>
+    <text x="387" y="455" text-anchor="middle" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="13">Search Engine</text>
+    <line x1="336" y1="462" x2="438" y2="462" stroke="#8C8C8C" stroke-width="0.5" opacity="0.4"/>
+    <text x="387" y="478" text-anchor="middle" fill="#2B2B2B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9.5">Hybrid scoring</text>
+    <text x="387" y="492" text-anchor="middle" fill="#D4A843" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" font-weight="600">BM25 · Vector · Graph · Recency</text>
   </g>
 
   <!-- Component 4: Database -->
-  <g filter="url(#softShadow)">
-    <rect x="460" y="438" width="125" height="80" rx="10" fill="url(#cardGrad)" stroke="#f43f5e" stroke-width="1" stroke-opacity="0.4"/>
-    <text x="522" y="462" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Database</text>
-    <line x1="478" y1="470" x2="568" y2="470" stroke="#2a1e2a" stroke-width="0.8"/>
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" fill="#fb7185" opacity="0.7">
-      <text x="480" y="487">SQLite</text>
-      <text x="527" y="487">(local)</text>
-      <text x="480" y="501">PostgreSQL</text>
-      <text x="544" y="501">(Docker)</text>
-    </g>
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="470" y="430" width="125" height="80" fill="#FFFFFF" stroke="#C23B22" stroke-width="2" rx="4"/>
+    <text x="532" y="455" text-anchor="middle" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="13">Database</text>
+    <line x1="486" y1="462" x2="578" y2="462" stroke="#8C8C8C" stroke-width="0.5" opacity="0.4"/>
+    <text x="532" y="478" text-anchor="middle" fill="#2B2B2B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9.5">SQLite (local)</text>
+    <text x="532" y="492" text-anchor="middle" fill="#2B2B2B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9.5">PostgreSQL (Docker)</text>
   </g>
 
-  <!-- ═══════════ DOCKER DEPLOYMENT (right column) ═══════════ -->
-  <text x="620" y="85" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">DOCKER DEPLOYMENT</text>
-  <line x1="620" y1="90" x2="875" y2="90" stroke="#1e293b" stroke-width="1"/>
+  <!-- Section: Docker Deployment (right column) -->
+  <text x="650" y="86" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#8C8C8C" letter-spacing="0.08em">DOCKER DEPLOYMENT</text>
+  <line x1="650" y1="92" x2="920" y2="92" stroke="#1B3A5C" stroke-width="1" opacity="0.3"/>
 
-  <!-- Container -->
-  <rect x="620" y="100" width="255" height="418" rx="14" fill="url(#proposedGrad)" stroke="#10b981" stroke-width="1.5" stroke-opacity="0.5" opacity="0.85"/>
+  <!-- Docker container outline -->
+  <rect x="640" y="102" width="280" height="408" fill="none" stroke="#2D6A4F" stroke-width="2" rx="4" stroke-dasharray="6,4"/>
 
-  <!-- Label -->
-  <rect x="640" y="112" width="215" height="24" rx="5" fill="#1e293b" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.5"/>
-  <text x="747" y="128" text-anchor="middle" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">docker compose up -d</text>
+  <!-- Docker command badge -->
+  <rect x="660" y="115" width="240" height="24" fill="#1B3A5C" rx="2"/>
+  <text x="780" y="131" text-anchor="middle" fill="#2D6A4F" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600" letter-spacing="0.03em">docker compose up -d</text>
 
-  <!-- Shield icon + Chainguard label -->
-  <g transform="translate(670, 152)">
-    <!-- Shield shape -->
-    <path d="M12,2 L22,7 L22,13 C22,19 18,24 12,26 C6,24 2,19 2,13 L2,7 Z" fill="none" stroke="#10b981" stroke-width="1.5" opacity="0.8"/>
-    <path d="M12,6 L12,16" stroke="#10b981" stroke-width="1.2" opacity="0.5"/>
-    <path d="M8,11 L12,15 L18,8" stroke="#10b981" stroke-width="1.5" fill="none" opacity="0.8"/>
-    <text x="30" y="18" fill="#34d399" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="600">Chainguard Hardened</text>
+  <!-- Chainguard badge -->
+  <g transform="translate(680, 155)">
+    <path d="M12,2 L22,7 L22,13 C22,19 18,24 12,26 C6,24 2,19 2,13 L2,7 Z" fill="none" stroke="#2D6A4F" stroke-width="1.5"/>
+    <polyline points="8,13 11,16 17,9" fill="none" stroke="#2D6A4F" stroke-width="1.5"/>
+    <text x="30" y="18" fill="#2D6A4F" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600">Chainguard Hardened</text>
   </g>
 
-  <!-- Container box 1: Python -->
-  <g filter="url(#softShadow)">
-    <rect x="640" y="195" width="215" height="100" rx="10" fill="#0f1419" stroke="#10b981" stroke-width="1" stroke-opacity="0.5"/>
-
-    <!-- Container header -->
-    <rect x="640" y="195" width="215" height="30" rx="10" fill="#10b981" fill-opacity="0.1"/>
-    <rect x="640" y="215" width="215" height="10" fill="#10b981" fill-opacity="0.1"/>
-    <text x="660" y="215" fill="#34d399" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="600">Engram Container</text>
-
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">
-      <text x="656" y="243" fill="#94a3b8">FROM</text>
-      <text x="680" y="243" fill="#60a5fa">cgr.dev/chainguard/</text>
-      <text x="660" y="257" fill="#60a5fa">  python:latest</text>
-      <text x="656" y="278" fill="#64748b">Distroless · Non-root</text>
-      <text x="656" y="290" fill="#64748b">SBOM included · CVE-free</text>
-    </g>
+  <!-- Container 1: Engram -->
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="660" y="195" width="240" height="110" fill="#FFFFFF" stroke="#2D6A4F" stroke-width="2" rx="4"/>
+    <rect x="660" y="195" width="240" height="28" fill="#2D6A4F" rx="4"/>
+    <rect x="660" y="219" width="240" height="4" fill="#2D6A4F"/>
+    <text x="780" y="215" text-anchor="middle" fill="#F5F0E8" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="600" font-size="12">Engram Container</text>
+    <text x="676" y="244" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">FROM</text>
+    <text x="710" y="244" fill="#4A7C9B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">cgr.dev/chainguard/</text>
+    <text x="686" y="260" fill="#4A7C9B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">python:latest</text>
+    <text x="676" y="284" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9">Distroless · Non-root · SBOM included</text>
   </g>
 
-  <!-- Arrow between containers -->
-  <line x1="747" y1="295" x2="747" y2="318" stroke="#10b981" stroke-width="1.2" opacity="0.5" marker-end="url(#arrowGreen)"/>
-  <text x="770" y="310" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8">depends_on</text>
+  <!-- Arrow -->
+  <line x1="780" y1="305" x2="780" y2="325" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="800" y="318" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8">depends_on</text>
 
-  <!-- Container box 2: PostgreSQL -->
-  <g filter="url(#softShadow)">
-    <rect x="640" y="322" width="215" height="100" rx="10" fill="#0f1419" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.5"/>
-
-    <!-- Container header -->
-    <rect x="640" y="322" width="215" height="30" rx="10" fill="#3b82f6" fill-opacity="0.1"/>
-    <rect x="640" y="342" width="215" height="10" fill="#3b82f6" fill-opacity="0.1"/>
-    <text x="660" y="342" fill="#60a5fa" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="600">PostgreSQL Sidecar</text>
-
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">
-      <text x="656" y="370" fill="#94a3b8">FROM</text>
-      <text x="680" y="370" fill="#60a5fa">cgr.dev/chainguard/</text>
-      <text x="660" y="384" fill="#60a5fa">  postgres:latest</text>
-      <text x="656" y="405" fill="#64748b">pgvector extension</text>
-      <text x="656" y="417" fill="#64748b">Replaces SQLite + BLOBs</text>
-    </g>
+  <!-- Container 2: PostgreSQL -->
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="660" y="330" width="240" height="110" fill="#FFFFFF" stroke="#4A7C9B" stroke-width="2" rx="4"/>
+    <rect x="660" y="330" width="240" height="28" fill="#4A7C9B" rx="4"/>
+    <rect x="660" y="354" width="240" height="4" fill="#4A7C9B"/>
+    <text x="780" y="350" text-anchor="middle" fill="#F5F0E8" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="600" font-size="12">PostgreSQL Sidecar</text>
+    <text x="676" y="379" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">FROM</text>
+    <text x="710" y="379" fill="#4A7C9B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">cgr.dev/chainguard/</text>
+    <text x="686" y="395" fill="#4A7C9B" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">postgres:latest</text>
+    <text x="676" y="419" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9">pgvector extension · Replaces SQLite</text>
   </g>
 
-  <!-- Caddy TLS note -->
-  <g transform="translate(650, 438)">
-    <rect x="0" y="0" width="195" height="60" rx="8" fill="#1a1f2e" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
-    <text x="97" y="18" text-anchor="middle" fill="#fbbf24" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9.5" font-weight="500">Caddy (optional TLS)</text>
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8.5" fill="#94a3b8">
-      <text x="14" y="34">cgr.dev/chainguard/caddy</text>
-      <text x="14" y="48">Auto HTTPS · Reverse proxy</text>
-    </g>
+  <!-- Caddy note -->
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="660" y="455" width="240" height="48" fill="#FFFFFF" stroke="#D4A843" stroke-width="1" rx="4"/>
+    <text x="780" y="476" text-anchor="middle" fill="#D4A843" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">Caddy (optional TLS)</text>
+    <text x="780" y="492" text-anchor="middle" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9">cgr.dev/chainguard/caddy · Auto HTTPS</text>
   </g>
 
-  <!-- ═══════════ DATA FLOW LEGEND ═══════════ -->
-  <g transform="translate(30, 545)">
-    <text x="0" y="0" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9" letter-spacing="1.5">DATA FLOW</text>
-    <line x1="0" y1="5" x2="555" y2="5" stroke="#1e293b" stroke-width="1"/>
+  <!-- Data Flow Section -->
+  <text x="40" y="545" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#8C8C8C" letter-spacing="0.08em">DATA FLOW</text>
+  <line x1="40" y1="551" x2="920" y2="551" stroke="#1B3A5C" stroke-width="1" opacity="0.3"/>
 
-    <!-- Flow diagram -->
-    <g transform="translate(0, 20)">
-      <!-- Store flow -->
-      <rect x="0" y="0" width="70" height="22" rx="5" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="35" y="15" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">store()</text>
+  <!-- Store flow -->
+  <g transform="translate(50, 565)">
+    <rect x="0" y="0" width="70" height="24" fill="none" stroke="#4A7C9B" stroke-width="1" rx="2"/>
+    <text x="35" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">store()</text>
 
-      <line x1="70" y1="11" x2="92" y2="11" stroke="#3b82f6" stroke-width="1" opacity="0.5" marker-end="url(#arrowBlue)"/>
+    <line x1="70" y1="12" x2="92" y2="12" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-      <rect x="95" y="0" width="70" height="22" rx="5" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="130" y="15" text-anchor="middle" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">chunk</text>
+    <rect x="95" y="0" width="70" height="24" fill="none" stroke="#2D6A4F" stroke-width="1" rx="2"/>
+    <text x="130" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">chunk</text>
 
-      <line x1="165" y1="11" x2="187" y2="11" stroke="#3b82f6" stroke-width="1" opacity="0.5" marker-end="url(#arrowBlue)"/>
+    <line x1="165" y1="12" x2="187" y2="12" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-      <rect x="190" y="0" width="70" height="22" rx="5" fill="#3b82f6" fill-opacity="0.12" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="225" y="15" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">embed</text>
+    <rect x="190" y="0" width="70" height="24" fill="none" stroke="#4A7C9B" stroke-width="1" rx="2"/>
+    <text x="225" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">embed</text>
 
-      <line x1="260" y1="11" x2="282" y2="11" stroke="#3b82f6" stroke-width="1" opacity="0.5" marker-end="url(#arrowBlue)"/>
+    <line x1="260" y1="12" x2="282" y2="12" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-      <rect x="285" y="0" width="70" height="22" rx="5" fill="#f43f5e" fill-opacity="0.12" stroke="#f43f5e" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="320" y="15" text-anchor="middle" fill="#fb7185" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">persist</text>
-    </g>
-
-    <!-- Recall flow -->
-    <g transform="translate(0, 52)">
-      <rect x="0" y="0" width="72" height="22" rx="5" fill="#3b82f6" fill-opacity="0.15" stroke="#3b82f6" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="36" y="15" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">recall()</text>
-
-      <line x1="72" y1="11" x2="94" y2="11" stroke="#f59e0b" stroke-width="1" opacity="0.5"/>
-
-      <rect x="95" y="0" width="70" height="22" rx="5" fill="#f59e0b" fill-opacity="0.12" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="130" y="15" text-anchor="middle" fill="#fbbf24" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">search</text>
-
-      <line x1="165" y1="11" x2="187" y2="11" stroke="#f59e0b" stroke-width="1" opacity="0.5"/>
-
-      <rect x="190" y="0" width="70" height="22" rx="5" fill="#f59e0b" fill-opacity="0.12" stroke="#f59e0b" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="225" y="15" text-anchor="middle" fill="#fbbf24" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">rank</text>
-
-      <line x1="260" y1="11" x2="282" y2="11" stroke="#f59e0b" stroke-width="1" opacity="0.5"/>
-
-      <rect x="285" y="0" width="70" height="22" rx="5" fill="#10b981" fill-opacity="0.12" stroke="#10b981" stroke-width="0.8" stroke-opacity="0.4"/>
-      <text x="320" y="15" text-anchor="middle" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9">return</text>
-    </g>
-
-    <!-- Legend items -->
-    <g transform="translate(400, 5)">
-      <rect x="0" y="0" width="10" height="10" rx="2" fill="#3b82f6" opacity="0.7"/>
-      <text x="16" y="9" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">MCP Tools</text>
-
-      <rect x="0" y="18" width="10" height="10" rx="2" fill="#10b981" opacity="0.7"/>
-      <text x="16" y="27" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Processing</text>
-
-      <rect x="0" y="36" width="10" height="10" rx="2" fill="#f59e0b" opacity="0.7"/>
-      <text x="16" y="45" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Search / Scoring</text>
-
-      <rect x="0" y="54" width="10" height="10" rx="2" fill="#f43f5e" opacity="0.7"/>
-      <text x="16" y="63" fill="#64748b" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Storage</text>
-    </g>
+    <rect x="285" y="0" width="70" height="24" fill="none" stroke="#C23B22" stroke-width="1" rx="2"/>
+    <text x="320" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">persist</text>
   </g>
 
-  <!-- ═══════════ FOOTER ═══════════ -->
-  <line x1="30" y1="690" x2="870" y2="690" stroke="#1e293b" stroke-width="0.5"/>
-  <text x="450" y="708" text-anchor="middle" fill="#334155" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Architecture by Peter Simmons · Original by shugav</text>
+  <!-- Recall flow -->
+  <g transform="translate(50, 600)">
+    <rect x="0" y="0" width="72" height="24" fill="none" stroke="#D4A843" stroke-width="1" rx="2"/>
+    <text x="36" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">recall()</text>
+
+    <line x1="72" y1="12" x2="94" y2="12" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+    <rect x="95" y="0" width="70" height="24" fill="none" stroke="#D4A843" stroke-width="1" rx="2"/>
+    <text x="130" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">search</text>
+
+    <line x1="165" y1="12" x2="187" y2="12" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+    <rect x="190" y="0" width="70" height="24" fill="none" stroke="#D4A843" stroke-width="1" rx="2"/>
+    <text x="225" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">rank</text>
+
+    <line x1="260" y1="12" x2="282" y2="12" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+    <rect x="285" y="0" width="70" height="24" fill="none" stroke="#2D6A4F" stroke-width="1" rx="2"/>
+    <text x="320" y="16" text-anchor="middle" fill="#1B3A5C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="600">return</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(500, 565)">
+    <text x="0" y="12" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#8C8C8C" letter-spacing="0.08em">LEGEND:</text>
+    <rect x="70" y="2" width="14" height="14" fill="none" stroke="#4A7C9B" stroke-width="2" rx="2"/>
+    <text x="90" y="13" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#2B2B2B">MCP Tools</text>
+    <rect x="150" y="2" width="14" height="14" fill="none" stroke="#2D6A4F" stroke-width="2" rx="2"/>
+    <text x="170" y="13" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#2B2B2B">Processing</text>
+    <rect x="240" y="2" width="14" height="14" fill="none" stroke="#D4A843" stroke-width="2" rx="2"/>
+    <text x="260" y="13" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#2B2B2B">Search</text>
+    <rect x="310" y="2" width="14" height="14" fill="none" stroke="#C23B22" stroke-width="2" rx="2"/>
+    <text x="330" y="13" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#2B2B2B">Storage</text>
+  </g>
+
+  <!-- Footer -->
+  <line x1="40" y1="660" x2="920" y2="660" stroke="#1B3A5C" stroke-width="1" opacity="0.3"/>
+  <text x="480" y="680" text-anchor="middle" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" letter-spacing="0.08em">ENGRAM — ARCHITECTURE — SIMMONS &amp; PARTNERS 2026</text>
+  <text x="480" y="700" text-anchor="middle" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8">Architecture by Peter Simmons · Original by shugav</text>
 </svg>

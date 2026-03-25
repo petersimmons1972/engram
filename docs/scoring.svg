@@ -1,265 +1,202 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 350" width="900" height="350">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="100%">
   <defs>
-    <!-- Background gradient -->
-    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#0f1419"/>
-      <stop offset="100%" stop-color="#141b22"/>
-    </linearGradient>
-
-    <!-- Lane gradients -->
-    <linearGradient id="laneBlue" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.05"/>
-    </linearGradient>
-    <linearGradient id="laneGreen" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#10b981" stop-opacity="0.05"/>
-    </linearGradient>
-    <linearGradient id="laneAmber" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.05"/>
-    </linearGradient>
-    <linearGradient id="laneRose" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#f43f5e" stop-opacity="0.25"/>
-      <stop offset="100%" stop-color="#f43f5e" stop-opacity="0.05"/>
-    </linearGradient>
-
-    <!-- Merge gradient -->
-    <linearGradient id="mergeGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1e2832"/>
-      <stop offset="100%" stop-color="#182028"/>
-    </linearGradient>
-
-    <!-- Multiplier gradient -->
-    <linearGradient id="multGrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#1a1f2e"/>
-      <stop offset="100%" stop-color="#151a26"/>
-    </linearGradient>
-
-    <!-- Glow filters -->
-    <filter id="glowBlue" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feFlood flood-color="#3b82f6" flood-opacity="0.3"/>
-      <feComposite in2="blur" operator="in"/>
-      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    <filter id="shadow-standard" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.15"/>
     </filter>
-    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
+    <filter id="shadow-elevated" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="5" dy="5" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.2"/>
     </filter>
-    <filter id="softShadow" x="-5%" y="-5%" width="110%" height="115%">
-      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#000" flood-opacity="0.3"/>
-    </filter>
-
-    <!-- Arrow markers -->
-    <marker id="arrowWhite" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#475569" stroke-width="1.2"/>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8C8C8C"/>
     </marker>
-    <marker id="arrowMerge" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
-      <path d="M0,0 L8,3 L0,6" fill="none" stroke="#94a3b8" stroke-width="1.2"/>
-    </marker>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .bg-ivory { fill: #1A1A2E; }
+        .text-navy { fill: #F5F0E8; }
+        .text-charcoal { fill: #E0E0E0; }
+        .card-fill { fill: #2B2B3D; }
+      }
+    </style>
   </defs>
 
   <!-- Background -->
-  <rect width="900" height="350" fill="url(#bgGrad)"/>
+  <rect class="bg-ivory" width="960" height="400" fill="#F5F0E8"/>
 
-  <!-- Subtle grid -->
-  <g opacity="0.03">
-    <line x1="50" y1="0" x2="50" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="150" y1="0" x2="150" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="250" y1="0" x2="250" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="350" y1="0" x2="350" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="450" y1="0" x2="450" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="550" y1="0" x2="550" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="650" y1="0" x2="650" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="750" y1="0" x2="750" y2="350" stroke="#fff" stroke-width="0.5"/>
-    <line x1="850" y1="0" x2="850" y2="350" stroke="#fff" stroke-width="0.5"/>
+  <!-- Title Bar -->
+  <rect x="0" y="0" width="960" height="44" fill="#1B3A5C"/>
+  <text x="480" y="30" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="20" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.05em">HOW RECALL WORKS — FOUR-LAYER SCORING</text>
+
+  <!-- Query Input -->
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="30" y="72" width="72" height="190" fill="#FFFFFF" stroke="#D4A843" stroke-width="2" rx="4"/>
+    <text x="66" y="155" text-anchor="middle" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="12" transform="rotate(-90 66 155)">QUERY</text>
+    <text x="66" y="175" text-anchor="middle" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" transform="rotate(-90 66 175)">recall()</text>
   </g>
 
-  <!-- ═══════════ TITLE ═══════════ -->
-  <text x="450" y="28" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif" font-size="16" font-weight="700" letter-spacing="0.5">How Recall Works — Four-Layer Scoring</text>
-  <line x1="170" y1="35" x2="730" y2="35" stroke="#1e293b" stroke-width="1"/>
-
-  <!-- ═══════════ QUERY INPUT (left) ═══════════ -->
-  <g filter="url(#softShadow)">
-    <rect x="20" y="68" width="72" height="172" rx="10" fill="#1a2740" stroke="#3b82f6" stroke-width="1.2" stroke-opacity="0.6"/>
-    <text x="56" y="140" text-anchor="middle" fill="#60a5fa" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="600" transform="rotate(-90 56 140)">QUERY</text>
-    <text x="56" y="162" text-anchor="middle" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8" transform="rotate(-90 56 162)">recall()</text>
+  <!-- Flow arrows from query -->
+  <g stroke="#8C8C8C" stroke-width="1" opacity="0.5">
+    <line x1="102" y1="107" x2="118" y2="107"/>
+    <line x1="102" y1="150" x2="118" y2="150"/>
+    <line x1="102" y1="193" x2="118" y2="193"/>
+    <line x1="102" y1="236" x2="118" y2="236"/>
   </g>
-
-  <!-- Flow arrows from query to lanes -->
-  <g stroke="#475569" stroke-width="1" opacity="0.5">
-    <line x1="92" y1="100" x2="110" y2="100"/>
-    <line x1="92" y1="140" x2="110" y2="140"/>
-    <line x1="92" y1="180" x2="110" y2="180"/>
-    <line x1="92" y1="220" x2="110" y2="220"/>
-  </g>
-
-  <!-- ═══════════ FOUR SCORING LANES ═══════════ -->
 
   <!-- Lane 1: Vector / Semantic (blue, 45%) -->
-  <g filter="url(#softShadow)">
-    <rect x="110" y="80" width="340" height="38" rx="6" fill="url(#laneBlue)" stroke="#3b82f6" stroke-width="1" stroke-opacity="0.5"/>
-    <!-- Weight bar fill -->
-    <rect x="112" y="82" width="152" height="34" rx="5" fill="#3b82f6" opacity="0.12"/>
-    <!-- Label -->
-    <text x="125" y="96" fill="#60a5fa" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="700">Vector / Semantic</text>
-    <text x="125" y="111" fill="#475569" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Meaning similarity via embeddings</text>
-    <!-- Weight badge -->
-    <rect x="394" y="88" width="46" height="22" rx="11" fill="#3b82f6" opacity="0.25"/>
-    <text x="417" y="103" text-anchor="middle" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="11" font-weight="700">45%</text>
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="120" y="86" width="360" height="40" fill="#FFFFFF" stroke="#4A7C9B" stroke-width="2" rx="4"/>
+    <rect x="122" y="88" width="162" height="36" fill="#4A7C9B" opacity="0.1" rx="3"/>
+    <text x="135" y="103" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="12">Vector / Semantic</text>
+    <text x="135" y="118" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9">Meaning similarity via embeddings</text>
+    <rect x="418" y="94" width="50" height="24" fill="#4A7C9B" rx="2"/>
+    <text x="443" y="110" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700">45%</text>
   </g>
 
   <!-- Lane 2: BM25 / Keyword (green, 25%) -->
-  <g filter="url(#softShadow)">
-    <rect x="110" y="122" width="340" height="38" rx="6" fill="url(#laneGreen)" stroke="#10b981" stroke-width="1" stroke-opacity="0.5"/>
-    <rect x="112" y="124" width="84" height="34" rx="5" fill="#10b981" opacity="0.12"/>
-    <text x="125" y="138" fill="#34d399" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="700">BM25 / Keyword</text>
-    <text x="125" y="153" fill="#475569" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Exact term matching via FTS5</text>
-    <rect x="394" y="130" width="46" height="22" rx="11" fill="#10b981" opacity="0.25"/>
-    <text x="417" y="145" text-anchor="middle" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="11" font-weight="700">25%</text>
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="120" y="130" width="360" height="40" fill="#FFFFFF" stroke="#2D6A4F" stroke-width="2" rx="4"/>
+    <rect x="122" y="132" width="90" height="36" fill="#2D6A4F" opacity="0.1" rx="3"/>
+    <text x="135" y="147" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="12">BM25 / Keyword</text>
+    <text x="135" y="162" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9">Exact term matching via FTS5</text>
+    <rect x="418" y="138" width="50" height="24" fill="#2D6A4F" rx="2"/>
+    <text x="443" y="154" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700">25%</text>
   </g>
 
-  <!-- Lane 3: Recency (amber, 15%) -->
-  <g filter="url(#softShadow)">
-    <rect x="110" y="164" width="340" height="38" rx="6" fill="url(#laneAmber)" stroke="#f59e0b" stroke-width="1" stroke-opacity="0.5"/>
-    <rect x="112" y="166" width="50" height="34" rx="5" fill="#f59e0b" opacity="0.12"/>
-    <text x="125" y="180" fill="#fbbf24" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="700">Recency</text>
-    <text x="125" y="195" fill="#475569" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Exponential decay from last access</text>
-    <rect x="394" y="172" width="46" height="22" rx="11" fill="#f59e0b" opacity="0.25"/>
-    <text x="417" y="187" text-anchor="middle" fill="#fbbf24" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="11" font-weight="700">15%</text>
+  <!-- Lane 3: Recency (gold, 15%) -->
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="120" y="174" width="360" height="40" fill="#FFFFFF" stroke="#D4A843" stroke-width="2" rx="4"/>
+    <rect x="122" y="176" width="54" height="36" fill="#D4A843" opacity="0.1" rx="3"/>
+    <text x="135" y="191" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="12">Recency</text>
+    <text x="135" y="206" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9">Exponential decay from last access</text>
+    <rect x="418" y="182" width="50" height="24" fill="#D4A843" rx="2"/>
+    <text x="443" y="198" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700">15%</text>
   </g>
 
-  <!-- Lane 4: Graph (rose, 15%) -->
-  <g filter="url(#softShadow)">
-    <rect x="110" y="206" width="340" height="38" rx="6" fill="url(#laneRose)" stroke="#f43f5e" stroke-width="1" stroke-opacity="0.5"/>
-    <rect x="112" y="208" width="50" height="34" rx="5" fill="#f43f5e" opacity="0.12"/>
-    <text x="125" y="222" fill="#fb7185" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="700">Graph</text>
-    <text x="125" y="237" fill="#475569" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="9">Connected memory boost</text>
-    <rect x="394" y="214" width="46" height="22" rx="11" fill="#f43f5e" opacity="0.25"/>
-    <text x="417" y="229" text-anchor="middle" fill="#fb7185" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="11" font-weight="700">15%</text>
+  <!-- Lane 4: Graph (red, 15%) -->
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="120" y="218" width="360" height="40" fill="#FFFFFF" stroke="#C23B22" stroke-width="2" rx="4"/>
+    <rect x="122" y="220" width="54" height="36" fill="#C23B22" opacity="0.1" rx="3"/>
+    <text x="135" y="235" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="12">Graph</text>
+    <text x="135" y="250" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9">Connected memory boost</text>
+    <rect x="418" y="226" width="50" height="24" fill="#C23B22" rx="2"/>
+    <text x="443" y="242" text-anchor="middle" fill="#FFFFFF" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700">15%</text>
   </g>
 
-  <!-- ═══════════ MERGE ARROWS ═══════════ -->
-  <g stroke="#94a3b8" stroke-width="1" opacity="0.4">
-    <path d="M450,99 L475,99 Q490,99 490,114 L490,148" fill="none"/>
-    <path d="M450,141 L475,141 Q490,141 490,148" fill="none"/>
-    <path d="M450,183 L475,183 Q490,183 490,165" fill="none"/>
-    <path d="M450,225 L475,225 Q490,225 490,200 L490,165" fill="none"/>
+  <!-- Merge arrows -->
+  <g stroke="#8C8C8C" stroke-width="1" opacity="0.4">
+    <path d="M480,106 L500,106 Q510,106 510,120 L510,160" fill="none"/>
+    <path d="M480,150 L500,150 Q510,150 510,160" fill="none"/>
+    <path d="M480,194 L500,194 Q510,194 510,175" fill="none"/>
+    <path d="M480,238 L500,238 Q510,238 510,210 L510,175" fill="none"/>
   </g>
 
-  <!-- ═══════════ COMPOSITE SCORE BOX ═══════════ -->
-  <g filter="url(#shadow)">
-    <rect x="480" y="68" width="120" height="172" rx="10" fill="url(#mergeGrad)" stroke="#94a3b8" stroke-width="1" stroke-opacity="0.4"/>
-    <text x="540" y="92" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="11" font-weight="700">Composite</text>
-    <line x1="495" y1="100" x2="585" y2="100" stroke="#2a3a50" stroke-width="0.8"/>
+  <!-- Composite Score Box -->
+  <g filter="url(#shadow-elevated)">
+    <rect class="card-fill" x="500" y="72" width="130" height="190" fill="#FFFFFF" stroke="#1B3A5C" stroke-width="2" rx="4"/>
+    <rect x="500" y="72" width="130" height="28" fill="#1B3A5C" rx="4"/>
+    <rect x="500" y="96" width="130" height="4" fill="#1B3A5C"/>
+    <text x="565" y="92" text-anchor="middle" fill="#F5F0E8" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="12">Composite</text>
 
-    <!-- Mini formula -->
-    <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="8.5">
-      <text x="498" y="118" fill="#60a5fa">vec</text>
-      <text x="520" y="118" fill="#475569">× 0.45</text>
-      <text x="498" y="134" fill="#34d399">bm25</text>
-      <text x="525" y="134" fill="#475569">× 0.25</text>
-      <text x="498" y="150" fill="#fbbf24">rec</text>
-      <text x="520" y="150" fill="#475569">× 0.15</text>
-      <text x="498" y="166" fill="#fb7185">grph</text>
-      <text x="525" y="166" fill="#475569">× 0.15</text>
+    <g font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">
+      <text x="515" y="120" fill="#4A7C9B" font-weight="600">vec</text>
+      <text x="540" y="120" fill="#8C8C8C">x 0.45</text>
+      <text x="515" y="138" fill="#2D6A4F" font-weight="600">bm25</text>
+      <text x="548" y="138" fill="#8C8C8C">x 0.25</text>
+      <text x="515" y="156" fill="#D4A843" font-weight="600">rec</text>
+      <text x="540" y="156" fill="#8C8C8C">x 0.15</text>
+      <text x="515" y="174" fill="#C23B22" font-weight="600">grph</text>
+      <text x="548" y="174" fill="#8C8C8C">x 0.15</text>
     </g>
 
-    <line x1="495" y1="176" x2="585" y2="176" stroke="#2a3a50" stroke-width="0.8"/>
-
-    <!-- Multiply symbol -->
-    <text x="540" y="196" text-anchor="middle" fill="#94a3b8" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10">× importance</text>
-    <text x="540" y="212" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="10" font-weight="600">= final score</text>
-
-    <!-- Connector dot -->
-    <circle cx="540" cy="154" r="3" fill="#94a3b8" opacity="0.5"/>
+    <line x1="512" y1="186" x2="618" y2="186" stroke="#8C8C8C" stroke-width="0.5" opacity="0.4"/>
+    <text x="565" y="206" text-anchor="middle" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10">x importance</text>
+    <text x="565" y="224" text-anchor="middle" fill="#1B3A5C" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="11">= final score</text>
   </g>
 
-  <!-- Arrow from composite to multiplier -->
-  <line x1="600" y1="154" x2="625" y2="154" stroke="#94a3b8" stroke-width="1.2" opacity="0.5" marker-end="url(#arrowMerge)"/>
+  <!-- Arrow to importance -->
+  <line x1="630" y1="167" x2="655" y2="167" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-  <!-- ═══════════ IMPORTANCE MULTIPLIER (right) ═══════════ -->
-  <g filter="url(#shadow)">
-    <rect x="630" y="52" width="250" height="196" rx="12" fill="url(#multGrad)" stroke="#475569" stroke-width="1" stroke-opacity="0.5"/>
+  <!-- Importance Multiplier -->
+  <g filter="url(#shadow-elevated)">
+    <rect class="card-fill" x="660" y="72" width="270" height="190" fill="#FFFFFF" stroke="#1B3A5C" stroke-width="2" rx="4"/>
+    <rect x="660" y="72" width="270" height="28" fill="#1B3A5C" rx="4"/>
+    <rect x="660" y="96" width="270" height="4" fill="#1B3A5C"/>
+    <text x="795" y="92" text-anchor="middle" fill="#F5F0E8" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="12">Importance Multiplier</text>
 
-    <!-- Header -->
-    <text x="755" y="76" text-anchor="middle" fill="#e2e8f0" font-family="'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif" font-size="12" font-weight="700">Importance Multiplier</text>
-    <line x1="648" y1="84" x2="862" y2="84" stroke="#2a3a50" stroke-width="0.8"/>
-
-    <!-- Scale items -->
-    <g font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="10.5">
+    <g font-family="'Helvetica Neue', Arial, sans-serif" font-size="11">
       <!-- Critical -->
-      <rect x="650" y="94" width="56" height="20" rx="4" fill="#f43f5e" opacity="0.2"/>
-      <text x="678" y="108" text-anchor="middle" fill="#fb7185" font-weight="600">Critical</text>
-      <text x="718" y="108" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9.5">(0)</text>
-      <!-- Bar -->
-      <rect x="748" y="97" width="110" height="14" rx="3" fill="#1e293b"/>
-      <rect x="748" y="97" width="110" height="14" rx="3" fill="#f43f5e" opacity="0.35"/>
-      <text x="862" y="108" fill="#fb7185" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10" font-weight="600">2.0×</text>
+      <rect x="676" y="108" width="58" height="20" fill="#C23B22" opacity="0.15" rx="2"/>
+      <text x="705" y="122" text-anchor="middle" fill="#C23B22" font-weight="600">Critical</text>
+      <text x="746" y="122" fill="#8C8C8C" font-size="9">(0)</text>
+      <rect x="776" y="111" width="120" height="14" fill="#F5F0E8" stroke="#8C8C8C" stroke-width="0.5" rx="2"/>
+      <rect x="776" y="111" width="120" height="14" fill="#C23B22" opacity="0.25" rx="2"/>
+      <text x="900" y="122" fill="#C23B22" font-weight="700" font-size="10">2.0x</text>
 
       <!-- High -->
-      <rect x="650" y="120" width="56" height="20" rx="4" fill="#f59e0b" opacity="0.2"/>
-      <text x="678" y="134" text-anchor="middle" fill="#fbbf24" font-weight="600">High</text>
-      <text x="718" y="134" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9.5">(1)</text>
-      <rect x="748" y="123" width="110" height="14" rx="3" fill="#1e293b"/>
-      <rect x="748" y="123" width="91" height="14" rx="3" fill="#f59e0b" opacity="0.3"/>
-      <text x="862" y="134" fill="#fbbf24" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10" font-weight="600">1.65×</text>
+      <rect x="676" y="134" width="58" height="20" fill="#D4A843" opacity="0.15" rx="2"/>
+      <text x="705" y="148" text-anchor="middle" fill="#D4A843" font-weight="600">High</text>
+      <text x="746" y="148" fill="#8C8C8C" font-size="9">(1)</text>
+      <rect x="776" y="137" width="120" height="14" fill="#F5F0E8" stroke="#8C8C8C" stroke-width="0.5" rx="2"/>
+      <rect x="776" y="137" width="100" height="14" fill="#D4A843" opacity="0.2" rx="2"/>
+      <text x="900" y="148" fill="#D4A843" font-weight="700" font-size="10">1.65x</text>
 
       <!-- Medium -->
-      <rect x="650" y="146" width="56" height="20" rx="4" fill="#3b82f6" opacity="0.2"/>
-      <text x="678" y="160" text-anchor="middle" fill="#60a5fa" font-weight="600">Medium</text>
-      <text x="718" y="160" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9.5">(2)</text>
-      <rect x="748" y="149" width="110" height="14" rx="3" fill="#1e293b"/>
-      <rect x="748" y="149" width="72" height="14" rx="3" fill="#3b82f6" opacity="0.3"/>
-      <text x="862" y="160" fill="#60a5fa" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10" font-weight="600">1.30×</text>
+      <rect x="676" y="160" width="58" height="20" fill="#4A7C9B" opacity="0.15" rx="2"/>
+      <text x="705" y="174" text-anchor="middle" fill="#4A7C9B" font-weight="600">Medium</text>
+      <text x="746" y="174" fill="#8C8C8C" font-size="9">(2)</text>
+      <rect x="776" y="163" width="120" height="14" fill="#F5F0E8" stroke="#8C8C8C" stroke-width="0.5" rx="2"/>
+      <rect x="776" y="163" width="78" height="14" fill="#4A7C9B" opacity="0.2" rx="2"/>
+      <text x="900" y="174" fill="#4A7C9B" font-weight="700" font-size="10">1.30x</text>
 
       <!-- Low -->
-      <rect x="650" y="172" width="56" height="20" rx="4" fill="#10b981" opacity="0.2"/>
-      <text x="678" y="186" text-anchor="middle" fill="#34d399" font-weight="600">Low</text>
-      <text x="718" y="186" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9.5">(3)</text>
-      <rect x="748" y="175" width="110" height="14" rx="3" fill="#1e293b"/>
-      <rect x="748" y="175" width="52" height="14" rx="3" fill="#10b981" opacity="0.3"/>
-      <text x="862" y="186" fill="#34d399" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10" font-weight="600">0.95×</text>
+      <rect x="676" y="186" width="58" height="20" fill="#2D6A4F" opacity="0.15" rx="2"/>
+      <text x="705" y="200" text-anchor="middle" fill="#2D6A4F" font-weight="600">Low</text>
+      <text x="746" y="200" fill="#8C8C8C" font-size="9">(3)</text>
+      <rect x="776" y="189" width="120" height="14" fill="#F5F0E8" stroke="#8C8C8C" stroke-width="0.5" rx="2"/>
+      <rect x="776" y="189" width="57" height="14" fill="#2D6A4F" opacity="0.2" rx="2"/>
+      <text x="900" y="200" fill="#2D6A4F" font-weight="700" font-size="10">0.95x</text>
 
       <!-- Trivial -->
-      <rect x="650" y="198" width="56" height="20" rx="4" fill="#475569" opacity="0.2"/>
-      <text x="678" y="212" text-anchor="middle" fill="#64748b" font-weight="600">Trivial</text>
-      <text x="718" y="212" fill="#475569" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="9.5">(4)</text>
-      <rect x="748" y="201" width="110" height="14" rx="3" fill="#1e293b"/>
-      <rect x="748" y="201" width="33" height="14" rx="3" fill="#475569" opacity="0.3"/>
-      <text x="862" y="212" fill="#64748b" font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="10" font-weight="600">0.60×</text>
+      <rect x="676" y="212" width="58" height="20" fill="#8C8C8C" opacity="0.15" rx="2"/>
+      <text x="705" y="226" text-anchor="middle" fill="#8C8C8C" font-weight="600">Trivial</text>
+      <text x="746" y="226" fill="#8C8C8C" font-size="9">(4)</text>
+      <rect x="776" y="215" width="120" height="14" fill="#F5F0E8" stroke="#8C8C8C" stroke-width="0.5" rx="2"/>
+      <rect x="776" y="215" width="36" height="14" fill="#8C8C8C" opacity="0.2" rx="2"/>
+      <text x="900" y="226" fill="#8C8C8C" font-weight="700" font-size="10">0.60x</text>
     </g>
   </g>
 
-  <!-- ═══════════ FORMULA BAR (bottom) ═══════════ -->
-  <rect x="20" y="265" width="860" height="68" rx="8" fill="#0d1117" stroke="#1e293b" stroke-width="1"/>
+  <!-- Formula Bar -->
+  <g filter="url(#shadow-standard)">
+    <rect class="card-fill" x="30" y="285" width="900" height="74" fill="#FFFFFF" stroke="#1B3A5C" stroke-width="2" rx="4"/>
+    <rect x="30" y="285" width="900" height="24" fill="#1B3A5C" rx="4"/>
+    <rect x="30" y="305" width="900" height="4" fill="#1B3A5C"/>
+    <text x="480" y="302" text-anchor="middle" fill="#F5F0E8" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="600" font-size="10" letter-spacing="0.05em">SCORING FORMULA</text>
 
-  <g font-family="'SF Mono','JetBrains Mono','Cascadia Code',monospace" font-size="11">
-    <!-- Line 1 -->
-    <text x="40" y="288" fill="#475569">composite</text>
-    <text x="120" y="288" fill="#64748b">=</text>
-    <text x="133" y="288" fill="#475569">(</text>
-    <text x="140" y="288" fill="#60a5fa">vector</text>
-    <text x="186" y="288" fill="#64748b">× 0.45</text>
-    <text x="232" y="288" fill="#475569">) + (</text>
-    <text x="260" y="288" fill="#34d399">bm25</text>
-    <text x="296" y="288" fill="#64748b">× 0.25</text>
-    <text x="342" y="288" fill="#475569">) + (</text>
-    <text x="370" y="288" fill="#fbbf24">recency</text>
-    <text x="424" y="288" fill="#64748b">× 0.15</text>
-    <text x="470" y="288" fill="#475569">) + (</text>
-    <text x="498" y="288" fill="#fb7185">graph</text>
-    <text x="540" y="288" fill="#64748b">× 0.15</text>
-    <text x="586" y="288" fill="#475569">)</text>
+    <g font-family="'Helvetica Neue', Arial, sans-serif" font-size="11">
+      <text x="50" y="330" fill="#8C8C8C">composite</text>
+      <text x="125" y="330" fill="#2B2B2B">=</text>
+      <text x="136" y="330" fill="#8C8C8C">(</text>
+      <text x="142" y="330" fill="#4A7C9B" font-weight="600">vector</text>
+      <text x="186" y="330" fill="#8C8C8C">x 0.45</text>
+      <text x="234" y="330" fill="#8C8C8C">) + (</text>
+      <text x="270" y="330" fill="#2D6A4F" font-weight="600">bm25</text>
+      <text x="308" y="330" fill="#8C8C8C">x 0.25</text>
+      <text x="356" y="330" fill="#8C8C8C">) + (</text>
+      <text x="392" y="330" fill="#D4A843" font-weight="600">recency</text>
+      <text x="446" y="330" fill="#8C8C8C">x 0.15</text>
+      <text x="494" y="330" fill="#8C8C8C">) + (</text>
+      <text x="530" y="330" fill="#C23B22" font-weight="600">graph</text>
+      <text x="572" y="330" fill="#8C8C8C">x 0.15</text>
+      <text x="620" y="330" fill="#8C8C8C">)</text>
 
-    <!-- Line 2 -->
-    <text x="40" y="318" fill="#e2e8f0" font-weight="600">final</text>
-    <text x="82" y="318" fill="#94a3b8">=</text>
-    <text x="95" y="318" fill="#94a3b8">composite</text>
-    <text x="175" y="318" fill="#e2e8f0">×</text>
-    <text x="190" y="318" fill="#e2e8f0" font-weight="600">importance_multiplier</text>
+      <text x="50" y="352" fill="#1B3A5C" font-weight="700">final</text>
+      <text x="85" y="352" fill="#2B2B2B">=</text>
+      <text x="96" y="352" fill="#8C8C8C">composite</text>
+      <text x="170" y="352" fill="#1B3A5C" font-weight="700">x</text>
+      <text x="185" y="352" fill="#1B3A5C" font-weight="700">importance_multiplier</text>
+    </g>
   </g>
 
-  <!-- ═══════════ FOOTER ═══════════ -->
-  <text x="450" y="345" text-anchor="middle" fill="#334155" font-family="'SF Pro Text','Inter','Segoe UI',system-ui,sans-serif" font-size="8">Engram Recall Scoring · Peter Simmons</text>
+  <!-- Footer -->
+  <text x="480" y="390" text-anchor="middle" fill="#8C8C8C" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" letter-spacing="0.08em">ENGRAM — RECALL SCORING — SIMMONS &amp; PARTNERS 2026</text>
 </svg>
