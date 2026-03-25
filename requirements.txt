@@ -5,3 +5,4 @@ pydantic>=2.5.0
 psycopg[pool,binary]>=3.1.0
 uvicorn>=0.30.0
 starlette>=0.38.0
+httpx>=0.24
