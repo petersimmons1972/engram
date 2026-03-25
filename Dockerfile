@@ -21,4 +21,4 @@ ENV PYTHONPATH=/app/deps:/app/src
 ENV ENGRAM_DIR=/data
 EXPOSE 8788
 
-ENTRYPOINT ["python", "-m", "engram", "--transport", "sse", "--host", "0.0.0.0", "--port", "8788"]
+ENTRYPOINT ["python", "-m", "engram", "server", "--transport", "sse", "--host", "0.0.0.0", "--port", "8788"]
