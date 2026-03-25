@@ -23,7 +23,7 @@ class TestEmbedderResolution:
         Docker deployments with ENGRAM_EMBEDDER=ollama would silently fall back
         to NullEmbedder (BM25-only mode) with no error, breaking the default use case.
         """
-        embedder = create_embedder("ollama", url="http://localhost:11434")
+        embedder = create_embedder("ollama", ollama_url="http://localhost:11434")
 
         assert isinstance(
             embedder, OllamaEmbedder
@@ -40,7 +40,7 @@ class TestEmbedderResolution:
 
         If this fails, a required dependency is missing (httpx for ollama).
         """
-        embedder = create_embedder("ollama", url="http://localhost:11434")
+        embedder = create_embedder("ollama", ollama_url="http://localhost:11434")
 
         assert not isinstance(
             embedder, NullEmbedder
@@ -70,6 +70,7 @@ class TestEmbedderResolution:
     def test_ollama_url_validation(self):
         """OllamaEmbedder should validate the URL is reachable (or at least parse correctly)."""
         # This test verifies the URL is accepted; actual reachability is tested in integration tests
-        embedder = create_embedder("ollama", url="http://ollama:11434")
+        embedder = create_embedder("ollama", ollama_url="http://ollama:11434")
         assert isinstance(embedder, OllamaEmbedder)
-        assert hasattr(embedder, "url")
+        # Verify the embedder has the internal base_url attribute
+        assert hasattr(embedder, "_base_url")
