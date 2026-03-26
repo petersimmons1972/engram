@@ -22,8 +22,11 @@ class EmbeddingConfigMismatchError(EngramError):
         self.current_name = current_name
         self.current_dims = current_dims
         super().__init__(
-            f"Embedding model mismatch: project uses '{stored_name}' ({stored_dims}d) "
-            f"but current embedder is '{current_name}' ({current_dims}d). "
-            f"To switch models, delete the project database and re-store memories, "
-            f"or start a fresh project database."
+            f"Embedding model mismatch: project was created with '{stored_name}' ({stored_dims}d) "
+            f"but the current embedder is '{current_name}' ({current_dims}d). "
+            f"Mixing embedding models corrupts vector search results.\n\n"
+            f"To fix this, either:\n"
+            f"  1. Switch back to '{stored_name}' (set ENGRAM_OLLAMA_MODEL or ENGRAM_EMBEDDER)\n"
+            f"  2. Export memories with 'engram dump', delete the project, and re-import with 'engram ingest'\n"
+            f"  3. Start a fresh project with the new model"
         )

@@ -54,17 +54,16 @@ services:
     container_name: engram-app
     build: .
     ports:
-      - "${ENGRAM_PORT:-8788}:8788"
+      - "127.0.0.1:${ENGRAM_PORT:-8788}:8788"
     environment:
       - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
       - ENGRAM_EMBEDDER=ollama
-      - OLLAMA_URL=http://open-webui:8080/ollama
-      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      - OLLAMA_URL=http://ollama:11434
       - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
     depends_on:
       postgres:
         condition: service_healthy
-      open-webui:
+      ollama:
         condition: service_started
     restart: unless-stopped
 
@@ -76,7 +75,7 @@ services:
     container_name: engram-open-webui
     image: ghcr.io/open-webui/open-webui:main
     ports:
-      - "3000:8080"
+      - "127.0.0.1:3000:8080"
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
       - WEBUI_AUTH=true

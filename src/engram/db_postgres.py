@@ -52,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_search ON memories USING GIN (search_vec
 CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
 CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed);
 CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project, memory_type);
 
 CREATE TABLE IF NOT EXISTS chunks (
     id TEXT PRIMARY KEY,
@@ -105,7 +106,24 @@ class PostgresBackend:
             max_size=10,
             kwargs={"row_factory": dict_row},
         )
+        self._validate_connection()
         self._init_db()
+
+    def _validate_connection(self) -> None:
+        """Verify the database is reachable before running schema migrations.
+
+        Raises ConnectionError immediately if the DSN is wrong or the server
+        is unreachable, instead of letting _init_db() fail mid-migration.
+        """
+        try:
+            with self.pool.connection() as conn:
+                conn.execute("SELECT 1")
+        except Exception as exc:
+            self.pool.close()
+            raise ConnectionError(
+                f"Cannot connect to PostgreSQL — check DATABASE_URL and server status. "
+                f"Underlying error: {exc}"
+            ) from exc
 
     def __enter__(self) -> PostgresBackend:
         return self

@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS project_meta (
 CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed);
 CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
 CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
+CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project, memory_type);
 """
 
 CURRENT_SCHEMA_VERSION = 3
