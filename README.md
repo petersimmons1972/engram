@@ -404,6 +404,76 @@ For responsible disclosure of security issues, see [SECURITY.md](SECURITY.md).
 
 ---
 
+## Backup & Recovery
+
+**Your memories are valuable. Protect them.**
+
+### Creating Backups
+
+Before any Docker maintenance or risky operations:
+
+```bash
+# Create a dated PostgreSQL backup
+docker compose exec -T postgres pg_dump -U engram -d engram | gzip > backups/engram-$(date +%Y%m%d-%H%M%S).sql.gz
+
+# Or use the provided backup script (if available)
+bash bin/backup-postgres.sh
+```
+
+Store backups outside the `engram/` directory (e.g., cloud storage, NAS, external drive).
+
+### Safe Docker Operations
+
+| Operation                      | Data Lost? | When to use                           |
+|--------------------------------|-----------|---------------------------------------|
+| `docker compose restart`       | ❌ No     | Restart services after code changes   |
+| `docker compose up -d`         | ❌ No     | Start/update services, apply changes  |
+| `docker compose down`          | ❌ No     | Stop containers (keeps data)          |
+| `docker compose down -v`       | ✅ **YES** | **NEVER use this** — deletes database |
+| `docker volume rm engram_pgdata` | ✅ **YES** | **NEVER use this** — data loss       |
+
+**Rule: Never use `-v` or `rm` on volumes without an active backup.**
+
+### Recovering from Data Loss
+
+If the database is accidentally deleted:
+
+1. **Check archives:**
+   ```bash
+   ls -la ~/.engram-archive/  # SQLite backups from before PostgreSQL migration
+   ```
+
+2. **Restore from PostgreSQL dump:**
+   ```bash
+   gunzip < backups/engram-20260326-153014.sql.gz | docker compose exec -T postgres psql -U engram -d engram
+   ```
+
+3. **Restore from SQLite archives:**
+   ```bash
+   python restore_from_sqlite.py  # Restores from ~/.engram-archive/*.db files
+   ```
+
+4. **Verify restoration:**
+   ```bash
+   docker compose exec -T postgres psql -U engram -d engram -c "SELECT COUNT(*) FROM memories;"
+   ```
+
+### Docker Volume Backups (Full System)
+
+For complete system snapshots (volumes + configs):
+
+```bash
+# Backup the entire pgdata volume
+docker run --rm -v engram_pgdata:/data -v $(pwd)/backups:/backup \
+  postgres:16-alpine tar czf /backup/pgdata-full-$(date +%Y%m%d).tar.gz /data
+
+# Restore from volume backup
+docker run --rm -v engram_pgdata:/data -v $(pwd)/backups:/backup \
+  postgres:16-alpine tar xzf /backup/pgdata-full-20260326.tar.gz -C /
+```
+
+---
+
 ## How Agents Use It
 
 Engram ships with a built-in system prompt (the `onboarding` tool) that teaches agents the full workflow. The short version:
