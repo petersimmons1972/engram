@@ -106,7 +106,24 @@ class PostgresBackend:
             max_size=10,
             kwargs={"row_factory": dict_row},
         )
+        self._validate_connection()
         self._init_db()
+
+    def _validate_connection(self) -> None:
+        """Verify the database is reachable before running schema migrations.
+
+        Raises ConnectionError immediately if the DSN is wrong or the server
+        is unreachable, instead of letting _init_db() fail mid-migration.
+        """
+        try:
+            with self.pool.connection() as conn:
+                conn.execute("SELECT 1")
+        except Exception as exc:
+            self.pool.close()
+            raise ConnectionError(
+                f"Cannot connect to PostgreSQL — check DATABASE_URL and server status. "
+                f"Underlying error: {exc}"
+            ) from exc
 
     def __enter__(self) -> PostgresBackend:
         return self

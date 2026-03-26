@@ -6,7 +6,8 @@ import logging
 import os
 import re
 import threading
-from collections import OrderedDict
+import time
+from collections import OrderedDict, defaultdict, deque
 
 from mcp.server.fastmcp import FastMCP
 
@@ -123,6 +124,12 @@ MAX_ENGINE_CACHE_SIZE = 64
 _engines: OrderedDict[str, SearchEngine] = OrderedDict()
 _engines_lock = threading.Lock()
 
+# Rate limiting for memory_store — sliding window per project
+_RATE_LIMIT_WINDOW = 60  # seconds
+_RATE_LIMIT_MAX = int(os.environ.get("ENGRAM_RATE_LIMIT", "100"))  # calls per window
+_store_calls: dict[str, deque] = defaultdict(deque)
+_rate_limit_lock = threading.Lock()
+
 
 def _get_engine(project: str | None = None) -> SearchEngine:
     """Return (or create) a SearchEngine for the given project.
@@ -172,6 +179,22 @@ def memory_store(
     logger.debug("memory_store called: project=%s, type=%s, importance=%d", project, memory_type, importance)
     if len(content) > MAX_CONTENT_LENGTH:
         return {"error": f"Content exceeds maximum length of {MAX_CONTENT_LENGTH} characters."}
+
+    # Rate limiting: sliding window per project
+    proj_key = (project or "default").strip().lower() or "default"
+    now = time.monotonic()
+    with _rate_limit_lock:
+        window = _store_calls[proj_key]
+        # Evict calls outside the window
+        while window and now - window[0] > _RATE_LIMIT_WINDOW:
+            window.popleft()
+        if len(window) >= _RATE_LIMIT_MAX:
+            retry_after = int(_RATE_LIMIT_WINDOW - (now - window[0])) + 1
+            return {
+                "error": f"Rate limit exceeded: max {_RATE_LIMIT_MAX} memory_store calls per {_RATE_LIMIT_WINDOW}s per project.",
+                "retry_after_seconds": retry_after,
+            }
+        window.append(now)
 
     engine = _get_engine(project or None)
 
@@ -253,15 +276,22 @@ def memory_recall(
 
     output = []
     for r in results:
-        # Check if this memory has been superseded by a newer one
+        # Determine supersede status from both edge directions.
+        # Convention (set by memory_correct): source=new supersedes target=old.
+        #   incoming edge (other → this): this memory IS superseded by other.
+        #   outgoing edge (this → other): this memory supersedes other (this is the new version).
         superseded_by = None
+        supersedes_list = []
         for c in r.connected:
-            if c.rel_type == "supersedes" and c.direction == "incoming":
-                superseded_by = {
-                    "id": c.memory.id,
-                    "content": c.memory.content[:300],
-                }
-                break
+            if c.rel_type != "supersedes":
+                continue
+            if c.direction == "incoming":
+                # Another memory declared itself as superseding this one.
+                superseded_by = {"id": c.memory.id, "content": c.memory.content[:300]}
+            elif c.direction == "outgoing":
+                # This memory supersedes another — surface it so callers know
+                # the old version still exists.
+                supersedes_list.append({"id": c.memory.id, "content": c.memory.content[:300]})
 
         entry = {
             "id": r.memory.id,
@@ -287,6 +317,8 @@ def memory_recall(
         if superseded_by:
             entry["WARNING"] = "THIS MEMORY HAS BEEN SUPERSEDED. Use the newer version instead."
             entry["superseded_by"] = superseded_by
+        if supersedes_list:
+            entry["supersedes"] = supersedes_list
 
         output.append(entry)
 

@@ -156,6 +156,29 @@ class TestInputValidation:
         result = memory_store(content=huge, project="test-project")
         assert "error" in result
 
+    def test_rate_limit_blocks_excess_calls(self, _patch_embedder):
+        import engram.server as srv
+        # Use a fresh project key and patch the limit to 3 for speed
+        proj = "rate-limit-test"
+        original_max = srv._RATE_LIMIT_MAX
+        srv._RATE_LIMIT_MAX = 3
+        # Clear any prior state for this project
+        with srv._rate_limit_lock:
+            srv._store_calls.pop(proj, None)
+        try:
+            for _ in range(3):
+                r = srv.memory_store(content="ok", project=proj)
+                assert "error" not in r
+            # 4th call must be rejected
+            r = srv.memory_store(content="overflow", project=proj)
+            assert "error" in r
+            assert "Rate limit" in r["error"]
+            assert "retry_after_seconds" in r
+        finally:
+            srv._RATE_LIMIT_MAX = original_max
+            with srv._rate_limit_lock:
+                srv._store_calls.pop(proj, None)
+
     def test_recall_limit_capped(self, _patch_embedder):
         from engram.server import memory_recall
         result = memory_recall(query="test", top_k=10000, project="test-project")
