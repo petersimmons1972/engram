@@ -817,14 +817,15 @@ def main(
     """Start the engram MCP server.
 
     Args:
-        transport: "stdio" for local subprocess, "sse" for network HTTP/SSE.
-        host: Bind address for SSE mode.
-        port: Port for SSE mode.
-        api_key: Optional Bearer token for SSE auth.
+        transport: "stdio" for local subprocess, "sse" for legacy SSE, or
+                   "streamable-http" for stateless HTTP (recommended for Docker).
+        host: Bind address for network transports.
+        port: Port for network transports.
+        api_key: Optional Bearer token for auth.
     """
     if transport == "stdio":
         mcp.run()
-    elif transport == "sse":
+    elif transport in ("sse", "streamable-http"):
         import atexit
 
         import anyio
@@ -833,7 +834,14 @@ def main(
         # Disable DNS rebinding protection for network access
         mcp.settings.transport_security = None
 
-        app = mcp.sse_app()
+        if transport == "streamable-http":
+            # Stateless per-request transport: no session state, survives server restarts.
+            # Recommended over SSE for Docker deployments — eliminates stale session issues.
+            app = mcp.streamable_http_app()
+            startup_msg = f"Starting engram streamable-HTTP server on {host}:{port}/mcp"
+        else:
+            app = mcp.sse_app()
+            startup_msg = f"Starting engram SSE server on {host}:{port}"
 
         if api_key:
             app = _wrap_with_api_key_auth(app, api_key)
@@ -845,6 +853,7 @@ def main(
 
         atexit.register(_shutdown)
 
+        print(startup_msg)
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
         anyio.run(server.serve)
