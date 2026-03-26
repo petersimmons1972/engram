@@ -52,6 +52,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_search ON memories USING GIN (search_vec
 CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
 CREATE INDEX IF NOT EXISTS idx_memories_last_accessed ON memories(last_accessed);
 CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at);
+CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project, memory_type);
 
 CREATE TABLE IF NOT EXISTS chunks (
     id TEXT PRIMARY KEY,
