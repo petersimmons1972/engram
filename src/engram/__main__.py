@@ -44,9 +44,9 @@ def cli() -> None:
     )
     server_parser.add_argument(
         "--transport",
-        choices=["stdio", "sse"],
+        choices=["stdio", "sse", "streamable-http"],
         default="stdio",
-        help="Transport mode: stdio (local) or sse (network). Default: stdio.",
+        help="Transport mode: stdio (local), sse (network/legacy), or streamable-http (network/recommended). Default: stdio.",
     )
     server_parser.add_argument(
         "--host",
