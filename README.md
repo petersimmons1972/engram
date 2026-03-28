@@ -115,151 +115,56 @@ Without embeddings, you still get keyword search, recency scoring, and the full 
 
 ## Installation
 
-Engram runs exclusively via Docker and Compose. A standard installation starts four required services:
+Engram runs as two Docker services: **PostgreSQL** and **Engram**. Ollama is external — provided by your existing Open-WebUI installation.
 
 1. **PostgreSQL** — Persistent database (Docker volume: `pgdata`)
-2. **Ollama** — Local embedding model (Docker volume: `ollama-data`)
-3. **Open-WebUI** — Auth proxy for Ollama (port 3000)
-4. **Engram** — MCP server (port 8788)
+2. **Engram** — MCP server (port 8788)
+
+Ollama access routes through your enterprise Open-WebUI instance. No local Ollama container required.
 
 ### Prerequisites
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
-- 4 GB RAM minimum (8 GB recommended)
-- For GPU acceleration: NVIDIA CUDA, AMD ROCm, or Mac M-series Metal support
+- 1 GB RAM minimum
+- An existing Open-WebUI instance with an API key
 
 ### Quick Start
 
 ```bash
 git clone https://github.com/shugav/engram.git
 cd engram
+cp .env.example .env
+# Edit .env: set OLLAMA_URL and OLLAMA_API_KEY for your Open-WebUI instance
 docker compose up -d
 ```
 
-This starts all four services. Engram listens on `http://localhost:8788/sse`.
-
-> **First run?** Ollama needs to pull the embedding model. Run once to initialize:
-> ```bash
-> docker compose --profile init run --rm ollama-init
-> ```
-> This pulls `nomic-embed-text`. Future runs start faster.
-
-### Open-WebUI Setup (First Boot)
-
-Open-WebUI acts as an authenticated proxy between Engram and Ollama. Choose one of two setup methods:
-
-#### Option A: Automatic (Headless)
-
-Add these to your `.env` file **before first boot**:
-
-```bash
-WEBUI_ADMIN_EMAIL=admin@local.dev
-WEBUI_ADMIN_PASSWORD=your-secure-password
-WEBUI_SECRET_KEY=your-jwt-secret
-```
-
-Then generate an API key via the API:
-
-```bash
-# Sign in and get a JWT
-TOKEN=$(curl -s http://localhost:3000/api/v1/auths/signin \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@local.dev","password":"your-secure-password"}' \
-  | jq -r '.token')
-
-# Generate a persistent API key
-curl -s http://localhost:3000/api/v1/auths/api_key \
-  -H "Authorization: Bearer $TOKEN" -X POST | jq -r '.api_key'
-```
-
-Add the resulting `sk-...` key to your `.env`:
-
-```bash
-OLLAMA_API_KEY=sk-your-key-here
-```
-
-Then restart: `docker compose restart engram`
-
-#### Option B: Browser
-
-1. Open http://localhost:3000
-2. Create an admin account (the first signup automatically becomes admin)
-3. Go to **Settings > Account > API Keys**
-4. Generate a new API key (starts with `sk-...`)
-5. Add it to your `.env` file:
-   ```bash
-   OLLAMA_API_KEY=sk-your-key-here
-   ```
-6. Restart Engram to pick up the key:
-   ```bash
-   docker compose restart engram
-   ```
+Engram listens on `http://localhost:8788/sse`.
 
 ### Configuration
 
-Create a `.env` file in the engram directory for customization:
+Create or edit `.env` in the engram directory:
 
 ```bash
-# .env (optional)
-ENGRAM_API_KEY=your-secret-token              # For network authentication
-ENGRAM_EMBEDDER=ollama                         # Auto-detected; force with: openai, ollama, none
-OPENAI_API_KEY=sk-...                          # If using OpenAI embeddings
-OLLAMA_API_KEY=sk-...                          # Open-WebUI API key for Ollama proxy auth
-OLLAMA_URL=http://open-webui:8080/ollama       # Routes through Open-WebUI (default)
+# .env
 POSTGRES_PASSWORD=change-me-in-production      # Default: engram
+ENGRAM_EMBEDDER=ollama                         # Force mode: openai, ollama, or none
 ENGRAM_PORT=8788                               # HTTP port (default)
+
+# External Ollama via Open-WebUI proxy
+OLLAMA_URL=https://your-open-webui-host/ollama # Your OWUI Ollama endpoint
+OLLAMA_API_KEY=sk-...                          # API key from your OWUI instance
+
+# Optional: Engram network auth
+# ENGRAM_API_KEY=your-secret-token             # Require Bearer auth on the SSE endpoint
 ```
 
-Restart the services after changing `.env`:
+To get your Open-WebUI API key: log in to your OWUI instance, go to **Settings > Account > API Keys**, and generate a key (starts with `sk-...`).
+
+Restart after changing `.env`:
 
 ```bash
 docker compose down && docker compose up -d
-```
-
-### GPU Configuration
-
-By default, Ollama runs on CPU. For faster embeddings, add GPU support:
-
-#### NVIDIA GPUs (CUDA)
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
-```
-
-Requires:
-- NVIDIA GPU with CUDA compute capability 3.5+
-- NVIDIA Container Toolkit installed
-- Docker daemon configured with `nvidia` runtime
-
-#### AMD GPUs (ROCm)
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
-```
-
-Requires:
-- AMD RDNA or CDNA GPU
-- ROCm runtime on host
-- `rocm` image support
-
-#### Mac M-series (Metal)
-
-No override needed. Docker Desktop on Apple Silicon auto-detects Metal acceleration. Ollama uses Metal automatically.
-
-#### System Ollama (Local/Host)
-
-If you're running Ollama natively on your machine (not in Docker):
-
-```bash
-# Start your host Ollama
-ollama serve
-
-# In another terminal, init the model
-ollama pull nomic-embed-text
-
-# Start Engram pointing to host Ollama
-docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d
 ```
 
 ### Connect Your IDE
@@ -378,7 +283,7 @@ Each file is editable, greppable, version-controllable. You can:
 |----------------------|--------------------------|------------------------------------------------------|
 | `ENGRAM_EMBEDDER`    | *(auto-detect)*          | Force embedding mode: `openai`, `ollama`, or `none`  |
 | `OPENAI_API_KEY`     | *(unset)*                | OpenAI key for vector embeddings                     |
-| `OLLAMA_URL`         | `http://open-webui:8080/ollama` | Ollama endpoint — routed through Open-WebUI   |
+| `OLLAMA_URL`         | `https://open-webui.petersimmons.com/ollama` | Ollama endpoint — your external Open-WebUI |
 | `OLLAMA_API_KEY`     | *(unset)*                | Open-WebUI API key for Bearer auth                   |
 | `ENGRAM_PROJECT`     | `default`                | Default project namespace                            |
 | `ENGRAM_API_KEY`     | *(unset)*                | Bearer token for SSE authentication                  |
@@ -513,9 +418,9 @@ docker run --rm -v engram_pgdata:/data -v $(pwd):/backup \
 
 - **Single git-like server per team** — If multiple developers need shared memory, you need one Engram instance (not replicated). This keeps things simple. For single-developer or small team, Docker + Compose handles it.
 
-- **Embedding model size** — `nomic-embed-text` is 268 MB. Docker image is ~150 MB (distroless). Total footprint ~500 MB on disk.
+- **Docker image size** — Engram image is ~150 MB (distroless). Ollama and the `nomic-embed-text` model live on your external Open-WebUI host, not here.
 
-- **Ollama startup time** — First run pulls the embedding model (~5 min on typical connection). Subsequent runs start in <5 seconds. If you're memory-constrained, use `ollama none` mode (BM25-only).
+- **External Ollama dependency** — Embedding requires your Open-WebUI instance to be reachable. If it's down, Engram falls back to BM25-only search. Use `ENGRAM_EMBEDDER=none` to skip embeddings entirely.
 
 - **PostgreSQL performance** — Tested up to ~100k memories. For >1M memories, you'd want connection pooling and query optimization. Not part of the default stack.
 
@@ -540,7 +445,7 @@ Delete all Engram data:
 ```bash
 docker compose down
 docker rmi engram
-docker volume rm engram_pgdata engram_ollama-data
+docker volume rm engram_pgdata
 ```
 
 Then remove the `engram` entry from your IDE's MCP config:
