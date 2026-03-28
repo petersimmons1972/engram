@@ -111,6 +111,8 @@ class SearchEngine:
         tags: list[str] | None = None,
         min_importance: int | None = None,
         graph_hops: int = 1,
+        since: datetime | None = None,
+        before: datetime | None = None,
     ) -> list[SearchResult]:
         """Three-signal recall: BM25 + vector + recency. Graph is enrichment only."""
 
@@ -127,7 +129,7 @@ class SearchEngine:
             w_recency = WEIGHT_RECENCY
 
         # Layer 1: FTS5 / BM25
-        fts_results = self.db.fts_search(query, limit=top_k * 2)
+        fts_results = self.db.fts_search(query, limit=top_k * 2, since=since, before=before)
         if fts_results:
             max_bm25 = max(score for _, score in fts_results)
             min_bm25 = min(score for _, score in fts_results)
@@ -231,6 +233,13 @@ class SearchEngine:
                     matched_chunk=cand.matched_chunk,
                 )
             )
+
+        # Post-filter by temporal bounds (catches vector-only candidates that
+        # bypassed the FTS temporal filter)
+        if since:
+            scored = [r for r in scored if r.memory.created_at >= since]
+        if before:
+            scored = [r for r in scored if r.memory.created_at <= before]
 
         scored.sort(key=lambda r: r.score, reverse=True)
         top_results = scored[:top_k]

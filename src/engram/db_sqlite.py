@@ -628,23 +628,31 @@ class SqliteBackend:
         sanitized = re.sub(r'\b(AND|OR|NOT|NEAR)\b', '', sanitized, flags=re.IGNORECASE)
         return re.sub(r'\s+', ' ', sanitized).strip()
 
-    def fts_search(self, query: str, limit: int = 20) -> list[tuple[Memory, float]]:
+    def fts_search(
+        self, query: str, limit: int = 20,
+        since: datetime | None = None, before: datetime | None = None,
+    ) -> list[tuple[Memory, float]]:
         with self._lock:
             conn = self._get_conn()
             safe_query = self._sanitize_fts_query(query)
             if not safe_query:
                 return []
             try:
-                rows = conn.execute(
-                    """SELECT m.*, bm25(memory_fts) AS rank
+                sql = """SELECT m.*, bm25(memory_fts) AS rank
                        FROM memory_fts f
                        JOIN memories m ON m.rowid = f.rowid
                        WHERE memory_fts MATCH ?
-                       AND m.project = ?
-                       ORDER BY rank
-                       LIMIT ?""",
-                    (safe_query, self.project, limit),
-                ).fetchall()
+                       AND m.project = ?"""
+                params: list = [safe_query, self.project]
+                if since:
+                    sql += " AND m.created_at >= ?"
+                    params.append(since.isoformat())
+                if before:
+                    sql += " AND m.created_at <= ?"
+                    params.append(before.isoformat())
+                sql += " ORDER BY rank LIMIT ?"
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
             except sqlite3.OperationalError as exc:
                 logger.debug("FTS query failed for %r: %s", safe_query, exc)
                 return []

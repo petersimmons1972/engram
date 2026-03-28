@@ -623,23 +623,31 @@ class PostgresBackend:
 
     # ── FTS Search ────────────────────────────────────────────────
 
-    def fts_search(self, query: str, limit: int = 20) -> list[tuple[Memory, float]]:
+    def fts_search(
+        self, query: str, limit: int = 20,
+        since: datetime | None = None, before: datetime | None = None,
+    ) -> list[tuple[Memory, float]]:
         query = query.strip()
         if not query:
             return []
 
         with self.pool.connection() as conn:
             try:
-                rows = conn.execute(
-                    """SELECT m.*, ts_rank(m.search_vector,
+                sql = """SELECT m.*, ts_rank(m.search_vector,
                               plainto_tsquery('english', %s)) AS rank
                        FROM memories m
                        WHERE m.search_vector @@ plainto_tsquery('english', %s)
-                       AND m.project = %s
-                       ORDER BY rank DESC
-                       LIMIT %s""",
-                    (query, query, self.project, limit),
-                ).fetchall()
+                       AND m.project = %s"""
+                params: list = [query, query, self.project]
+                if since:
+                    sql += " AND m.created_at >= %s"
+                    params.append(since)
+                if before:
+                    sql += " AND m.created_at <= %s"
+                    params.append(before)
+                sql += " ORDER BY rank DESC LIMIT %s"
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
             except Exception as exc:
                 logger.debug("FTS query failed for %r: %s", query, exc)
                 return []

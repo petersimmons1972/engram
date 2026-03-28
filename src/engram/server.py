@@ -249,6 +249,8 @@ def memory_recall(
     tags: str = "",
     min_importance: int = 4,
     graph_hops: int = 1,
+    since: str = "",
+    before: str = "",
     project: str = "",
 ) -> dict:
     """Search memories using all three layers: keyword (BM25), semantic (vector), and graph.
@@ -266,6 +268,8 @@ def memory_recall(
         tags: Comma-separated tags to filter by. Empty = all.
         min_importance: Only return memories with importance <= this value (0=only critical, 4=all).
         graph_hops: How many relationship hops to traverse (1 or 2).
+        since: Only return memories created at or after this ISO datetime (e.g. "2026-03-01T00:00:00+00:00"). Empty = no lower bound.
+        before: Only return memories created at or before this ISO datetime. Empty = no upper bound.
         project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
@@ -279,6 +283,10 @@ def memory_recall(
     mt = memory_type if memory_type else None
     mi = min_importance if min_importance < 4 else None
 
+    from datetime import datetime as _dt
+    since_dt = _dt.fromisoformat(since) if since else None
+    before_dt = _dt.fromisoformat(before) if before else None
+
     results = engine.recall(
         query=query,
         top_k=top_k,
@@ -286,6 +294,8 @@ def memory_recall(
         tags=tag_list,
         min_importance=mi,
         graph_hops=max(1, min(2, graph_hops)),
+        since=since_dt,
+        before=before_dt,
     )
 
     output = []
