@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS memories (
     access_count INTEGER NOT NULL DEFAULT 0,
     last_accessed TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    immutable INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
@@ -100,7 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
 CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project, memory_type);
 """
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 class SqliteBackend:
@@ -166,6 +168,21 @@ class SqliteBackend:
                    ) WHERE project = ''"""
             )
             conn.commit()
+        if current < 4:
+            # Add immutability and TTL columns (Wave 1 enhancements)
+            try:
+                conn.execute(
+                    "ALTER TABLE memories ADD COLUMN immutable INTEGER NOT NULL DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            try:
+                conn.execute(
+                    "ALTER TABLE memories ADD COLUMN expires_at TEXT"
+                )
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            conn.commit()
         conn.execute("INSERT OR REPLACE INTO project_meta (key, value) VALUES ('schema_version', ?)",
                      (str(CURRENT_SCHEMA_VERSION),))
         conn.commit()
@@ -208,10 +225,12 @@ class SqliteBackend:
             memory.last_accessed = datetime.fromisoformat(now)
             memory.project = self.project
 
+            expires_at_str = memory.expires_at.isoformat() if memory.expires_at else None
             conn.execute(
                 """INSERT INTO memories (id, content, memory_type, project, tags,
-                   importance, access_count, last_accessed, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   importance, access_count, last_accessed, created_at, updated_at,
+                   immutable, expires_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     memory.id,
                     memory.content,
@@ -223,6 +242,8 @@ class SqliteBackend:
                     now,
                     now,
                     now,
+                    int(memory.immutable),
+                    expires_at_str,
                 ),
             )
             conn.commit()
@@ -569,16 +590,20 @@ class SqliteBackend:
             return decayed, pruned
 
     def prune_stale_memories(self, max_age_hours: float = 720, max_importance: int = 3) -> int:
-        """Remove low-importance memories that haven't been accessed in max_age_hours.
-        Never prunes memories with importance <= 1 (critical/high)."""
+        """Remove low-importance memories that haven't been accessed in max_age_hours,
+        plus any expired memories. Never prunes immutable memories."""
         with self._lock:
             conn = self._get_conn()
             from datetime import datetime, timedelta, timezone
             cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
             cursor = conn.execute(
                 """DELETE FROM memories
-                   WHERE project = ? AND importance >= ? AND last_accessed < ? AND access_count = 0""",
-                (self.project, max_importance, cutoff),
+                   WHERE project = ? AND immutable = 0 AND (
+                       (importance >= ? AND last_accessed < ? AND access_count = 0)
+                       OR (expires_at IS NOT NULL AND expires_at < ?)
+                   )""",
+                (self.project, max_importance, cutoff, now_iso),
             )
             conn.commit()
             return cursor.rowcount
@@ -715,6 +740,9 @@ class SqliteBackend:
 
     @staticmethod
     def _row_to_memory(row: sqlite3.Row) -> Memory:
+        expires_at_raw = row["expires_at"] if "expires_at" in row.keys() else None
+        expires_at = datetime.fromisoformat(expires_at_raw) if expires_at_raw else None
+        immutable_raw = row["immutable"] if "immutable" in row.keys() else 0
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -726,6 +754,8 @@ class SqliteBackend:
             last_accessed=datetime.fromisoformat(row["last_accessed"]),
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
+            immutable=bool(immutable_raw),
+            expires_at=expires_at,
         )
 
     @staticmethod

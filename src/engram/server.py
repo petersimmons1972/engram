@@ -162,6 +162,8 @@ def memory_store(
     memory_type: str = "context",
     tags: str = "",
     importance: int = 2,
+    immutable: bool = False,
+    expires_at: str = "",
     project: str = "",
 ) -> dict:
     """Store a new memory. Auto-chunks, embeds, and indexes for three-layer search.
@@ -171,6 +173,8 @@ def memory_store(
         memory_type: One of: decision, pattern, error, context, architecture, preference.
         tags: Comma-separated tags for filtering (e.g. "auth,security,jwt").
         importance: Priority 0-4. 0=critical identity, 1=key facts, 2=general, 3=low, 4=trivial.
+        immutable: If true, memory cannot be corrected or deleted. Use for critical preferences.
+        expires_at: ISO datetime after which memory is auto-pruned (e.g. "2026-04-30T00:00:00+00:00"). Empty = never expires.
         project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
@@ -206,11 +210,21 @@ def memory_store(
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     importance = max(0, min(4, importance))
 
+    expires_at_dt = None
+    if expires_at:
+        try:
+            from datetime import datetime
+            expires_at_dt = datetime.fromisoformat(expires_at)
+        except ValueError:
+            return {"error": f"Invalid expires_at format: '{expires_at}'. Use ISO 8601 (e.g. '2026-04-30T00:00:00+00:00')."}
+
     memory = Memory(
         content=content,
         memory_type=mt,
         tags=tag_list,
         importance=importance,
+        immutable=immutable,
+        expires_at=expires_at_dt,
     )
 
     try:
@@ -479,6 +493,9 @@ def memory_correct(
     if not old_mem:
         return {"error": f"Memory '{old_memory_id}' not found."}
 
+    if old_mem.immutable:
+        return {"error": f"Memory '{old_memory_id}' is immutable and cannot be corrected."}
+
     if not memory_type:
         mt = old_mem.memory_type
     else:
@@ -542,6 +559,9 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
     mem = engine.db.get_memory(memory_id)
     if not mem:
         return {"error": f"Memory '{memory_id}' not found."}
+
+    if mem.immutable:
+        return {"error": f"Memory '{memory_id}' is immutable and cannot be deleted."}
 
     engine.db.delete_memory_atomic(memory_id)
 
