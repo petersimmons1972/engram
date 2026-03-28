@@ -242,6 +242,114 @@ def memory_store(
 
 
 @mcp.tool()
+def memory_store_batch(
+    memories: str,
+    project: str = "",
+) -> dict:
+    """Store multiple memories in one call with batched embedding.
+
+    More efficient than calling memory_store in a loop — chunks all memories
+    first, then embeds all chunks in a single batch call.
+
+    Args:
+        memories: JSON array of memory objects. Each object may contain:
+            content (required), memory_type, tags (comma-separated string or list),
+            importance, immutable, expires_at.
+        project: Project namespace (e.g. "my-app"). Empty = "default".
+
+    Returns:
+        Count of stored/failed memories and list of stored IDs.
+    """
+    import json as _json
+
+    logger.debug("memory_store_batch called: project=%s", project)
+
+    try:
+        items = _json.loads(memories)
+    except (ValueError, TypeError):
+        return {"error": "Invalid JSON. 'memories' must be a JSON array of objects."}
+
+    if not isinstance(items, list):
+        return {"error": "'memories' must be a JSON array of objects."}
+
+    # Rate limiting: count each memory against sliding window
+    proj_key = (project or "default").strip().lower() or "default"
+    now = time.monotonic()
+    with _rate_limit_lock:
+        window = _store_calls[proj_key]
+        while window and now - window[0] > _RATE_LIMIT_WINDOW:
+            window.popleft()
+        remaining = _RATE_LIMIT_MAX - len(window)
+        if remaining <= 0:
+            retry_after = int(_RATE_LIMIT_WINDOW - (now - window[0])) + 1
+            return {
+                "error": f"Rate limit exceeded: max {_RATE_LIMIT_MAX} stores per {_RATE_LIMIT_WINDOW}s per project.",
+                "retry_after_seconds": retry_after,
+            }
+        # Reserve slots for the batch (cap at remaining capacity)
+        batch_size = min(len(items), remaining)
+        for _ in range(batch_size):
+            window.append(now)
+        items = items[:batch_size]
+
+    engine = _get_engine(project or None)
+
+    memory_objects: list[Memory] = []
+    failed = 0
+    for item in items:
+        if not isinstance(item, dict):
+            failed += 1
+            continue
+        content = item.get("content", "")
+        if not content or len(content) > MAX_CONTENT_LENGTH:
+            failed += 1
+            continue
+
+        try:
+            mt = MemoryType(item.get("memory_type", "context"))
+        except ValueError:
+            mt = MemoryType.CONTEXT
+
+        raw_tags = item.get("tags", "")
+        if isinstance(raw_tags, list):
+            tag_list = [str(t).strip() for t in raw_tags if str(t).strip()]
+        else:
+            tag_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+
+        importance = max(0, min(4, int(item.get("importance", 2))))
+        immutable = bool(item.get("immutable", False))
+
+        expires_at_dt = None
+        ea = item.get("expires_at", "")
+        if ea:
+            try:
+                from datetime import datetime as _dt
+                expires_at_dt = _dt.fromisoformat(ea)
+            except ValueError:
+                pass  # Ignore invalid expires_at
+
+        memory_objects.append(Memory(
+            content=content,
+            memory_type=mt,
+            tags=tag_list,
+            importance=importance,
+            immutable=immutable,
+            expires_at=expires_at_dt,
+        ))
+
+    try:
+        stored = engine.store_batch(memory_objects)
+    except EmbeddingConfigMismatchError as e:
+        return {"error": str(e)}
+
+    return {
+        "stored": len(stored),
+        "failed": failed + (len(memory_objects) - len(stored)),
+        "ids": [m.id for m in stored],
+    }
+
+
+@mcp.tool()
 def memory_recall(
     query: str,
     top_k: int = 5,
