@@ -150,10 +150,14 @@ class PostgresBackend:
             current = int(row["value"]) if row else 1
             if current < 3:
                 # Add project column to relationships table for cross-project isolation (#75)
+                # Use a savepoint so a DuplicateColumn exception doesn't abort the outer
+                # transaction (bare try/except pass in psycopg3 leaves the connection in
+                # an error state and poisons the pool — see issue #84).
                 try:
-                    conn.execute(
-                        "ALTER TABLE relationships ADD COLUMN project TEXT NOT NULL DEFAULT ''"
-                    )
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE relationships ADD COLUMN project TEXT NOT NULL DEFAULT ''"
+                        )
                 except Exception:
                     pass  # Column already exists (fresh DB created with new schema)
                 conn.execute(
