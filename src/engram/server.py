@@ -162,6 +162,8 @@ def memory_store(
     memory_type: str = "context",
     tags: str = "",
     importance: int = 2,
+    immutable: bool = False,
+    expires_at: str = "",
     project: str = "",
 ) -> dict:
     """Store a new memory. Auto-chunks, embeds, and indexes for three-layer search.
@@ -171,6 +173,8 @@ def memory_store(
         memory_type: One of: decision, pattern, error, context, architecture, preference.
         tags: Comma-separated tags for filtering (e.g. "auth,security,jwt").
         importance: Priority 0-4. 0=critical identity, 1=key facts, 2=general, 3=low, 4=trivial.
+        immutable: If true, memory cannot be corrected or deleted. Use for critical preferences.
+        expires_at: ISO datetime after which memory is auto-pruned (e.g. "2026-04-30T00:00:00+00:00"). Empty = never expires.
         project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
@@ -206,11 +210,21 @@ def memory_store(
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
     importance = max(0, min(4, importance))
 
+    expires_at_dt = None
+    if expires_at:
+        try:
+            from datetime import datetime
+            expires_at_dt = datetime.fromisoformat(expires_at)
+        except ValueError:
+            return {"error": f"Invalid expires_at format: '{expires_at}'. Use ISO 8601 (e.g. '2026-04-30T00:00:00+00:00')."}
+
     memory = Memory(
         content=content,
         memory_type=mt,
         tags=tag_list,
         importance=importance,
+        immutable=immutable,
+        expires_at=expires_at_dt,
     )
 
     try:
@@ -228,6 +242,114 @@ def memory_store(
 
 
 @mcp.tool()
+def memory_store_batch(
+    memories: str,
+    project: str = "",
+) -> dict:
+    """Store multiple memories in one call with batched embedding.
+
+    More efficient than calling memory_store in a loop — chunks all memories
+    first, then embeds all chunks in a single batch call.
+
+    Args:
+        memories: JSON array of memory objects. Each object may contain:
+            content (required), memory_type, tags (comma-separated string or list),
+            importance, immutable, expires_at.
+        project: Project namespace (e.g. "my-app"). Empty = "default".
+
+    Returns:
+        Count of stored/failed memories and list of stored IDs.
+    """
+    import json as _json
+
+    logger.debug("memory_store_batch called: project=%s", project)
+
+    try:
+        items = _json.loads(memories)
+    except (ValueError, TypeError):
+        return {"error": "Invalid JSON. 'memories' must be a JSON array of objects."}
+
+    if not isinstance(items, list):
+        return {"error": "'memories' must be a JSON array of objects."}
+
+    # Rate limiting: count each memory against sliding window
+    proj_key = (project or "default").strip().lower() or "default"
+    now = time.monotonic()
+    with _rate_limit_lock:
+        window = _store_calls[proj_key]
+        while window and now - window[0] > _RATE_LIMIT_WINDOW:
+            window.popleft()
+        remaining = _RATE_LIMIT_MAX - len(window)
+        if remaining <= 0:
+            retry_after = int(_RATE_LIMIT_WINDOW - (now - window[0])) + 1
+            return {
+                "error": f"Rate limit exceeded: max {_RATE_LIMIT_MAX} stores per {_RATE_LIMIT_WINDOW}s per project.",
+                "retry_after_seconds": retry_after,
+            }
+        # Reserve slots for the batch (cap at remaining capacity)
+        batch_size = min(len(items), remaining)
+        for _ in range(batch_size):
+            window.append(now)
+        items = items[:batch_size]
+
+    engine = _get_engine(project or None)
+
+    memory_objects: list[Memory] = []
+    failed = 0
+    for item in items:
+        if not isinstance(item, dict):
+            failed += 1
+            continue
+        content = item.get("content", "")
+        if not content or len(content) > MAX_CONTENT_LENGTH:
+            failed += 1
+            continue
+
+        try:
+            mt = MemoryType(item.get("memory_type", "context"))
+        except ValueError:
+            mt = MemoryType.CONTEXT
+
+        raw_tags = item.get("tags", "")
+        if isinstance(raw_tags, list):
+            tag_list = [str(t).strip() for t in raw_tags if str(t).strip()]
+        else:
+            tag_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+
+        importance = max(0, min(4, int(item.get("importance", 2))))
+        immutable = bool(item.get("immutable", False))
+
+        expires_at_dt = None
+        ea = item.get("expires_at", "")
+        if ea:
+            try:
+                from datetime import datetime as _dt
+                expires_at_dt = _dt.fromisoformat(ea)
+            except ValueError:
+                pass  # Ignore invalid expires_at
+
+        memory_objects.append(Memory(
+            content=content,
+            memory_type=mt,
+            tags=tag_list,
+            importance=importance,
+            immutable=immutable,
+            expires_at=expires_at_dt,
+        ))
+
+    try:
+        stored = engine.store_batch(memory_objects)
+    except EmbeddingConfigMismatchError as e:
+        return {"error": str(e)}
+
+    return {
+        "stored": len(stored),
+        "failed": failed + (len(memory_objects) - len(stored)),
+        "ids": [m.id for m in stored],
+    }
+
+
+@mcp.tool()
 def memory_recall(
     query: str,
     top_k: int = 5,
@@ -235,6 +357,8 @@ def memory_recall(
     tags: str = "",
     min_importance: int = 4,
     graph_hops: int = 1,
+    since: str = "",
+    before: str = "",
     project: str = "",
 ) -> dict:
     """Search memories using all three layers: keyword (BM25), semantic (vector), and graph.
@@ -252,6 +376,8 @@ def memory_recall(
         tags: Comma-separated tags to filter by. Empty = all.
         min_importance: Only return memories with importance <= this value (0=only critical, 4=all).
         graph_hops: How many relationship hops to traverse (1 or 2).
+        since: Only return memories created at or after this ISO datetime (e.g. "2026-03-01T00:00:00+00:00"). Empty = no lower bound.
+        before: Only return memories created at or before this ISO datetime. Empty = no upper bound.
         project: Project namespace (e.g. "my-app"). Empty = "default".
 
     Returns:
@@ -265,6 +391,10 @@ def memory_recall(
     mt = memory_type if memory_type else None
     mi = min_importance if min_importance < 4 else None
 
+    from datetime import datetime as _dt
+    since_dt = _dt.fromisoformat(since) if since else None
+    before_dt = _dt.fromisoformat(before) if before else None
+
     results = engine.recall(
         query=query,
         top_k=top_k,
@@ -272,6 +402,8 @@ def memory_recall(
         tags=tag_list,
         min_importance=mi,
         graph_hops=max(1, min(2, graph_hops)),
+        since=since_dt,
+        before=before_dt,
     )
 
     output = []
@@ -479,6 +611,9 @@ def memory_correct(
     if not old_mem:
         return {"error": f"Memory '{old_memory_id}' not found."}
 
+    if old_mem.immutable:
+        return {"error": f"Memory '{old_memory_id}' is immutable and cannot be corrected."}
+
     if not memory_type:
         mt = old_mem.memory_type
     else:
@@ -542,6 +677,9 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
     mem = engine.db.get_memory(memory_id)
     if not mem:
         return {"error": f"Memory '{memory_id}' not found."}
+
+    if mem.immutable:
+        return {"error": f"Memory '{memory_id}' is immutable and cannot be deleted."}
 
     engine.db.delete_memory_atomic(memory_id)
 

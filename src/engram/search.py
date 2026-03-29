@@ -103,6 +103,45 @@ class SearchEngine:
 
         return memory
 
+    def store_batch(self, memories: list[Memory]) -> list[Memory]:
+        """Store multiple memories with batched embedding.
+
+        Chunks all memories, embeds all chunks in one batch call, then stores.
+        Individual memory failures are skipped without aborting the batch.
+        """
+        self._check_embedder_metadata()
+        stored: list[Memory] = []
+        all_chunks: list[Chunk] = []
+        all_texts: list[str] = []
+
+        for memory in memories:
+            try:
+                memory = self.db.store_memory(memory)
+                stored.append(memory)
+                chunks = chunk_text(memory.content)
+                for i, text in enumerate(chunks):
+                    h = chunk_hash(text)
+                    if self.db.chunk_hash_exists(h):
+                        continue
+                    chunk_obj = Chunk(
+                        memory_id=memory.id, chunk_text=text,
+                        chunk_index=i, chunk_hash=h,
+                    )
+                    all_chunks.append(chunk_obj)
+                    all_texts.append(text)
+            except Exception:
+                continue  # Skip failed individual memories
+
+        if all_texts and self.has_vectors:
+            embeddings = self.embedder.embed_batch(all_texts)
+            for chunk_obj, emb in zip(all_chunks, embeddings):
+                chunk_obj.embedding = to_blob(emb)
+
+        if all_chunks:
+            self.db.store_chunks(all_chunks)
+
+        return stored
+
     def recall(
         self,
         query: str,
@@ -111,6 +150,8 @@ class SearchEngine:
         tags: list[str] | None = None,
         min_importance: int | None = None,
         graph_hops: int = 1,
+        since: datetime | None = None,
+        before: datetime | None = None,
     ) -> list[SearchResult]:
         """Three-signal recall: BM25 + vector + recency. Graph is enrichment only."""
 
@@ -127,7 +168,7 @@ class SearchEngine:
             w_recency = WEIGHT_RECENCY
 
         # Layer 1: FTS5 / BM25
-        fts_results = self.db.fts_search(query, limit=top_k * 2)
+        fts_results = self.db.fts_search(query, limit=top_k * 2, since=since, before=before)
         if fts_results:
             max_bm25 = max(score for _, score in fts_results)
             min_bm25 = min(score for _, score in fts_results)
@@ -231,6 +272,13 @@ class SearchEngine:
                     matched_chunk=cand.matched_chunk,
                 )
             )
+
+        # Post-filter by temporal bounds (catches vector-only candidates that
+        # bypassed the FTS temporal filter)
+        if since:
+            scored = [r for r in scored if r.memory.created_at >= since]
+        if before:
+            scored = [r for r in scored if r.memory.created_at <= before]
 
         scored.sort(key=lambda r: r.score, reverse=True)
         top_results = scored[:top_k]

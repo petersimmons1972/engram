@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -86,7 +87,10 @@ class DatabaseBackend(Protocol):
     def delete_relationships_for_memory(self, memory_id: str) -> None: ...
 
     # -- FTS search --
-    def fts_search(self, query: str, limit: int = 20) -> list[tuple[Memory, float]]: ...
+    def fts_search(
+        self, query: str, limit: int = 20,
+        since: datetime | None = None, before: datetime | None = None,
+    ) -> list[tuple[Memory, float]]: ...
     def rebuild_fts(self) -> None: ...
 
     # -- stats --

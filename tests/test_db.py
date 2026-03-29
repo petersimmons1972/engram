@@ -408,7 +408,7 @@ class TestSchemaMigration:
         db.close()
         db2 = MemoryDB(project="olddb", db_dir=tmp_db_dir)
         version = db2.get_meta("schema_version")
-        assert version == "3"
+        assert version == "4"
 
 
 class TestRelationshipIsolation:

@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS memories (
     last_accessed TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
+    immutable BOOLEAN NOT NULL DEFAULT FALSE,
+    expires_at TIMESTAMPTZ,
     search_vector TSVECTOR GENERATED ALWAYS AS (
         to_tsvector('english', content)
     ) STORED
@@ -91,7 +93,7 @@ CREATE TABLE IF NOT EXISTS project_meta (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 class PostgresBackend:
@@ -170,6 +172,23 @@ class PostgresBackend:
                        ) WHERE project = ''"""
                 )
                 conn.commit()
+            if current < 4:
+                # Add immutability and TTL columns (Wave 1 enhancements)
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE memories ADD COLUMN immutable BOOLEAN NOT NULL DEFAULT FALSE"
+                        )
+                except Exception:
+                    pass  # Column already exists (fresh DB created with new schema)
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE memories ADD COLUMN expires_at TIMESTAMPTZ"
+                        )
+                except Exception:
+                    pass  # Column already exists (fresh DB created with new schema)
+                conn.commit()
             conn.execute(
                 "INSERT INTO project_meta (key, value) VALUES ('schema_version', %s) "
                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -208,8 +227,9 @@ class PostgresBackend:
             conn.execute(
                 """INSERT INTO memories
                    (id, content, memory_type, project, tags,
-                    importance, access_count, last_accessed, created_at, updated_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    importance, access_count, last_accessed, created_at, updated_at,
+                    immutable, expires_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (
                     memory.id,
                     memory.content,
@@ -221,6 +241,8 @@ class PostgresBackend:
                     now,
                     now,
                     now,
+                    memory.immutable,
+                    memory.expires_at,
                 ),
             )
             conn.commit()
@@ -573,13 +595,17 @@ class PostgresBackend:
     def prune_stale_memories(
         self, max_age_hours: float = 720, max_importance: int = 3,
     ) -> int:
+        """Remove low-importance memories that haven't been accessed in max_age_hours,
+        plus any expired memories. Never prunes immutable memories."""
         cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
         with self.pool.connection() as conn:
             row = conn.execute(
                 "WITH deleted AS ("
                 "  DELETE FROM memories"
-                "  WHERE project = %s AND importance >= %s"
-                "  AND last_accessed < %s AND access_count = 0"
+                "  WHERE project = %s AND NOT immutable AND ("
+                "    (importance >= %s AND last_accessed < %s AND access_count = 0)"
+                "    OR (expires_at IS NOT NULL AND expires_at < NOW())"
+                "  )"
                 "  RETURNING id"
                 ") SELECT count(*) AS c FROM deleted",
                 (self.project, max_importance, cutoff),
@@ -597,23 +623,31 @@ class PostgresBackend:
 
     # ── FTS Search ────────────────────────────────────────────────
 
-    def fts_search(self, query: str, limit: int = 20) -> list[tuple[Memory, float]]:
+    def fts_search(
+        self, query: str, limit: int = 20,
+        since: datetime | None = None, before: datetime | None = None,
+    ) -> list[tuple[Memory, float]]:
         query = query.strip()
         if not query:
             return []
 
         with self.pool.connection() as conn:
             try:
-                rows = conn.execute(
-                    """SELECT m.*, ts_rank(m.search_vector,
+                sql = """SELECT m.*, ts_rank(m.search_vector,
                               plainto_tsquery('english', %s)) AS rank
                        FROM memories m
                        WHERE m.search_vector @@ plainto_tsquery('english', %s)
-                       AND m.project = %s
-                       ORDER BY rank DESC
-                       LIMIT %s""",
-                    (query, query, self.project, limit),
-                ).fetchall()
+                       AND m.project = %s"""
+                params: list = [query, query, self.project]
+                if since:
+                    sql += " AND m.created_at >= %s"
+                    params.append(since)
+                if before:
+                    sql += " AND m.created_at <= %s"
+                    params.append(before)
+                sql += " ORDER BY rank DESC LIMIT %s"
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
             except Exception as exc:
                 logger.debug("FTS query failed for %r: %s", query, exc)
                 return []
@@ -713,6 +747,11 @@ class PostgresBackend:
         if isinstance(updated_at, str):
             updated_at = datetime.fromisoformat(updated_at)
 
+        expires_at_raw = row.get("expires_at")
+        if isinstance(expires_at_raw, str):
+            expires_at_raw = datetime.fromisoformat(expires_at_raw)
+        # datetime objects pass through as-is; None stays None
+
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -724,6 +763,8 @@ class PostgresBackend:
             last_accessed=last_accessed,
             created_at=created_at,
             updated_at=updated_at,
+            immutable=bool(row.get("immutable", False)),
+            expires_at=expires_at_raw,
         )
 
     @staticmethod
