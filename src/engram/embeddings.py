@@ -142,7 +142,11 @@ class OllamaEmbedder:
             raise ValueError(f"Blocked Ollama URL (potential SSRF): {base_url}")
         self._base_url = base_url.rstrip("/")
         self._model = model or os.environ.get("ENGRAM_OLLAMA_MODEL", "nomic-embed-text")
-        self.name = f"ollama/{self._model}"
+        # Canonicalize name: strip :latest suffix so nomic-embed-text and
+        # nomic-embed-text:latest are treated as the same model by the
+        # consistency guard. The full tag is still sent to the Ollama API.
+        _canonical = self._model.removesuffix(":latest")
+        self.name = f"ollama/{_canonical}"
         self._headers: dict[str, str] = {}
         if api_key:
             self._headers["Authorization"] = f"Bearer {api_key}"

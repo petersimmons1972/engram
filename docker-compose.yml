@@ -34,6 +34,7 @@ services:
       - ENGRAM_EMBEDDER=ollama
       - OLLAMA_URL=${OLLAMA_URL:-https://open-webui.petersimmons.com/ollama}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
+      - ENGRAM_OLLAMA_MODEL=${ENGRAM_OLLAMA_MODEL:-nomic-embed-text:latest}
       - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
     depends_on:
       postgres:
