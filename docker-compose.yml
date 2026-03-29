@@ -1,11 +1,12 @@
 # Chainguard images: free tier requires :latest tag only.
 # Version-pinned tags require a paid subscription.
 # See: https://edu.chainguard.dev/chainguard/chainguard-images/faq/
+#
+# Two-service architecture: PostgreSQL + Engram.
+# Ollama is external — provided by your existing Open-WebUI installation.
+# Set OLLAMA_URL and OLLAMA_API_KEY in .env to point at your OWUI instance.
 
 services:
-  # Three required services: postgres, ollama, engram
-  # For GPU support, use: docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
-  # For host Ollama: docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d
 
   postgres:
     container_name: engram-postgres
@@ -23,33 +24,6 @@ services:
       retries: 5
     restart: unless-stopped
 
-  ollama:
-    container_name: engram-ollama
-    image: ollama/ollama:latest
-    volumes:
-      - ollama-data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  # Initialize Ollama with nomic-embed-text model (required for vector embeddings).
-  # Run once: docker compose --profile init run --rm ollama-init
-  ollama-init:
-    container_name: engram-ollama-init
-    image: ollama/ollama:latest
-    volumes:
-      - ollama-data:/root/.ollama
-    entrypoint: /bin/sh
-    command: -c "ollama pull nomic-embed-text && echo 'Model nomic-embed-text ready'"
-    depends_on:
-      ollama:
-        condition: service_healthy
-    profiles: ["init"]
-    restart: no
-
   engram:
     container_name: engram-app
     build: .
@@ -58,32 +32,14 @@ services:
     environment:
       - ENGRAM_API_KEY=${ENGRAM_API_KEY:-}
       - ENGRAM_EMBEDDER=ollama
-      - OLLAMA_URL=http://ollama:11434
+      - OLLAMA_URL=${OLLAMA_URL:-https://open-webui.petersimmons.com/ollama}
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY:-}
       - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
     depends_on:
       postgres:
         condition: service_healthy
-      ollama:
-        condition: service_started
     restart: unless-stopped
 
-
-  # Open WebUI: auth proxy for Ollama access. Engram routes embedding
-  # requests through Open-WebUI with Bearer token authentication.
-  # First boot: visit http://localhost:3000, create admin, generate API key.
-  open-webui:
-    container_name: engram-open-webui
-    image: ghcr.io/open-webui/open-webui:main
-    ports:
-      - "127.0.0.1:3000:8080"
-    environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - WEBUI_AUTH=true
-      - ENABLE_SIGNUP=true
-      - DEFAULT_USER_ROLE=user
-    volumes:
-      - open-webui-data:/app/backend/data
-    restart: unless-stopped
 
   # Optional: TLS termination for production SSE deployments.
   # Uncomment and configure Caddyfile with your domain.
@@ -118,6 +74,4 @@ services:
 
 volumes:
   pgdata:
-  ollama-data:
-  open-webui-data:
   # caddy-data:
