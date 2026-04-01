@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 220" width="100%">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#080c09"/>
+      <stop offset="100%" style="stop-color:#0a0f0c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="220" fill="url(#bg)"/>
+
+  <!-- Left accent bar -->
+  <rect width="5" height="220" fill="#00ff88"/>
+
+  <!-- Concentric circles — memory signal motif, right side -->
+  <circle cx="820" cy="110" r="90" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.12"/>
+  <circle cx="820" cy="110" r="68" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.2"/>
+  <circle cx="820" cy="110" r="46" fill="none" stroke="#00ff88" stroke-width="0.7" opacity="0.32"/>
+  <circle cx="820" cy="110" r="24" fill="none" stroke="#00ff88" stroke-width="0.8" opacity="0.45"/>
+  <circle cx="820" cy="110" r="8"  fill="#00ff88" opacity="0.25"/>
+  <circle cx="820" cy="110" r="3"  fill="#00ff88" opacity="0.85"/>
+
+  <!-- Top rule -->
+  <line x1="24" y1="38" x2="680" y2="38" stroke="#00ff88" stroke-width="0.4" opacity="0.3"/>
+
+  <!-- ENGRAM headline -->
+  <text x="24" y="102" font-family="'Helvetica Neue', Arial, sans-serif" font-size="64" fill="#ffffff" font-weight="900" letter-spacing="-2.5">ENGRAM</text>
+
+  <!-- Divider rule -->
+  <line x1="24" y1="116" x2="620" y2="116" stroke="#1a2a1a" stroke-width="0.5"/>
+
+  <!-- Tagline -->
+  <text x="24" y="134" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8.5" fill="#00ff88" letter-spacing="4" font-weight="700">PERSISTENT · SEARCHABLE · PRIVATE</text>
+
+  <!-- Body copy -->
+  <text x="24" y="160" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#999999" font-style="italic">Your AI agents forget everything between sessions.</text>
+  <text x="24" y="179" font-family="Georgia, 'Times New Roman', serif" font-size="13" fill="#cccccc" font-style="italic" font-weight="700">Engram doesn't.</text>
+
+  <!-- Bottom rule -->
+  <line x1="24" y1="196" x2="200" y2="196" stroke="#00ff88" stroke-width="0.4" opacity="0.3"/>
+
+  <!-- Badge pills -->
+  <rect x="24"  y="202" width="74" height="15" rx="2" fill="#00ff88" opacity="0.08"/>
+  <rect x="24"  y="202" width="74" height="15" rx="2" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.35"/>
+  <text x="61"  y="213" font-family="'Helvetica Neue', Arial, sans-serif" font-size="7" fill="#00ff88" text-anchor="middle" letter-spacing="0.8">Python 3.11+</text>
+
+  <rect x="104" y="202" width="40" height="15" rx="2" fill="#00ff88" opacity="0.08"/>
+  <rect x="104" y="202" width="40" height="15" rx="2" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.35"/>
+  <text x="124" y="213" font-family="'Helvetica Neue', Arial, sans-serif" font-size="7" fill="#00ff88" text-anchor="middle" letter-spacing="0.8">MIT</text>
+
+  <rect x="150" y="202" width="60" height="15" rx="2" fill="#00ff88" opacity="0.08"/>
+  <rect x="150" y="202" width="60" height="15" rx="2" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.35"/>
+  <text x="180" y="213" font-family="'Helvetica Neue', Arial, sans-serif" font-size="7" fill="#00ff88" text-anchor="middle" letter-spacing="0.8">MCP Server</text>
+
+  <rect x="216" y="202" width="44" height="15" rx="2" fill="#00ff88" opacity="0.08"/>
+  <rect x="216" y="202" width="44" height="15" rx="2" fill="none" stroke="#00ff88" stroke-width="0.5" opacity="0.35"/>
+  <text x="238" y="213" font-family="'Helvetica Neue', Arial, sans-serif" font-size="7" fill="#00ff88" text-anchor="middle" letter-spacing="0.8">Beta</text>
+</svg>

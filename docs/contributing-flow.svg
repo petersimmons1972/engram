@@ -1,116 +1,101 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="100%">
   <defs>
-    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
-      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.15"/>
-    </filter>
-    <filter id="shadow-lg" x="-5%" y="-5%" width="115%" height="115%">
-      <feDropShadow dx="5" dy="5" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.2"/>
-    </filter>
     <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#8C8C8C"/>
+      <polygon points="0 0, 10 3.5, 0 7" fill="#00ff88" opacity="0.7"/>
     </marker>
-    <style>
-      @media (prefers-color-scheme: dark) {
-        .bg { fill: #1A1A2E; }
-        .card-bg { fill: #2B2B3D; }
-        .card-text { fill: #E0E0E0; }
-        .muted { fill: #8C8C8C; }
-        .tip-bg { fill: #1F2B3A; }
-      }
-    </style>
   </defs>
 
   <!-- Background -->
-  <rect class="bg" width="960" height="360" fill="#F5F0E8"/>
+  <rect width="960" height="360" fill="#080c09"/>
 
-  <!-- Title Bar -->
-  <rect x="0" y="0" width="960" height="52" fill="#1B3A5C"/>
-  <text x="480" y="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="21" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.06em">YOUR FIRST CONTRIBUTION — FIVE STEPS</text>
+  <!-- Left accent bar -->
+  <rect width="5" height="360" fill="#00ff88"/>
+
+  <!-- Title bar -->
+  <rect x="0" y="0" width="960" height="50" fill="#080c09"/>
+  <line x1="24" y1="49" x2="936" y2="49" stroke="#00ff88" stroke-width="0.5" opacity="0.3"/>
+  <text x="480" y="32" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="12" fill="#00ff88" text-anchor="middle" letter-spacing="4">YOUR FIRST CONTRIBUTION — FIVE STEPS</text>
 
   <!-- Step 1: Find -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="36" y="80" width="154" height="180" fill="#FFFFFF" rx="2"/>
-    <rect x="36" y="80" width="154" height="44" fill="#1B3A5C" rx="2"/>
-    <rect x="36" y="102" width="154" height="22" fill="#1B3A5C"/>
-    <text x="113" y="108" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#D4A843" text-anchor="middle">1</text>
-    <text x="113" y="122" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.08em">FIND AN ISSUE</text>
-    <text x="113" y="154" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Browse open</text>
-    <text x="113" y="170" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">issues. Look for</text>
-    <text x="113" y="186" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">"good first issue"</text>
-    <text x="113" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">labels. Docs PRs</text>
-    <text x="113" y="218" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">count too.</text>
-  </g>
+  <rect x="36"  y="66" width="154" height="196" fill="#0d1510" rx="2"/>
+  <rect x="36"  y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
+  <rect x="36"  y="88" width="154" height="22"  fill="#0a1a0d"/>
+  <line x1="36" y1="66" x2="36"  y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.5"/>
+  <text x="113" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">1</text>
+  <text x="113" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">FIND AN ISSUE</text>
+  <text x="113" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Browse open</text>
+  <text x="113" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">issues. Look for</text>
+  <text x="113" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">"good first issue"</text>
+  <text x="113" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">labels. Docs PRs</text>
+  <text x="113" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">count too.</text>
 
   <!-- Arrow 1→2 -->
-  <line x1="196" y1="170" x2="222" y2="170" stroke="#8C8C8C" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="196" y1="164" x2="222" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
 
   <!-- Step 2: Claim -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="228" y="80" width="154" height="180" fill="#FFFFFF" rx="2"/>
-    <rect x="228" y="80" width="154" height="44" fill="#4A7C9B" rx="2"/>
-    <rect x="228" y="102" width="154" height="22" fill="#4A7C9B"/>
-    <text x="305" y="108" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
-    <text x="305" y="122" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.08em">LEAVE A COMMENT</text>
-    <text x="305" y="154" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Say "I'll take this."</text>
-    <text x="305" y="170" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Prevents duplicate</text>
-    <text x="305" y="186" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">work. Ask any</text>
-    <text x="305" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">clarifying questions</text>
-    <text x="305" y="218" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">here first.</text>
-  </g>
+  <rect x="228" y="66" width="154" height="196" fill="#0d1510" rx="2"/>
+  <rect x="228" y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
+  <rect x="228" y="88" width="154" height="22"  fill="#0a1a0d"/>
+  <line x1="228" y1="66" x2="228" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="305" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">2</text>
+  <text x="305" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">LEAVE A COMMENT</text>
+  <text x="305" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Say "I'll take this."</text>
+  <text x="305" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Prevents duplicate</text>
+  <text x="305" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">work. Ask any</text>
+  <text x="305" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">clarifying questions</text>
+  <text x="305" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">here first.</text>
 
   <!-- Arrow 2→3 -->
-  <line x1="388" y1="170" x2="414" y2="170" stroke="#8C8C8C" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="388" y1="164" x2="414" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
 
-  <!-- Step 3: Fork & Branch -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="420" y="80" width="154" height="180" fill="#FFFFFF" rx="2"/>
-    <rect x="420" y="80" width="154" height="44" fill="#2D6A4F" rx="2"/>
-    <rect x="420" y="102" width="154" height="22" fill="#2D6A4F"/>
-    <text x="497" y="108" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
-    <text x="497" y="122" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.08em">FORK &amp; BRANCH</text>
-    <text x="497" y="154" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Fork the repo.</text>
-    <text x="497" y="170" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Create a branch</text>
-    <text x="497" y="186" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">named for the</text>
-    <text x="497" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">issue or feature.</text>
-    <text x="497" y="218" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Set up locally.</text>
-  </g>
+  <!-- Step 3: Fork -->
+  <rect x="420" y="66" width="154" height="196" fill="#0d1510" rx="2"/>
+  <rect x="420" y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
+  <rect x="420" y="88" width="154" height="22"  fill="#0a1a0d"/>
+  <line x1="420" y1="66" x2="420" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="497" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">3</text>
+  <text x="497" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">FORK &amp; BRANCH</text>
+  <text x="497" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Fork the repo.</text>
+  <text x="497" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Create a branch</text>
+  <text x="497" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">named for the</text>
+  <text x="497" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">issue or feature.</text>
+  <text x="497" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Set up locally.</text>
 
   <!-- Arrow 3→4 -->
-  <line x1="580" y1="170" x2="606" y2="170" stroke="#8C8C8C" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="580" y1="164" x2="606" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
 
   <!-- Step 4: Change -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="612" y="80" width="154" height="180" fill="#FFFFFF" rx="2"/>
-    <rect x="612" y="80" width="154" height="44" fill="#D4A843" rx="2"/>
-    <rect x="612" y="102" width="154" height="22" fill="#D4A843"/>
-    <text x="689" y="108" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
-    <text x="689" y="122" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.08em">MAKE THE CHANGE</text>
-    <text x="689" y="154" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Keep the change</text>
-    <text x="689" y="170" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">focused. Run</text>
-    <text x="689" y="186" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">the tests. Update</text>
-    <text x="689" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">docs if behavior</text>
-    <text x="689" y="218" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">changed.</text>
-  </g>
+  <rect x="612" y="66" width="154" height="196" fill="#0d1510" rx="2"/>
+  <rect x="612" y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
+  <rect x="612" y="88" width="154" height="22"  fill="#0a1a0d"/>
+  <line x1="612" y1="66" x2="612" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="689" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">4</text>
+  <text x="689" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">MAKE THE CHANGE</text>
+  <text x="689" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Keep the change</text>
+  <text x="689" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">focused. Run</text>
+  <text x="689" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">the tests. Update</text>
+  <text x="689" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">docs if behavior</text>
+  <text x="689" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">changed.</text>
 
   <!-- Arrow 4→5 -->
-  <line x1="772" y1="170" x2="798" y2="170" stroke="#8C8C8C" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="772" y1="164" x2="798" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
 
   <!-- Step 5: PR -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="804" y="80" width="120" height="180" fill="#FFFFFF" rx="2"/>
-    <rect x="804" y="80" width="120" height="44" fill="#7B4D8E" rx="2"/>
-    <rect x="804" y="102" width="120" height="22" fill="#7B4D8E"/>
-    <text x="864" y="108" font-family="Georgia, serif" font-size="28" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
-    <text x="864" y="122" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.08em">OPEN PR</text>
-    <text x="864" y="154" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Use the PR</text>
-    <text x="864" y="170" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">template. Link</text>
-    <text x="864" y="186" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">the issue.</text>
-    <text x="864" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Ask questions</text>
-    <text x="864" y="218" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">if unsure.</text>
-  </g>
+  <rect x="804" y="66" width="120" height="196" fill="#0d1510" rx="2"/>
+  <rect x="804" y="66" width="120" height="44"  fill="#0a1a0d" rx="2"/>
+  <rect x="804" y="88" width="120" height="22"  fill="#0a1a0d"/>
+  <line x1="804" y1="66" x2="804" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="864" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">5</text>
+  <text x="864" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">OPEN PR</text>
+  <text x="864" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Use the PR</text>
+  <text x="864" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">template. Link</text>
+  <text x="864" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">the issue.</text>
+  <text x="864" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Ask questions</text>
+  <text x="864" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">if unsure.</text>
 
   <!-- Bottom tip bar -->
-  <rect class="tip-bg" x="36" y="284" width="888" height="52" fill="#EDE8DF" rx="2"/>
-  <text x="68" y="305" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#1B3A5C" letter-spacing="0.06em">FIRST CONTRIBUTION TIP</text>
-  <text x="68" y="325" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#2B2B2B">Small, focused changes get reviewed and merged faster than large sweeping ones. A one-paragraph docs fix is a great first PR.</text>
+  <rect x="36" y="282" width="888" height="52" fill="#0d1510" rx="2"/>
+  <line x1="36" y1="282" x2="36"  y2="334" stroke="#00ff88" stroke-width="2" opacity="0.6"/>
+  <text x="56" y="304" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="700" fill="#00ff88" letter-spacing="3">FIRST CONTRIBUTION TIP</text>
+  <text x="56" y="322" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#aaaaaa">Small, focused changes get reviewed and merged faster than large sweeping ones. A one-paragraph docs fix is a great first PR.</text>
 </svg>

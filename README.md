@@ -1,9 +1,4 @@
-# Engram
-
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![MCP Server](https://img.shields.io/badge/MCP-server-black)](https://modelcontextprotocol.io/)
-[![Status: Beta](https://img.shields.io/badge/status-beta-orange)](https://github.com/shugav/engram)
+<p align="center"><img src="docs/hero.svg" alt="Engram — Persistent Memory for AI Agents" width="100%"></p>
 
 **Your AI agents forget everything between sessions. Engram fixes that.**
 

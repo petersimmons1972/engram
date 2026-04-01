@@ -1,80 +1,68 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="100%">
   <defs>
-    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
-      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.15"/>
-    </filter>
     <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#8C8C8C"/>
+      <polygon points="0 0, 10 3.5, 0 7" fill="#00ff88" opacity="0.5"/>
     </marker>
-    <style>
-      @media (prefers-color-scheme: dark) {
-        .bg { fill: #1A1A2E; }
-        .card-bg { fill: #2B2B3D; }
-        .body-text { fill: #E0E0E0; }
-        .question-bg { fill: #1F2B3A; }
-      }
-    </style>
   </defs>
 
   <!-- Background -->
-  <rect class="bg" width="960" height="320" fill="#F5F0E8"/>
+  <rect width="960" height="320" fill="#080c09"/>
 
-  <!-- Title Bar -->
-  <rect x="0" y="0" width="960" height="52" fill="#1B3A5C"/>
-  <text x="480" y="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="21" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.06em">WHAT KIND OF HELP DO YOU NEED?</text>
+  <!-- Left accent bar -->
+  <rect width="5" height="320" fill="#00ff88"/>
 
-  <!-- Central Question Box -->
-  <g filter="url(#shadow)">
-    <rect class="question-bg" x="350" y="76" width="260" height="56" fill="#1B3A5C" rx="3"/>
-    <text x="480" y="100" font-family="Georgia, serif" font-size="15" font-weight="700" fill="#F5F0E8" text-anchor="middle">Something isn't working</text>
-    <text x="480" y="121" font-family="Georgia, serif" font-size="15" font-weight="700" fill="#F5F0E8" text-anchor="middle">the way I expect.</text>
-  </g>
+  <!-- Title bar -->
+  <line x1="24" y1="49" x2="936" y2="49" stroke="#00ff88" stroke-width="0.5" opacity="0.3"/>
+  <text x="480" y="32" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="12" fill="#00ff88" text-anchor="middle" letter-spacing="4">WHAT KIND OF HELP DO YOU NEED?</text>
+
+  <!-- Central question box -->
+  <rect x="334" y="64" width="292" height="58" fill="#0d1510" rx="2"/>
+  <line x1="334" y1="64" x2="334" y2="122" stroke="#00ff88" stroke-width="2" opacity="0.6"/>
+  <text x="480" y="90"  font-family="Georgia, 'Times New Roman', serif" font-size="14" font-weight="700" fill="#cccccc" text-anchor="middle">Something isn't working</text>
+  <text x="480" y="110" font-family="Georgia, 'Times New Roman', serif" font-size="14" font-weight="700" fill="#cccccc" text-anchor="middle">the way I expect.</text>
 
   <!-- Arrow left: BUG -->
-  <line x1="350" y1="104" x2="250" y2="152" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="278" y="127" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">reproducible</text>
+  <line x1="334" y1="93" x2="248" y2="150" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.5"/>
+  <text x="270" y="122" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#555555" text-anchor="middle">reproducible</text>
 
   <!-- Arrow center: QUESTION -->
-  <line x1="480" y1="132" x2="480" y2="168" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="506" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A">not sure</text>
+  <line x1="480" y1="122" x2="480" y2="162" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.5"/>
+  <text x="506" y="148" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#555555">not sure</text>
 
   <!-- Arrow right: FEATURE -->
-  <line x1="610" y1="104" x2="720" y2="152" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrow)"/>
-  <text x="690" y="127" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">new capability</text>
+  <line x1="626" y1="93" x2="718" y2="150" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.5"/>
+  <text x="694" y="122" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#555555" text-anchor="middle">new capability</text>
 
   <!-- BUG card -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="60" y="158" width="260" height="130" fill="#FFFFFF" rx="2"/>
-    <rect x="60" y="158" width="260" height="40" fill="#C0392B" rx="2"/>
-    <rect x="60" y="180" width="260" height="18" fill="#C0392B"/>
-    <text x="190" y="185" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.06em">BUG REPORT</text>
-    <text x="190" y="216" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Open a Bug Report issue.</text>
-    <text x="190" y="233" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Include: steps to reproduce,</text>
-    <text x="190" y="250" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">expected vs. actual result,</text>
-    <text x="190" y="267" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">OS, Python version, logs.</text>
-  </g>
+  <rect x="60"  y="156" width="268" height="136" fill="#0f0808" rx="2" stroke="#ff4444" stroke-width="0.5" opacity="0.8"/>
+  <rect x="60"  y="156" width="268" height="42"  fill="#150808" rx="2"/>
+  <rect x="60"  y="180" width="268" height="18"  fill="#150808"/>
+  <line x1="60" y1="156" x2="60"  y2="292" stroke="#ff4444" stroke-width="2" opacity="0.6"/>
+  <text x="194" y="183" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#ff6666" text-anchor="middle" letter-spacing="3">BUG REPORT</text>
+  <text x="194" y="218" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">Open a Bug Report issue.</text>
+  <text x="194" y="236" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">Include: steps to reproduce,</text>
+  <text x="194" y="254" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">expected vs. actual result,</text>
+  <text x="194" y="272" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">OS, Python version, logs.</text>
 
   <!-- QUESTION card -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="350" y="168" width="260" height="120" fill="#FFFFFF" rx="2"/>
-    <rect x="350" y="168" width="260" height="40" fill="#4A7C9B" rx="2"/>
-    <rect x="350" y="188" width="260" height="20" fill="#4A7C9B"/>
-    <text x="480" y="195" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.06em">GENERAL QUESTION</text>
-    <text x="480" y="226" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Open an issue with</text>
-    <text x="480" y="243" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">[QUESTION] in the title.</text>
-    <text x="480" y="260" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">No question is too basic.</text>
-    <text x="480" y="277" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Beginners welcome.</text>
-  </g>
+  <rect x="346" y="162" width="268" height="126" fill="#0d1510" rx="2" stroke="#00ff88" stroke-width="0.5" opacity="0.8"/>
+  <rect x="346" y="162" width="268" height="42"  fill="#0a1a0d" rx="2"/>
+  <rect x="346" y="184" width="268" height="20"  fill="#0a1a0d"/>
+  <line x1="346" y1="162" x2="346" y2="288" stroke="#00ff88" stroke-width="2" opacity="0.6"/>
+  <text x="480" y="189" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="3">GENERAL QUESTION</text>
+  <text x="480" y="224" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">Open an issue with</text>
+  <text x="480" y="242" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">[QUESTION] in the title.</text>
+  <text x="480" y="260" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">No question is too basic.</text>
+  <text x="480" y="278" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">Beginners welcome.</text>
 
   <!-- FEATURE card -->
-  <g filter="url(#shadow)">
-    <rect class="card-bg" x="640" y="158" width="260" height="130" fill="#FFFFFF" rx="2"/>
-    <rect x="640" y="158" width="260" height="40" fill="#2D6A4F" rx="2"/>
-    <rect x="640" y="180" width="260" height="18" fill="#2D6A4F"/>
-    <text x="770" y="185" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.06em">FEATURE REQUEST</text>
-    <text x="770" y="216" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Open a Feature Request issue.</text>
-    <text x="770" y="233" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Include: what problem it</text>
-    <text x="770" y="250" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">solves, use case, any</text>
-    <text x="770" y="267" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">alternatives you considered.</text>
-  </g>
+  <rect x="632" y="156" width="268" height="136" fill="#080a0f" rx="2" stroke="#4488ff" stroke-width="0.5" opacity="0.8"/>
+  <rect x="632" y="156" width="268" height="42"  fill="#0a0e1a" rx="2"/>
+  <rect x="632" y="180" width="268" height="18"  fill="#0a0e1a"/>
+  <line x1="632" y1="156" x2="632" y2="292" stroke="#4488ff" stroke-width="2" opacity="0.5"/>
+  <text x="766" y="183" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#6699ff" text-anchor="middle" letter-spacing="3">FEATURE REQUEST</text>
+  <text x="766" y="218" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">Open a Feature Request issue.</text>
+  <text x="766" y="236" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">Include: what problem it</text>
+  <text x="766" y="254" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">solves, use case, any</text>
+  <text x="766" y="272" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#999999" text-anchor="middle">alternatives you considered.</text>
 </svg>
