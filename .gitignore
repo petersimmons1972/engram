@@ -37,3 +37,4 @@ venv/
 .DS_Store
 Thumbs.db
 .cursor/
+.superpowers/
