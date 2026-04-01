@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 320" width="100%">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.15"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8C8C8C"/>
+    </marker>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .bg { fill: #1A1A2E; }
+        .card-bg { fill: #2B2B3D; }
+        .body-text { fill: #E0E0E0; }
+        .question-bg { fill: #1F2B3A; }
+      }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect class="bg" width="960" height="320" fill="#F5F0E8"/>
+
+  <!-- Title Bar -->
+  <rect x="0" y="0" width="960" height="52" fill="#1B3A5C"/>
+  <text x="480" y="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="21" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.06em">WHAT KIND OF HELP DO YOU NEED?</text>
+
+  <!-- Central Question Box -->
+  <g filter="url(#shadow)">
+    <rect class="question-bg" x="350" y="76" width="260" height="56" fill="#1B3A5C" rx="3"/>
+    <text x="480" y="100" font-family="Georgia, serif" font-size="15" font-weight="700" fill="#F5F0E8" text-anchor="middle">Something isn't working</text>
+    <text x="480" y="121" font-family="Georgia, serif" font-size="15" font-weight="700" fill="#F5F0E8" text-anchor="middle">the way I expect.</text>
+  </g>
+
+  <!-- Arrow left: BUG -->
+  <line x1="350" y1="104" x2="250" y2="152" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="278" y="127" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">reproducible</text>
+
+  <!-- Arrow center: QUESTION -->
+  <line x1="480" y1="132" x2="480" y2="168" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="506" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A">not sure</text>
+
+  <!-- Arrow right: FEATURE -->
+  <line x1="610" y1="104" x2="720" y2="152" stroke="#8C8C8C" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="690" y="127" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">new capability</text>
+
+  <!-- BUG card -->
+  <g filter="url(#shadow)">
+    <rect class="card-bg" x="60" y="158" width="260" height="130" fill="#FFFFFF" rx="2"/>
+    <rect x="60" y="158" width="260" height="40" fill="#C0392B" rx="2"/>
+    <rect x="60" y="180" width="260" height="18" fill="#C0392B"/>
+    <text x="190" y="185" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.06em">BUG REPORT</text>
+    <text x="190" y="216" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Open a Bug Report issue.</text>
+    <text x="190" y="233" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Include: steps to reproduce,</text>
+    <text x="190" y="250" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">expected vs. actual result,</text>
+    <text x="190" y="267" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">OS, Python version, logs.</text>
+  </g>
+
+  <!-- QUESTION card -->
+  <g filter="url(#shadow)">
+    <rect class="card-bg" x="350" y="168" width="260" height="120" fill="#FFFFFF" rx="2"/>
+    <rect x="350" y="168" width="260" height="40" fill="#4A7C9B" rx="2"/>
+    <rect x="350" y="188" width="260" height="20" fill="#4A7C9B"/>
+    <text x="480" y="195" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.06em">GENERAL QUESTION</text>
+    <text x="480" y="226" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Open an issue with</text>
+    <text x="480" y="243" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">[QUESTION] in the title.</text>
+    <text x="480" y="260" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">No question is too basic.</text>
+    <text x="480" y="277" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Beginners welcome.</text>
+  </g>
+
+  <!-- FEATURE card -->
+  <g filter="url(#shadow)">
+    <rect class="card-bg" x="640" y="158" width="260" height="130" fill="#FFFFFF" rx="2"/>
+    <rect x="640" y="158" width="260" height="40" fill="#2D6A4F" rx="2"/>
+    <rect x="640" y="180" width="260" height="18" fill="#2D6A4F"/>
+    <text x="770" y="185" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.06em">FEATURE REQUEST</text>
+    <text x="770" y="216" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Open a Feature Request issue.</text>
+    <text x="770" y="233" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Include: what problem it</text>
+    <text x="770" y="250" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">solves, use case, any</text>
+    <text x="770" y="267" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">alternatives you considered.</text>
+  </g>
+</svg>

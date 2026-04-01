@@ -12,7 +12,7 @@ requires-python = ">=3.11"
 authors = [
     { name = "shugav" },
 ]
-keywords = ["mcp", "memory", "ai", "agents", "knowledge-graph", "sqlite"]
+keywords = ["mcp", "memory", "ai", "agents", "knowledge-graph", "postgresql"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

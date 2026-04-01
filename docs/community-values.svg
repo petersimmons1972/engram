@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 280" width="100%">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.15"/>
+    </filter>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .bg { fill: #1A1A2E; }
+        .card-bg { fill: #2B2B3D; }
+        .body-text { fill: #E0E0E0; }
+      }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect class="bg" width="960" height="280" fill="#F5F0E8"/>
+
+  <!-- Title Bar -->
+  <rect x="0" y="0" width="960" height="52" fill="#1B3A5C"/>
+  <text x="480" y="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="21" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.06em">HOW WE WORK TOGETHER</text>
+
+  <!-- Card 1: Be Kind -->
+  <g filter="url(#shadow)">
+    <rect class="card-bg" x="36" y="74" width="200" height="170" fill="#FFFFFF" rx="2"/>
+    <rect x="36" y="74" width="200" height="48" fill="#4A7C9B" rx="2"/>
+    <rect x="36" y="106" width="200" height="16" fill="#4A7C9B"/>
+    <text x="136" y="100" font-family="Georgia, serif" font-size="28" fill="#FFFFFF" text-anchor="middle">♡</text>
+    <text x="136" y="118" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.08em">BE KIND</text>
+    <text x="136" y="148" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Empathy first.</text>
+    <text x="136" y="166" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Every contributor</text>
+    <text x="136" y="184" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">was a beginner</text>
+    <text x="136" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">once. Patience</text>
+    <text x="136" y="220" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">is not optional.</text>
+  </g>
+
+  <!-- Card 2: Be Direct -->
+  <g filter="url(#shadow)">
+    <rect class="card-bg" x="256" y="74" width="200" height="170" fill="#FFFFFF" rx="2"/>
+    <rect x="256" y="74" width="200" height="48" fill="#2D6A4F" rx="2"/>
+    <rect x="256" y="106" width="200" height="16" fill="#2D6A4F"/>
+    <text x="356" y="100" font-family="Georgia, serif" font-size="28" fill="#FFFFFF" text-anchor="middle">→</text>
+    <text x="356" y="118" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.08em">BE DIRECT</text>
+    <text x="356" y="148" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Say what you mean.</text>
+    <text x="356" y="166" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Vague feedback</text>
+    <text x="356" y="184" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">helps no one. Be</text>
+    <text x="356" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">specific about</text>
+    <text x="356" y="220" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">what and why.</text>
+  </g>
+
+  <!-- Card 3: Assume Good Intent -->
+  <g filter="url(#shadow)">
+    <rect class="card-bg" x="476" y="74" width="200" height="170" fill="#FFFFFF" rx="2"/>
+    <rect x="476" y="74" width="200" height="48" fill="#D4A843" rx="2"/>
+    <rect x="476" y="106" width="200" height="16" fill="#D4A843"/>
+    <text x="576" y="100" font-family="Georgia, serif" font-size="28" fill="#FFFFFF" text-anchor="middle">✦</text>
+    <text x="576" y="118" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.06em">ASSUME GOOD INTENT</text>
+    <text x="576" y="148" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">People rarely mean</text>
+    <text x="576" y="166" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">harm. When in</text>
+    <text x="576" y="184" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">doubt, ask a</text>
+    <text x="576" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">clarifying question</text>
+    <text x="576" y="220" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">before escalating.</text>
+  </g>
+
+  <!-- Card 4: Code Not People -->
+  <g filter="url(#shadow)">
+    <rect class="card-bg" x="696" y="74" width="228" height="170" fill="#FFFFFF" rx="2"/>
+    <rect x="696" y="74" width="228" height="48" fill="#1B3A5C" rx="2"/>
+    <rect x="696" y="106" width="228" height="16" fill="#1B3A5C"/>
+    <text x="810" y="100" font-family="Georgia, serif" font-size="26" fill="#D4A843" text-anchor="middle">{  }</text>
+    <text x="810" y="118" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="700" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.06em">CRITIQUE CODE, NOT PEOPLE</text>
+    <text x="810" y="148" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">"This function could"</text>
+    <text x="810" y="166" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">is always better than</text>
+    <text x="810" y="184" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">"you should have."</text>
+    <text x="810" y="202" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">Review the work,</text>
+    <text x="810" y="220" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#2B2B2B" text-anchor="middle">not the person.</text>
+  </g>
+</svg>

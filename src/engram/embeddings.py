@@ -119,7 +119,7 @@ class OllamaEmbedder:
     """Ollama embedding via local REST API.
 
     Calls Ollama's /api/embed endpoint directly with httpx -- no ollama
-    Python package needed. Supports optional Bearer auth for Open-WebUI proxy.
+    Python package needed. Supports optional Bearer auth for protected Ollama endpoints.
 
     Model is configurable via ENGRAM_OLLAMA_MODEL env var (default: nomic-embed-text).
     """

@@ -7,45 +7,73 @@
 
 **Your AI agents forget everything between sessions. Engram fixes that.**
 
-Close a tab in Cursor, Claude Code, or VS Code, and your agent loses every decision it made, every bug it found, every bit of architecture it mapped. Next session starts from zero. You re-explain. The agent re-discovers the same gotchas. Both of you waste time.
+---
 
-Engram is a persistent memory server for AI agents. It speaks [MCP](https://modelcontextprotocol.io/), stores everything in a database you own, and searches it four ways — keyword match, semantic similarity, knowledge graph, and recency. Search for "database lock contention" and it finds the memory you stored about "WAL mode busy timeout." No cloud service. No subscription. Run it locally with SQLite, or deploy with Docker and PostgreSQL.
+## The Problem
 
-When one agent stores a decision, the next agent finds it. Switch from Cursor to Claude Code — the context follows. Three agents on the same project share what they learn, like coworkers leaving notes on a whiteboard that remembers everything and finds the right note before you ask.
+You're deep into a project with Claude Code or Cursor. The agent knows your architecture, knows the bug you spent two hours tracking down, knows you always use `RS256` for JWT and hate trailing commas. You close the tab. You open it again. The agent introduces the same bug. It suggests the same pattern you already rejected. It asks you to re-explain the same architecture decision for the third time.
 
-**Most importantly: You own your data. You can export it, back it up, or walk away with it in plain markdown. No lock-in.**
+This isn't stupidity — it's amnesia. Every AI agent session starts from a blank slate. Without a persistent memory layer, agents are like a brilliant contractor who shows up every morning having forgotten everything from the day before. They're capable, but they can never *learn*.
 
-> **Beta software.** Engram is under active development. APIs, storage format, and behavior may change between releases. See [LICENSE](LICENSE) for the full warranty disclaimer.
+**Engram is the memory layer.** It's a server that sits alongside your AI tools and gives every agent a shared, persistent, searchable store of everything learned about your projects. Store a decision once; every future agent finds it. Fix a bug on Monday; Tuesday's agent already knows about it and won't repeat it.
+
+---
+
+## What Makes Engram Different
+
+Most "memory" solutions for AI tools are basic key-value stores — you save a note and it either matches exactly or it doesn't. Engram uses three search signals simultaneously:
+
+**Keyword search (BM25)** — If you remember the exact phrase, it finds it. "SQLITE_BUSY timeout" matches "SQLITE_BUSY timeout." Fast and precise. This is the same technique Google pioneered for full-text search, adapted for PostgreSQL.
+
+**Semantic vector search** — If you *don't* remember the exact phrase, it still finds it. Search for "database lock problem" and it finds the memory you stored about "WAL mode busy timeout" — because the *meaning* is similar even though the words differ. This requires an embedding model (Ollama or OpenAI — your choice), but it's the layer that makes Engram feel like it *understands* what you're looking for.
+
+**Recency decay** — Recent memories score higher than old ones. The architecture decision you made yesterday outweighs the one from six months ago. Nothing is deleted; things just get quieter over time.
+
+**Knowledge graph (enrichment)** — When you recall a memory about authentication, Engram automatically pulls in connected memories: the bug that was caused by the auth flow, the pattern you use to test it, the decision about which JWT library to use. You recall one memory and its neighborhood comes along for free. Think of it like pulling a thread on a sweater — related context surfaces automatically.
+
+These four signals work together, which means recall works whether you remember exactly what you stored or only vaguely what the problem was about.
 
 ---
 
 ## What's Inside
 
-Engram exposes twelve tools any MCP client can call:
+Engram exposes tools that any MCP-compatible client (Cursor, Claude Code, VS Code, Windsurf) can call:
 
 ### Core Memory Operations
 
-| Tool                   | What it does                                                    |
-|------------------------|-----------------------------------------------------------------|
-| `memory_store`         | Save a memory — auto-chunks, embeds, and indexes it             |
-| `memory_recall`        | Search across all three layers with a single query              |
-| `memory_list`          | Browse recent memories with type/tag/importance filters         |
-| `memory_correct`       | Supersede a wrong or outdated memory with a corrected version   |
-| `memory_forget`        | Delete a memory and all its graph connections                   |
-| `memory_connect`       | Link two memories with a typed relationship                     |
-| `memory_feedback`      | Tell the system which recall results were actually useful       |
-| `memory_consolidate`   | Deduplicate, decay weak links, prune stale memories             |
-| `memory_status`        | View stats: memory count, chunks, graph size, DB size           |
-| `onboarding`           | Get a project-specific quick-start guide for new sessions       |
+| Tool                   | What it does                                                            |
+|------------------------|-------------------------------------------------------------------------|
+| `memory_store`         | Save a memory — auto-chunks, embeds, and indexes it                     |
+| `memory_store_batch`   | Store multiple memories in one efficient call with batched embedding     |
+| `memory_recall`        | Search across keyword, semantic, and graph layers with a single query   |
+| `memory_list`          | Browse recent memories, optionally filtered by type, tag, or importance |
+| `memory_correct`       | Supersede a wrong or outdated memory with a corrected version           |
+| `memory_forget`        | Delete a memory and all its graph connections                           |
+| `memory_connect`       | Link two memories with a typed relationship                             |
+| `memory_feedback`      | Tell the system which recall results were useful                        |
+| `memory_consolidate`   | Deduplicate, decay weak connections, prune stale memories               |
+| `memory_status`        | View stats: memory count, chunks, graph size, database size             |
 
-### Data Portability (Install/Uninstall)
+### Data Portability
 
-| Tool                   | What it does                                                    |
-|------------------------|-----------------------------------------------------------------|
-| `memory_dump`          | Export all project memories as markdown files                   |
-| `memory_ingest`        | Import markdown files as memories + create backup snapshot      |
+| Tool                   | What it does                                                            |
+|------------------------|-------------------------------------------------------------------------|
+| `memory_dump`          | Export all project memories as markdown files                           |
+| `memory_ingest`        | Import markdown files as memories with a backup snapshot                |
 
-Engram organizes memories by **project** — each project gets its own namespace. Your web app memories don't leak into your CLI tool's context. Store user-wide preferences in `project="global"` so every project can find them.
+### Built-in Onboarding
+
+Engram also provides an MCP **prompt** called `onboarding`. Call it at the start of a session and it gives your agent a project-specific quick-start guide — current memory count, project stats, and a workflow refresher. It's especially useful when first connecting to a project with zero memories and you want the agent to bootstrap the context correctly.
+
+---
+
+## How Projects Work
+
+Engram organizes memories by **project namespace**. Every tool accepts a `project` parameter. Memories stored in `project="my-web-app"` are completely invisible to `project="cli-tool"`. This matters because you don't want your Django app's database schema leaking into your Rust CLI agent's context.
+
+There's one special namespace: `project="global"`. Use this for preferences that should apply everywhere — "I always use two-space indentation," "I prefer explicit error handling over exceptions," "always use Tailscale hostnames for internal services." Any agent on any project can recall from `global`.
+
+A good mental model: each project namespace is like a dedicated notebook on a bookshelf. They share the same shelf (the Engram server), but each notebook is its own thing. `global` is the sticky note on the front of every notebook.
 
 ---
 
@@ -55,125 +83,134 @@ Engram organizes memories by **project** — each project gets its own namespace
   <img src="docs/architecture.svg" alt="Engram Architecture" width="900">
 </p>
 
-### The Three Layers
-
-Engram blends four signals into one score. This means recall works whether you remember the exact error code or just the shape of the problem:
+### The Three Search Signals
 
 <p align="center">
   <img src="docs/scoring.svg" alt="Engram Search Scoring" width="900">
 </p>
 
-**1. BM25 Keyword Search** — Full-text search with Porter stemming (FTS5 in SQLite, tsvector in PostgreSQL). Search for "SQLITE_BUSY timeout" and it finds the exact phrase. Fast, precise, no external dependencies.
+When you call `memory_recall`, Engram runs three searches simultaneously and combines their scores:
 
-**2. Vector Semantic Search** — Optional embedding-based similarity. Search for "database lock contention" when the stored memory says "WAL mode busy timeout" — the vectors connect the meaning even though the words differ. Supports OpenAI, Ollama (local/free), or disabled entirely.
+**1. BM25 Keyword Search** — Full-text search using PostgreSQL's `tsvector` with Porter stemming. Scores exact and near-exact matches. If you store "Authentication uses RS256 JWT," a search for "RS256" or "JWT auth" will score high here.
 
-**3. Recency Decay** — Recently touched memories score higher. Exponential decay at 1% per hour means today's context outweighs last month's, but nothing vanishes — it just gets quieter.
+**2. Vector Semantic Search** — Each memory is split into chunks and each chunk is embedded into a high-dimensional vector. At recall time, your query is embedded too, and Engram finds chunks whose vectors are close in that space. This is how it understands meaning rather than just matching keywords. If you store a memory about "WAL mode busy timeout" and search for "database lock contention," the vectors are close enough to match — even though not a single word is shared.
 
-**4. Knowledge Graph** — Memories linked by typed relationships (`depends_on`, `supersedes`, `caused_by`, `relates_to`, `used_in`, `resolved_by`) get a connectivity boost. Recall one memory and its neighbors come along. Over time, `memory_feedback` strengthens useful connections and weakens noise — the graph learns what matters.
+**3. Recency Decay** — Exponential decay at 1% per hour. A memory accessed or created today scores significantly higher than one from last month. Old memories don't disappear — they just step back to let fresher context lead.
 
-The final score:
+The final composite score:
 
 ```
-composite = (vector × 0.45) + (bm25 × 0.25) + (recency × 0.15) + (graph × 0.15)
+composite = (vector × 0.50) + (bm25 × 0.35) + (recency × 0.15)
 final     = composite × importance_multiplier
 ```
 
-Critical memories (importance 0) get a 2× boost. Trivial ones (importance 4) get 0.6×. The system self-maintains: `memory_consolidate` decays unused graph edges, deduplicates chunks, and prunes low-importance memories nobody has touched in 30 days.
+The knowledge graph doesn't change this score — it *enriches* the result. When a top-scoring memory is returned, Engram traverses its graph connections (up to two hops) and attaches those neighbors automatically. You get the scored result plus its relevant context, all in one call.
+
+**Importance multipliers:**
+
+| Importance | Label    | Multiplier | When to use                                          |
+|------------|----------|-----------|------------------------------------------------------|
+| 0          | Critical | 2.0×      | Core preferences, system-wide decisions              |
+| 1          | High     | 1.5×      | Key project decisions, frequently-needed patterns    |
+| 2          | Medium   | 1.0×      | Most memories — the default                          |
+| 3          | Low      | 0.8×      | Minor notes, temporary context                       |
+| 4          | Trivial  | 0.6×      | Auto-pruned after 30 days if never accessed          |
+
+Without vector embeddings configured, the weights redistribute: BM25 gets `0.85` and recency gets `0.15`. You still get good recall — just no semantic similarity layer.
 
 ---
 
 ## Memory Types
 
-Six typed categories let agents filter by context:
+Six types let agents (and you) filter by context. The type you choose changes how memories are organized and surfaced:
 
-| Type             | When to use it                                           | Example                                                      |
-|------------------|----------------------------------------------------------|--------------------------------------------------------------|
-| `decision`       | Choices and their reasoning                              | "Chose PostgreSQL over MySQL because of JSON column support"  |
-| `pattern`        | Recurring code or architecture patterns                  | "This codebase uses the repository pattern for all DB access" |
-| `error`          | Bugs, gotchas, and their fixes                           | "Port 3000 is taken on this server — use 3001 instead"        |
-| `context`        | General project or environment details                   | "Running on Ubuntu 22.04 with Python 3.11"                    |
-| `architecture`   | System design, data flow, integrations                   | "Auth flow: JWT → middleware → httpOnly cookie"               |
-| `preference`     | User conventions and style preferences                   | "User prefers tabs, 120-char line length, no trailing commas" |
+| Type           | Use it for                                        | Example                                                          |
+|----------------|---------------------------------------------------|------------------------------------------------------------------|
+| `decision`     | Choices made and the reasoning behind them        | "Chose PostgreSQL over MySQL — needed JSONB and array columns"   |
+| `pattern`      | Recurring code or architecture patterns           | "All DB access goes through a Repository class, never raw SQL"   |
+| `error`        | Bugs, gotchas, known failures, and their fixes    | "Port 3000 is taken on this server — always use 3001"            |
+| `context`      | General project or environment facts              | "Running on Ubuntu 22.04, Python 3.11, deployed to K8s"          |
+| `architecture` | System design, data flow, integrations            | "Auth: client → /api/login → JWT (RS256) → httpOnly cookie"      |
+| `preference`   | User style and convention preferences             | "Always tabs, 120-char lines, no trailing commas"                |
 
 ---
 
 ## Embedding Options
 
-You choose the quality/cost/privacy tradeoff. Engram auto-detects the best available option, or you can force one:
+You choose the quality/cost/privacy tradeoff. Engram auto-detects the best available option at startup, or you can force a specific mode with `ENGRAM_EMBEDDER`:
 
-| Mode       | Model                        | Dimensions | Quality     | Cost     | Privacy     |
-|------------|------------------------------|------------|-------------|----------|-------------|
-| **OpenAI** | `text-embedding-3-small`     | 1536       | Highest     | ~$0.02/M | Cloud       |
-| **Ollama** | `nomic-embed-text`           | 768        | Good        | Free     | Fully local |
-| **None**   | —                            | —          | BM25 only   | Free     | Fully local |
+| Mode       | Model                        | Dimensions | Quality     | Cost        | Privacy     |
+|------------|------------------------------|------------|-------------|-------------|-------------|
+| `openai`   | `text-embedding-3-small`     | 1536       | Highest     | ~$0.02/1M   | Cloud       |
+| `ollama`   | `nomic-embed-text` (default) | 768        | Good        | Free        | Fully local |
+| `none`     | —                            | —          | BM25 only   | Free        | Fully local |
 
-Without embeddings, you still get keyword search, recency scoring, and the full knowledge graph. Vector search adds the "I know what you mean even when you use the wrong words" layer.
+**Auto-detect order:** Ollama (if reachable) → OpenAI (if `OPENAI_API_KEY` is set) → None.
 
-> **Lock-in protection:** Once a project stores its first embedding, Engram records the model name and dimensions. If you switch models, it refuses to mix incompatible vectors rather than silently corrupting your search results.
+**The lock-in protection:** Once a project stores its first embedding, Engram records the model name and dimensions. If you later switch models, Engram refuses to mix incompatible vectors rather than silently corrupting your search results. To switch models, export your memories with `memory_dump`, wipe the project, and re-ingest.
+
+**Ollama model is configurable:** Set `ENGRAM_OLLAMA_MODEL` to use any Ollama-compatible embedding model. The default is `nomic-embed-text`.
 
 ---
 
 ## Installation
 
-Engram runs as two Docker services: **PostgreSQL** and **Engram**. Ollama is external — provided by your existing Open-WebUI installation.
-
-1. **PostgreSQL** — Persistent database (Docker volume: `pgdata`)
-2. **Engram** — MCP server (port 8788)
-
-Ollama access routes through your enterprise Open-WebUI instance. No local Ollama container required.
+Engram runs as three Docker services: **PostgreSQL** for persistent storage, **Ollama** for local embedding inference, and **Engram** for the MCP server.
 
 ### Prerequisites
 
 - Docker Engine 20.10+
 - Docker Compose 2.0+
 - 1 GB RAM minimum
-- An existing Open-WebUI instance with an API key
+- An Ollama instance, OpenAI API key, or nothing (BM25-only mode works without either)
 
 ### Quick Start
 
 ```bash
 git clone https://github.com/shugav/engram.git
 cd engram
+
+# Copy the example config and edit it
 cp .env.example .env
-# Edit .env: set OLLAMA_URL and OLLAMA_API_KEY for your Open-WebUI instance
+```
+
+Open `.env` and set at minimum:
+
+```bash
+POSTGRES_PASSWORD=a-strong-password-here
+
+OLLAMA_URL=http://ollama:11434          # Docker service (default)
+# OLLAMA_URL=http://host.docker.internal:11434  # Mac: native Ollama via brew
+```
+
+Then start:
+
+```bash
 docker compose up -d
 ```
 
-Engram listens on `http://localhost:8788/sse`.
+Engram listens on `http://localhost:8788/sse`. That's it. Now connect your IDE.
 
-### Configuration
+---
 
-Create or edit `.env` in the engram directory:
+## Connecting Your IDE
 
-```bash
-# .env
-POSTGRES_PASSWORD=change-me-in-production      # Default: engram
-ENGRAM_EMBEDDER=ollama                         # Force mode: openai, ollama, or none
-ENGRAM_PORT=8788                               # HTTP port (default)
-
-# External Ollama via Open-WebUI proxy
-OLLAMA_URL=https://your-open-webui-host/ollama # Your OWUI Ollama endpoint
-OLLAMA_API_KEY=sk-...                          # API key from your OWUI instance
-
-# Optional: Engram network auth
-# ENGRAM_API_KEY=your-secret-token             # Require Bearer auth on the SSE endpoint
-```
-
-To get your Open-WebUI API key: log in to your OWUI instance, go to **Settings > Account > API Keys**, and generate a key (starts with `sk-...`).
-
-Restart after changing `.env`:
+### Claude Code
 
 ```bash
-docker compose down && docker compose up -d
+claude mcp add engram --transport sse http://localhost:8788/sse
 ```
 
-### Connect Your IDE
+If you set `ENGRAM_API_KEY`, add a header:
 
-Docker runs Engram in SSE mode. Point your IDE at the server:
+```bash
+claude mcp add engram --transport sse http://localhost:8788/sse \
+  --header "Authorization: Bearer your-api-key"
+```
 
-#### Cursor / VS Code
+### Cursor / VS Code
 
-Add to `~/.cursor/mcp.json`:
+Add to `~/.cursor/mcp.json` (or `.vscode/mcp.json`):
 
 ```json
 {
@@ -185,13 +222,21 @@ Add to `~/.cursor/mcp.json`:
 }
 ```
 
-#### Claude Code
+### Windsurf
 
-```bash
-claude mcp add engram --transport sse http://localhost:8788/sse
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "engram": {
+      "serverUrl": "http://localhost:8788/sse"
+    }
+  }
+}
 ```
 
-#### Claude Desktop
+### Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 
@@ -209,13 +254,145 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 
 ---
 
+## Configuration Reference
+
+Create `.env` in the engram directory. All variables have working defaults — only change what you need:
+
+```bash
+# .env
+
+# === Database ===
+POSTGRES_PASSWORD=change-me-in-production   # Default: engram (please change this)
+
+# === Embeddings ===
+ENGRAM_EMBEDDER=ollama                      # Force mode: openai, ollama, or none
+                                            # Default: auto-detect
+
+OLLAMA_URL=http://localhost:11434           # Your Ollama endpoint
+OLLAMA_API_KEY=sk-...                       # Only needed if your Ollama is behind auth
+ENGRAM_OLLAMA_MODEL=nomic-embed-text        # Any Ollama embedding model. Default: nomic-embed-text
+
+OPENAI_API_KEY=sk-...                       # Required if ENGRAM_EMBEDDER=openai
+
+# === Server ===
+ENGRAM_PORT=8788                            # HTTP port. Default: 8788
+ENGRAM_API_KEY=your-secret-token           # Optional: require Bearer auth on the endpoint
+
+# === Project ===
+ENGRAM_PROJECT=default                      # Default project namespace
+```
+
+Full reference:
+
+| Variable              | Default          | What it does                                               |
+|-----------------------|------------------|------------------------------------------------------------|
+| `POSTGRES_PASSWORD`   | `engram`         | PostgreSQL password. **Change this.**                      |
+| `DATABASE_URL`        | *(set by Docker)*| PostgreSQL connection string. Set automatically by Compose.|
+| `ENGRAM_EMBEDDER`     | *(auto-detect)*  | Force embedding mode: `openai`, `ollama`, or `none`        |
+| `OPENAI_API_KEY`      | *(unset)*        | OpenAI key for `text-embedding-3-small`                    |
+| `OLLAMA_URL`          | `http://localhost:11434` | Ollama endpoint                                   |
+| `OLLAMA_API_KEY`      | *(unset)*        | Bearer auth if your Ollama endpoint requires it            |
+| `ENGRAM_OLLAMA_MODEL` | `nomic-embed-text` | Embedding model name                                     |
+| `ENGRAM_PROJECT`      | `default`        | Default project namespace                                  |
+| `ENGRAM_API_KEY`      | *(unset)*        | Bearer token to secure the SSE endpoint                    |
+| `ENGRAM_PORT`         | `8788`           | HTTP port for SSE server                                   |
+| `ENGRAM_RATE_LIMIT`   | `100`            | Max `memory_store` calls per 60s per project               |
+
+Restart after changing `.env`:
+
+```bash
+docker compose down && docker compose up -d
+```
+
+---
+
+## How Agents Use Engram
+
+Engram works best when agents follow a consistent session pattern. Here's the full workflow:
+
+### At the Start of Every Session
+
+Before writing a single line of code, the agent recalls where things stand:
+
+```python
+# 1. Find out where the last agent left off
+memory_recall("session handoff", project="my-app")
+
+# 2. Get relevant context for today's work
+memory_recall("authentication flow", project="my-app")
+
+# 3. Check user preferences that apply everywhere
+memory_recall("code style preferences", project="global")
+```
+
+The session handoff note is a structured summary the *previous* agent stored before finishing. It tells the current agent what was done, what's next, and what's blocked. You never have to re-explain the current state of the project.
+
+### During Work
+
+When the agent makes a decision, hits a bug, or spots a pattern worth remembering:
+
+```python
+# Store an architectural decision
+memory_store(
+    content="Auth uses RS256 JWT. Tokens issued at /api/login, 24h expiry, stored in httpOnly cookie. Do not use localStorage.",
+    memory_type="decision",
+    tags="auth,security,jwt",
+    importance=1,           # High — this should never get pruned
+    project="my-app"
+)
+
+# Store a bug that burned you
+memory_store(
+    content="Port 3000 is taken by the metrics service on this host. Use 3001 for the dev server.",
+    memory_type="error",
+    tags="port,devserver,gotcha",
+    importance=1,
+    project="my-app"
+)
+
+# Link related memories
+memory_connect(
+    source_id="decision-id-here",
+    target_id="error-id-here",
+    rel_type="relates_to",
+    project="my-app"
+)
+```
+
+### At the End of Every Session
+
+Before the agent stops, it stores a handoff note:
+
+```python
+memory_store(
+    content="SESSION HANDOFF: Implemented OAuth2 login flow | NEXT: Add logout endpoint and token refresh | BLOCKED: Nothing | FILES CHANGED: src/auth/login.py, src/auth/middleware.py",
+    memory_type="context",
+    tags="session-handoff",
+    importance=1,
+    project="my-app"
+)
+```
+
+The *next* agent — whether it's the same tool tomorrow or a different IDE entirely — calls `memory_recall("session handoff")` and picks up without missing a beat. No re-explanation. No re-discovery.
+
+### After Recall, Give Feedback
+
+```python
+# After using recall results, tell Engram whether they were useful
+memory_feedback(memory_ids="id1,id2", helpful=True, project="my-app")
+```
+
+Positive feedback reinforces graph connections, making those memories surface more reliably in future recalls. Negative feedback weakens them. Over many sessions, the graph self-optimizes based on what actually helps.
+
+---
+
 ## The Install/Uninstall Story
 
-Engram gives you complete control over your data. You can install with your existing markdown, use the system, and export everything with no loss.
+Engram gives you complete control over your data at every stage.
 
-### Install (Onboarding)
+### Bringing Existing Docs Into Engram
 
-Bring your existing documentation into Engram:
+If you have existing markdown documentation, you can ingest it directly:
 
 ```bash
 engram ingest --project my-app --directory ~/docs
@@ -223,87 +400,56 @@ engram ingest --project my-app --directory ~/docs
 
 This:
 1. Parses all `.md` files in the directory
-2. Stores them as indexed memories
-3. Creates a backup zip: `memory-backup-2026-03-25T10-15-30Z.zip`
+2. Stores them as indexed, searchable memories
+3. Creates a backup zip with your original files + a snapshot of all memories at ingest time: `memory-backup-2026-03-25T10-15-30Z.zip`
 
-The backup contains:
-- **source-files/** — Exact copy of your original files
-- **manifest.json** — Metadata about the ingest (timestamp, file count)
-- **memory-snapshot.json** — Snapshot of all memories at ingest time
+The backup is tangible confirmation your data was captured. If anything goes wrong, your originals are safe.
 
-You see this zip in your working directory — tangible proof your data was captured.
+### Using Engram Day-to-Day
 
-### Use (Normal Operation)
+Agents recall from and store to your namespaced project. Switch between Claude Code, Cursor, or Windsurf — the context follows. Multiple agents on the same project share the same memory store, like coworkers using a shared Confluence page except it actually remembers everything and finds the right page before you ask.
 
-Agents recall and store memories across sessions:
+### Exporting Your Data (Leaving Engram)
 
-```python
-# Agent recalls from your ingested docs
-memory_recall("How do we handle authentication?", project="my-app")
-
-# Agent stores a new decision
-memory_store("We use RS256 JWT in httpOnly cookies",
-             memory_type="decision", tags="auth,security", project="my-app")
-```
-
-Memories stay indexed and connected. Switch between Claude Code, Cursor, or any MCP client — context follows.
-
-### Uninstall (Export & Leave)
-
-Export all memories as markdown:
+No lock-in. Export all memories as editable markdown files:
 
 ```bash
 engram dump --project my-app --output ~/my-memories
 ```
 
-You get a directory of `.md` files, each with full metadata:
+You get a directory of `.md` files, each with YAML frontmatter:
 
 ```
 my-memories/
-  001-decision-abc123xy.md      # With YAML frontmatter
+  001-decision-abc123xy.md
   002-pattern-auth-def456uv.md
   003-architecture-ghi789st.md
   ...
 ```
 
-Each file is editable, greppable, version-controllable. You can:
-- Check them into git
-- Search with any tool
-- Edit or delete them
+Each file is editable, greppable, committable. You can:
+- Check them into git as documentation
+- Search with any tool (`grep`, `ripgrep`, Obsidian, anything)
+- Edit or delete individual memories
 - Move them to a different system
-- Print them as documentation
+- Use them as starting documentation for a new project
 
-**No lock-in. Your data is yours.**
-
----
-
-## Environment Variables
-
-| Variable             | Default                  | What it does                                         |
-|----------------------|--------------------------|------------------------------------------------------|
-| `ENGRAM_EMBEDDER`    | *(auto-detect)*          | Force embedding mode: `openai`, `ollama`, or `none`  |
-| `OPENAI_API_KEY`     | *(unset)*                | OpenAI key for vector embeddings                     |
-| `OLLAMA_URL`         | `https://open-webui.petersimmons.com/ollama` | Ollama endpoint — your external Open-WebUI |
-| `OLLAMA_API_KEY`     | *(unset)*                | Open-WebUI API key for Bearer auth                   |
-| `ENGRAM_PROJECT`     | `default`                | Default project namespace                            |
-| `ENGRAM_API_KEY`     | *(unset)*                | Bearer token for SSE authentication                  |
-| `DATABASE_URL`       | *(unset)*                | PostgreSQL connection string (Docker mode)           |
-| `POSTGRES_PASSWORD`  | `engram`                 | PostgreSQL password (Docker mode — change this)      |
-| `ENGRAM_PORT`        | `8788`                   | HTTP port for SSE server                             |
+**Your memories are yours.**
 
 ---
 
 ## Security
 
-Engram stores data on your filesystem. Here's what you should know.
+Engram stores data in PostgreSQL inside a Docker volume. Here's what you should know:
 
-**Network (SSE) mode** opens an HTTP endpoint. If you run it:
+**Secure the SSE endpoint.** Without an API key, anyone on your network can read and write your memories. Set `ENGRAM_API_KEY` and clients send `Authorization: Bearer <key>` with every request. The Docker Compose file binds to `127.0.0.1:8788` by default — change this only if you need remote access.
 
-- **Set an API key.** Without one, anyone on your network can read and write your memories. Use `ENGRAM_API_KEY`.
-- **Use TLS in production.** The API key travels as a Bearer token over HTTP. Without TLS, anyone between you and the server can read it. Use a reverse proxy (Caddy, Nginx) for HTTPS.
-- **Bind to localhost** unless you need network access: `--host 127.0.0.1`. On a trusted mesh VPN like Tailscale, binding to your Tailscale IP is reasonable.
+**For multi-machine access, use a mesh VPN.** Tailscale or WireGuard keeps traffic encrypted and private without exposing a public endpoint. Bind Engram to your VPN IP with an API key set — that's the right architecture for remote access.
 
-**What Engram stores:** Memory text, embedding vectors (opaque float arrays), and a knowledge graph (relationship metadata). Everything lives in the PostgreSQL `pgdata` Docker volume. Engram sends no data anywhere unless you configure OpenAI embeddings — then your memory text goes to OpenAI's embedding API. Use Ollama or `none` mode if that concerns you.
+**What Engram sends externally:**
+- **Ollama embeddings:** Your memory text is sent to your Ollama endpoint for inference. If Ollama runs as the bundled Docker service or locally on the same machine, it never leaves your host.
+- **OpenAI embeddings:** Your memory text goes to OpenAI's `text-embedding-3-small` API. Use `ENGRAM_EMBEDDER=ollama` or `ENGRAM_EMBEDDER=none` if this concerns you.
+- **Nothing else.** Engram has no telemetry, no analytics, no phone-home.
 
 For responsible disclosure of security issues, see [SECURITY.md](SECURITY.md).
 
@@ -313,147 +459,116 @@ For responsible disclosure of security issues, see [SECURITY.md](SECURITY.md).
 
 **Your memories are valuable. Protect them.**
 
+The golden rule of Docker volumes: **never run `docker compose down -v`**. The `-v` flag deletes the `pgdata` volume and your entire memory store with it. There is no undo.
+
+Safe Docker operations:
+
+| Command                          | Data safe? | Notes                                  |
+|----------------------------------|------------|----------------------------------------|
+| `docker compose restart`         | ✅ Yes     | Restart services — data untouched      |
+| `docker compose up -d`           | ✅ Yes     | Start or update containers             |
+| `docker compose down`            | ✅ Yes     | Stop containers, keep volumes          |
+| `docker compose down -v`         | ❌ **DATA LOSS** | Deletes all volumes. **Never use.** |
+| `docker volume rm engram_pgdata` | ❌ **DATA LOSS** | Same result. **Never use.**         |
+
 ### Creating Backups
 
-Before any Docker maintenance or risky operations:
+Before any Docker maintenance:
 
 ```bash
-# Create a dated PostgreSQL backup
-docker compose exec -T postgres pg_dump -U engram -d engram | gzip > backups/engram-$(date +%Y%m%d-%H%M%S).sql.gz
+# Dated PostgreSQL dump
+docker compose exec -T postgres pg_dump -U engram -d engram | \
+  gzip > backups/engram-$(date +%Y%m%d-%H%M%S).sql.gz
 
-# Or use the provided backup script (if available)
-bash bin/backup-postgres.sh
+# Verify it was created
+ls -lh backups/engram-*.sql.gz
 ```
 
-Store backups outside the `engram/` directory (e.g., cloud storage, NAS, external drive).
+Store backups outside the `engram/` directory — cloud storage, NAS, external drive.
 
-### Safe Docker Operations
+### Restoring from Backup
 
-| Operation                      | Data Lost? | When to use                           |
-|--------------------------------|-----------|---------------------------------------|
-| `docker compose restart`       | ❌ No     | Restart services after code changes   |
-| `docker compose up -d`         | ❌ No     | Start/update services, apply changes  |
-| `docker compose down`          | ❌ No     | Stop containers (keeps data)          |
-| `docker compose down -v`       | ✅ **YES** | **NEVER use this** — deletes database |
-| `docker volume rm engram_pgdata` | ✅ **YES** | **NEVER use this** — data loss       |
+```bash
+# Restore from a PostgreSQL dump
+gunzip < backups/engram-20260326-153014.sql.gz | \
+  docker compose exec -T postgres psql -U engram -d engram
 
-**Rule: Never use `-v` or `rm` on volumes without an active backup.**
+# Verify restoration
+docker compose exec -T postgres psql -U engram -d engram \
+  -c "SELECT COUNT(*) FROM memories;"
+```
 
-### Recovering from Data Loss
+### Full Volume Backup
 
-If the database is accidentally deleted:
-
-1. **Check archives:**
-   ```bash
-   ls -la ~/.engram-archive/  # SQLite backups from before PostgreSQL migration
-   ```
-
-2. **Restore from PostgreSQL dump:**
-   ```bash
-   gunzip < backups/engram-20260326-153014.sql.gz | docker compose exec -T postgres psql -U engram -d engram
-   ```
-
-3. **Restore from SQLite archives:**
-   ```bash
-   python restore_from_sqlite.py  # Restores from ~/.engram-archive/*.db files
-   ```
-
-4. **Verify restoration:**
-   ```bash
-   docker compose exec -T postgres psql -U engram -d engram -c "SELECT COUNT(*) FROM memories;"
-   ```
-
-### Docker Volume Backups (Full System)
-
-For complete system snapshots (volumes + configs):
+For a complete system snapshot (useful before major upgrades):
 
 ```bash
 # Backup the entire pgdata volume
-docker run --rm -v engram_pgdata:/data -v $(pwd)/backups:/backup \
+docker run --rm \
+  -v engram_pgdata:/data \
+  -v $(pwd)/backups:/backup \
   postgres:16-alpine tar czf /backup/pgdata-full-$(date +%Y%m%d).tar.gz /data
 
 # Restore from volume backup
-docker run --rm -v engram_pgdata:/data -v $(pwd)/backups:/backup \
+docker run --rm \
+  -v engram_pgdata:/data \
+  -v $(pwd)/backups:/backup \
   postgres:16-alpine tar xzf /backup/pgdata-full-20260326.tar.gz -C /
 ```
 
 ---
 
-## How Agents Use It
+## Database Layout
 
-Engram ships with a built-in system prompt (the `onboarding` tool) that teaches agents the full workflow. The short version:
+Engram uses PostgreSQL with five tables. You'll rarely interact with these directly, but knowing the layout helps when debugging or writing direct queries:
 
-**Session start** — The agent calls `memory_recall("session handoff")` to pick up where the last agent left off.
+| Table           | What's in it                                                           |
+|-----------------|------------------------------------------------------------------------|
+| `memories`      | Memory records: content, type, tags, importance, timestamps, flags     |
+| `memory_fts`    | Generated `tsvector` column + GIN index for full-text search           |
+| `chunks`        | Chunked text with embedding vectors stored as `bytea`                  |
+| `relationships` | Typed directed graph edges with decay-capable strength values          |
+| `project_meta`  | Per-project metadata: embedding model, dimensions, schema version      |
 
-**During work** — When the agent makes a decision, hits a bug, or spots a pattern, it stores a memory. Typed, tagged, with an importance level.
-
-**Session end** — The agent stores a handoff note: what it did, what's next, what's blocked, which files changed. The next agent reads this and picks up without missing a step.
-
-**Over time** — Feedback strengthens useful connections. Consolidation prunes the noise. The memory gets sharper the more you use it.
+Everything lives in the `pgdata` Docker volume. Back it up like you'd back up any database.
 
 ---
 
-## Database Layout
+## Knowledge Graph
 
-**Docker mode** uses PostgreSQL with tables for memories, chunks, relationships, and full-text search. The same schema supports local SQLite in standalone mode (for single-machine use).
+The graph is what separates Engram from a simple search index. You can explicitly connect memories with typed relationships:
 
-| Table             | Purpose                                                         |
-|-------------------|-----------------------------------------------------------------|
-| `memories`        | Memory records with content, type, tags, importance, timestamps |
-| `memory_fts`      | Full-text index (tsvector in PostgreSQL)                        |
-| `chunks`          | Chunked text with embedding vectors and dedup hashes            |
-| `relationships`   | Typed directed graph edges with decay-capable strength values    |
-| `project_meta`    | Metadata: embedding model name, dimensions, schema version      |
+| Relationship    | When to use it                                                       |
+|-----------------|----------------------------------------------------------------------|
+| `relates_to`    | Two memories are on the same topic — the default general connection  |
+| `depends_on`    | Memory A only makes sense if you've read Memory B first              |
+| `caused_by`     | This bug was caused by that architectural decision                   |
+| `supersedes`    | This memory corrects/replaces the old one (used automatically by `memory_correct`) |
+| `used_in`       | This pattern is used in that feature/file                            |
+| `resolved_by`   | This error was fixed by that decision or pattern                     |
 
-Your data persists in the `pgdata` Docker volume. Back it up like any Docker volume:
+When you recall a memory, Engram traverses up to two hops of its connections and attaches them as context. You asked about the JWT bug; you also get the authentication architecture memory and the session handling pattern that relates to it.
 
-```bash
-docker run --rm -v engram_pgdata:/data -v $(pwd):/backup \
-  postgres:16-alpine tar czf /backup/pgdata-backup.tar.gz /data
-```
+Over time, `memory_feedback` reinforces connections that prove useful and weakens ones that don't. The graph self-organizes based on what actually helps.
+
+`memory_consolidate` runs three maintenance passes:
+1. **Deduplication** — removes exact duplicate chunks
+2. **Edge decay** — reduces strength of graph edges that are never reinforced (strength below 0.1 = pruned)
+3. **Stale pruning** — removes importance-3 and importance-4 memories never accessed in the last 30 days
+
+Run consolidation periodically (weekly or after large ingests) to keep the memory sharp.
 
 ---
 
 ## Known Limitations
 
-- **Single git-like server per team** — If multiple developers need shared memory, you need one Engram instance (not replicated). This keeps things simple. For single-developer or small team, Docker + Compose handles it.
+**Single server per team.** If multiple developers want shared memory, you run one Engram instance. It handles concurrent writes cleanly via PostgreSQL's connection pool, but there's no replication or sharding support.
 
-- **Docker image size** — Engram image is ~150 MB (distroless). Ollama and the `nomic-embed-text` model live on your external Open-WebUI host, not here.
+**External Ollama required for semantic search.** If your Ollama endpoint goes down, Engram falls back to BM25-only mode automatically. Use `ENGRAM_EMBEDDER=none` to skip embeddings entirely if you prefer a zero-dependency setup.
 
-- **External Ollama dependency** — Embedding requires your Open-WebUI instance to be reachable. If it's down, Engram falls back to BM25-only search. Use `ENGRAM_EMBEDDER=none` to skip embeddings entirely.
+**Vector dimension lock-in.** Once a project records its first embedding, you can't switch embedding models without exporting and re-ingesting. Engram enforces this to protect data integrity — mixing dimensions from different models would silently corrupt search results.
 
-- **PostgreSQL performance** — Tested up to ~100k memories. For >1M memories, you'd want connection pooling and query optimization. Not part of the default stack.
-
-- **Vector dimension mismatch** — Once you start with one embedding model, switching models requires dumping/reimporting (Engram will refuse to mix incompatible dimensions to protect data integrity).
-
----
-
-## Scaling
-
-| Deployment     | Database   | Agents        | How it works                                                 |
-|----------------|------------|---------------|--------------------------------------------------------------|
-| **Docker**     | PostgreSQL | Many          | One server, multiple clients over HTTP/SSE. Full concurrency.|
-
-Docker with PostgreSQL is the standard. It handles concurrent writes from multiple agents without contention.
-
----
-
-## Uninstall
-
-Delete all Engram data:
-
-```bash
-docker compose down
-docker rmi engram
-docker volume rm engram_pgdata
-```
-
-Then remove the `engram` entry from your IDE's MCP config:
-
-- **Cursor/VS Code:** `~/.cursor/mcp.json` → remove the `"engram"` key
-- **Claude Code:** `claude mcp remove engram`
-
-Or export your memories first (see "The Install/Uninstall Story" above).
+**Scale ceiling around 100k memories.** Tested and performing well up to ~100k memories per project. For very large stores (1M+), you'd want connection pooling tuning and query optimization — not part of the default stack.
 
 ---
 
@@ -461,17 +576,44 @@ Or export your memories first (see "The Install/Uninstall Story" above).
 
 Engram works with any MCP-compatible client:
 
-- [Cursor](https://cursor.sh)
-- [VS Code](https://code.visualstudio.com/) (Copilot MCP support)
-- [Claude Desktop](https://claude.ai)
 - [Claude Code](https://github.com/anthropics/claude-code)
+- [Claude Desktop](https://claude.ai)
+- [Cursor](https://cursor.sh)
+- [VS Code](https://code.visualstudio.com/) (GitHub Copilot MCP support)
 - [Windsurf](https://codeium.com/windsurf)
+- Any client that speaks [Model Context Protocol](https://modelcontextprotocol.io/)
+
+---
+
+## CLI Reference
+
+The `engram` command provides server and data management subcommands:
+
+```bash
+# Start the server (stdio mode — for local IDE integrations)
+engram
+
+# Start in SSE mode (for network access)
+engram server --transport sse --host 127.0.0.1 --port 8788
+
+# Start in streamable-http mode (recommended for network deployments)
+engram server --transport streamable-http --host 127.0.0.1 --port 8788
+
+# Export all memories from a project
+engram dump --project my-app --output ./my-memories
+
+# Import markdown files as memories
+engram ingest --project my-app --directory ./docs
+engram ingest --project my-app --directory ./docs --type architecture --importance 1
+```
+
+The Docker deployment runs in SSE mode automatically. The CLI is most useful for `dump` and `ingest` operations, or running Engram locally without Docker.
 
 ---
 
 ## Contributing
 
-Contributions welcome — first-time contributors especially. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and workflow.
+Contributions welcome — first-time contributors especially. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, coding conventions, and the test suite.
 
 For security issues, see [SECURITY.md](SECURITY.md).
 
@@ -483,4 +625,8 @@ MIT License. See [LICENSE](LICENSE).
 
 ---
 
-<sub>Engram was created by [shugav](https://github.com/shugav). Security review and documentation by [Peter Simmons](mailto:petersimmons@duck.com). README written with Claude (Anthropic) — revised for clarity and accuracy.</sub>
+> **Beta software.** Engram is under active development. APIs, storage format, and behavior may change between releases. See [LICENSE](LICENSE) for the full warranty disclaimer.
+
+---
+
+<sub>Engram was created by [shugav](https://github.com/shugav). Security review and documentation by [Peter Simmons](mailto:petersimmons@duck.com). README written with Claude (Anthropic).</sub>

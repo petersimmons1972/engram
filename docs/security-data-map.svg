@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="100%">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="115%" height="115%">
+      <feDropShadow dx="3" dy="3" stdDeviation="0" flood-color="#2B2B2B" flood-opacity="0.15"/>
+    </filter>
+    <marker id="arrow-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#8C8C8C"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#C0392B"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2D6A4F"/>
+    </marker>
+    <style>
+      @media (prefers-color-scheme: dark) {
+        .bg { fill: #1A1A2E; }
+        .zone-bg { fill: #2B2B3D; }
+        .card-bg { fill: #1F2B3A; }
+        .body-text { fill: #E0E0E0; }
+        .muted { fill: #8C8C8C; }
+      }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect class="bg" width="960" height="400" fill="#F5F0E8"/>
+
+  <!-- Title Bar -->
+  <rect x="0" y="0" width="960" height="52" fill="#1B3A5C"/>
+  <text x="480" y="34" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="21" fill="#F5F0E8" text-anchor="middle" letter-spacing="0.06em">WHERE YOUR DATA LIVES — AND WHAT LEAVES YOUR MACHINE</text>
+
+  <!-- Zone 1: Your Machine -->
+  <rect class="zone-bg" x="24" y="72" width="360" height="296" fill="#FFFFFF" stroke="#2D6A4F" stroke-width="2" rx="3"/>
+  <rect x="24" y="72" width="360" height="36" fill="#2D6A4F" rx="3"/>
+  <rect x="24" y="94" width="360" height="14" fill="#2D6A4F"/>
+  <text x="204" y="96" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.08em">YOUR MACHINE</text>
+
+  <!-- Items inside Zone 1 -->
+  <g filter="url(#shadow)">
+    <rect x="44" y="124" width="156" height="64" fill="#EDF7F0" rx="2" stroke="#2D6A4F" stroke-width="1"/>
+    <text x="122" y="146" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#2D6A4F" text-anchor="middle" letter-spacing="0.06em">ENGRAM SERVER</text>
+    <text x="122" y="163" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">MCP tools, search</text>
+    <text x="122" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">engine, chunker</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="212" y="124" width="156" height="64" fill="#EDF7F0" rx="2" stroke="#2D6A4F" stroke-width="1"/>
+    <text x="290" y="146" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#2D6A4F" text-anchor="middle" letter-spacing="0.06em">POSTGRESQL</text>
+    <text x="290" y="163" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Memory text, tags,</text>
+    <text x="290" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">graph, embeddings</text>
+  </g>
+
+  <!-- Lock icon decoration -->
+  <text x="204" y="228" font-family="'Helvetica Neue', Arial, sans-serif" font-size="28" fill="#2D6A4F" text-anchor="middle">🔒</text>
+  <text x="204" y="254" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600" fill="#2D6A4F" text-anchor="middle">Stays here by default</text>
+  <text x="204" y="272" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">pgdata Docker volume</text>
+  <text x="204" y="290" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">127.0.0.1:8788 bind</text>
+  <text x="204" y="308" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">No telemetry, no analytics</text>
+  <text x="204" y="326" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">No phone-home</text>
+
+  <!-- Zone 2: Your Network (Ollama) -->
+  <rect class="zone-bg" x="408" y="72" width="248" height="296" fill="#FFFFFF" stroke="#D4A843" stroke-width="2" rx="3"/>
+  <rect x="408" y="72" width="248" height="36" fill="#D4A843" rx="3"/>
+  <rect x="408" y="94" width="248" height="14" fill="#D4A843"/>
+  <text x="532" y="96" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.08em">YOUR NETWORK (OPTIONAL)</text>
+
+  <!-- Ollama box -->
+  <g filter="url(#shadow)">
+    <rect x="432" y="124" width="200" height="64" fill="#FFFBEE" rx="2" stroke="#D4A843" stroke-width="1"/>
+    <text x="532" y="146" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#B8860B" text-anchor="middle" letter-spacing="0.06em">OLLAMA / OPEN-WEBUI</text>
+    <text x="532" y="163" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">Embedding inference</text>
+    <text x="532" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">nomic-embed-text</text>
+  </g>
+
+  <text x="532" y="228" font-family="'Helvetica Neue', Arial, sans-serif" font-size="24" fill="#D4A843" text-anchor="middle">⚡</text>
+  <text x="532" y="252" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600" fill="#B8860B" text-anchor="middle">Memory text sent here</text>
+  <text x="532" y="270" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">only if ENGRAM_EMBEDDER</text>
+  <text x="532" y="288" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">=ollama (the default)</text>
+  <text x="532" y="310" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">Can be localhost:11434</text>
+  <text x="532" y="328" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">for fully local setup</text>
+  <text x="532" y="348" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" fill="#2D6A4F" font-weight="600" text-anchor="middle">Stays within your network</text>
+
+  <!-- Zone 3: The Internet (OpenAI) -->
+  <rect class="zone-bg" x="680" y="72" width="256" height="296" fill="#FFFFFF" stroke="#C0392B" stroke-width="2" rx="3"/>
+  <rect x="680" y="72" width="256" height="36" fill="#C0392B" rx="3"/>
+  <rect x="680" y="94" width="256" height="14" fill="#C0392B"/>
+  <text x="808" y="96" font-family="'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.08em">THE INTERNET (OPTIONAL)</text>
+
+  <!-- OpenAI box -->
+  <g filter="url(#shadow)">
+    <rect x="704" y="124" width="208" height="64" fill="#FDF0EE" rx="2" stroke="#C0392B" stroke-width="1"/>
+    <text x="808" y="146" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" font-weight="700" fill="#C0392B" text-anchor="middle" letter-spacing="0.06em">OPENAI EMBEDDINGS API</text>
+    <text x="808" y="163" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">text-embedding-3-small</text>
+    <text x="808" y="178" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#2B2B2B" text-anchor="middle">1536 dimensions</text>
+  </g>
+
+  <text x="808" y="228" font-family="'Helvetica Neue', Arial, sans-serif" font-size="24" fill="#C0392B" text-anchor="middle">☁</text>
+  <text x="808" y="252" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" font-weight="600" fill="#C0392B" text-anchor="middle">Memory text sent here</text>
+  <text x="808" y="270" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">only if ENGRAM_EMBEDDER</text>
+  <text x="808" y="288" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">=openai is set</text>
+  <text x="808" y="310" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">Not used by default</text>
+  <text x="808" y="330" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">Use ollama or none</text>
+  <text x="808" y="350" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11" fill="#5A5A5A" text-anchor="middle">to avoid this entirely</text>
+
+  <!-- Arrows between zones -->
+  <!-- Zone 1 → Zone 2 -->
+  <line x1="393" y1="170" x2="422" y2="170" stroke="#D4A843" stroke-width="2" marker-end="url(#arrow-green)" stroke-dasharray="5,4"/>
+  <text x="398" y="160" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" fill="#5A5A5A" text-anchor="middle">text for</text>
+  <text x="398" y="172" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" fill="#5A5A5A" text-anchor="middle">embedding</text>
+
+  <!-- Zone 2 → Zone 3 -->
+  <line x1="665" y1="170" x2="674" y2="170" stroke="#C0392B" stroke-width="2" marker-end="url(#arrow-red)" stroke-dasharray="5,4"/>
+  <text x="670" y="160" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" fill="#5A5A5A" text-anchor="middle">or</text>
+  <text x="670" y="172" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" fill="#5A5A5A" text-anchor="middle">this</text>
+</svg>

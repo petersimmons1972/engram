@@ -5,7 +5,7 @@ These tests catch silent NullEmbedder fallback caused by missing dependencies.
 The critical bug: httpx missing from requirements.txt causes Docker deployments
 to silently fall back to BM25-only mode with no error message.
 
-Related issue: https://github.com/petersimmons1972/engram/issues/42
+Related issue: https://github.com/shugav/engram/issues/42
 """
 
 import pytest
@@ -31,7 +31,7 @@ class TestEmbedderResolution:
             f"Expected OllamaEmbedder but got {type(embedder).__name__}. "
             "Likely cause: httpx is missing from requirements.txt. "
             "Docker deployments default to ENGRAM_EMBEDDER=ollama but Ollama requires httpx. "
-            "See https://github.com/petersimmons1972/engram/issues/42"
+            "See https://github.com/shugav/engram/issues/42"
         )
 
     def test_null_embedder_not_returned_for_named_provider(self):

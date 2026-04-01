@@ -1,606 +1,384 @@
-# Engram Installation Guide
+# Installation Guide
 
-Complete step-by-step installation instructions for all GPU configurations.
+This guide covers GPU-accelerated Ollama setup for every supported platform. The standard `docker compose up -d` works on all platforms but runs Ollama in CPU mode. Follow your platform's section to enable GPU acceleration.
 
-## Table of Contents
+**Supported GPU paths:**
 
-1. [Prerequisites](#prerequisites)
-2. [NVIDIA GPUs (CUDA)](#nvidia-gpus-cuda)
-3. [AMD GPUs (ROCm)](#amd-gpus-rocm)
-4. [Mac M-series (Metal)](#mac-m-series-metal)
-5. [System Ollama (Local/Host)](#system-ollama-localhost)
-6. [Verification](#verification)
-7. [Troubleshooting](#troubleshooting)
-
----
-
-## Prerequisites
-
-All installations require:
-- **Docker & Docker Compose** (v2.20+)
-  - [Install Docker Desktop](https://www.docker.com/products/docker-desktop)
-  - Verify: `docker --version && docker compose --version`
-
-- **Git**
-  - Verify: `git --version`
-
-- **8GB+ RAM** (minimum; 16GB+ recommended)
-
-- **Free disk space**: 20GB+ (for container images + Ollama model)
+| Platform | Image | GPU method |
+|---|---|---|
+| NVIDIA (Linux/Windows WSL2) | `ollama/ollama:latest` | NVIDIA Container Toolkit + `deploy` stanza |
+| AMD (Linux) | `ollama/ollama:rocm` | ROCm device passthrough |
+| Mac M-series (Apple Silicon) | Native Ollama via `brew` | Metal (automatic, host-side) |
+| CPU only (any platform) | `ollama/ollama:latest` | No GPU config needed |
 
 ---
 
-## NVIDIA GPUs (CUDA)
+## Prerequisites (All Platforms)
 
-### Prerequisites
+- Docker Engine 20.10+ and Docker Compose v2
+- 4 GB RAM minimum (8 GB recommended when running Ollama in Docker)
+- 2 GB free disk space for the `nomic-embed-text` model
 
-✅ **GPU Requirements:**
-- NVIDIA GPU with CUDA compute capability 3.5+ (Maxwell generation or newer)
-- Common supported GPUs: GeForce GTX/RTX 1000+, Quadro P/RTX series, A100, H100
-
-✅ **Software Requirements:**
-
-1. **NVIDIA Container Toolkit**
-
-   **Ubuntu/Debian:**
-   ```bash
-   distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-   curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-   curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
-     sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-   sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
-   ```
-
-   **CentOS/RHEL:**
-   ```bash
-   distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-   yum-config-manager --add-repo \
-     https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.repo
-   sudo yum install -y nvidia-container-toolkit
-   ```
-
-   **macOS (Docker Desktop):**
-   - Not applicable; Docker Desktop on Mac uses native hypervisor acceleration
-
-2. **Docker daemon configuration**
-
-   After installing NVIDIA Container Toolkit, configure Docker to use the nvidia runtime:
-
-   ```bash
-   sudo nvidia-ctk runtime configure --runtime=docker
-   sudo systemctl restart docker
-   ```
-
-   Verify:
-   ```bash
-   docker run --rm --runtime=nvidia nvidia/cuda:11.8.0-runtime-ubuntu22.04 nvidia-smi
-   ```
-
-   You should see your GPU listed.
-
-✅ **Verify NVIDIA driver:**
 ```bash
-nvidia-smi
+# Verify your versions
+docker --version          # Docker version 24.x or newer
+docker compose version    # Docker Compose version v2.x or newer
 ```
-
-Expected output:
-```
-NVIDIA-SMI 545.23.06    Driver Version: 545.23.06    CUDA Version: 12.1
-|---------|---------|
-| GPU  Name  Persistence-M|
-| 0    NVIDIA A100  On    |
-|---------|---------|
-```
-
-### Installation Steps
-
-1. **Clone or navigate to Engram directory:**
-   ```bash
-   cd ~/projects/engram
-   git pull origin main
-   ```
-
-2. **Start services with NVIDIA GPU override:**
-   ```bash
-   docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d
-   ```
-
-3. **Verify services are healthy:**
-   ```bash
-   docker compose ps
-   ```
-
-   Expected output:
-   ```
-   NAME              STATUS
-   engram-postgres   healthy
-   engram-ollama     healthy
-   engram-app        running
-   ```
-
-4. **Pull the embedding model:**
-   ```bash
-   docker compose --profile init run --rm ollama-init
-   ```
-
-   Wait for model download (nomic-embed-text, ~300MB).
-
-### Verification
-
-✅ **GPU is being used:**
-```bash
-docker logs engram-ollama | grep -i "gpu\|cuda\|device"
-```
-
-Expected: mentions of CUDA, GPU device ID, or available memory on GPU.
-
-✅ **Embedding works:**
-```bash
-docker compose exec engram-app python -c \
-  "from engram.embeddings import create_embedder; e = create_embedder('ollama', url='http://ollama:11434'); print(e.embed('test')[:5])"
-```
-
-Expected: Returns first 5 dimensions of embedding vector (numbers like `[0.123, -0.456, ...]`).
-
-### Troubleshooting
-
-**"nvidia-smi not found"**
-- Driver not installed or not in PATH
-- `curl -fSsL https://nvidia.github.io/nvidia-docker/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg`
-- Then rerun apt-get install
-
-**"could not select device driver"**
-- NVIDIA Container Toolkit not installed
-- Docker daemon not restarted after toolkit installation
-- Run: `sudo systemctl restart docker && docker compose down && docker compose -f docker-compose.yml -f docker-compose.nvidia.yml up -d`
-
-**"GPU memory allocation failed"**
-- Other processes using GPU memory
-- Run: `nvidia-smi` to check usage
-- Kill competing processes or reduce model size
 
 ---
 
-## AMD GPUs (ROCm)
+## Quick Start (CPU Only)
 
-### Prerequisites
+If you don't need GPU acceleration or just want to verify the setup works first:
 
-✅ **GPU Requirements:**
-- AMD RDNA (RX 5700 XT and newer) or CDNA (MI100, MI210, etc.)
-- Check if supported: [AMD ROCm GPU Compatibility](https://rocmdocs.amd.com/en/docs-5.7.0/deploy/linux/index.html#supported-gpus)
-
-✅ **Software Requirements:**
-
-1. **ROCm driver and runtime** (Ubuntu/Debian 22.04)
-
-   ```bash
-   wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
-   echo "deb [arch=amd64] https://repo.radeon.com/rocm/apt/debian focal main" | \
-     sudo tee /etc/apt/sources.list.d/rocm.list
-   sudo apt-get update
-   sudo apt-get install -y rocm-dkms rocm-libs
-   sudo usermod -a -G render,video $USER
-   ```
-
-   **Reboot required:**
-   ```bash
-   sudo reboot
-   ```
-
-2. **Docker group permissions** (after reboot)
-
-   ```bash
-   # Verify ROCm works
-   rocm-smi
-
-   # Add user to docker group
-   sudo usermod -a -G docker $USER
-   ```
-
-   **Log out and log back in** for group changes to take effect.
-
-### Installation Steps
-
-1. **Clone or navigate to Engram directory:**
-   ```bash
-   cd ~/projects/engram
-   git pull origin main
-   ```
-
-2. **Start services with AMD GPU override:**
-   ```bash
-   docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
-   ```
-
-3. **Verify services are healthy:**
-   ```bash
-   docker compose ps
-   ```
-
-4. **Pull the embedding model:**
-   ```bash
-   docker compose --profile init run --rm ollama-init
-   ```
-
-### Verification
-
-✅ **GPU is being used:**
 ```bash
-docker logs engram-ollama | grep -i "rocm\|gpu\|device"
+git clone https://github.com/shugav/engram.git
+cd engram
+cp .env.example .env
+# Edit .env — at minimum, set POSTGRES_PASSWORD to something strong
+docker compose up -d
 ```
 
-✅ **Embedding works:**
+Then pull the embedding model:
+
 ```bash
-docker compose exec engram-app python -c \
-  "from engram.embeddings import create_embedder; e = create_embedder('ollama', url='http://ollama:11434'); print(e.embed('test')[:5])"
+docker exec engram-ollama ollama pull nomic-embed-text
 ```
 
-### Troubleshooting
-
-**"rocm-smi: command not found"**
-- ROCm not installed or not in PATH
-- Rerun: `sudo apt-get install rocm-dkms rocm-libs`
-
-**"GPU device not found in docker"**
-- Devices `/dev/kfd` and `/dev/dri` not accessible
-- Check: `ls -la /dev/kfd /dev/dri`
-- User not in correct groups: `groups` should include `render` and `video`
-- Fix: `sudo usermod -a -G render,video,docker $USER && newgrp docker`
-
-**"ROCM_HOME not set"**
-- Docker Ollama image handles this automatically
-- If manual Ollama: `export ROCM_HOME=/opt/rocm`
+Engram is now running at `http://localhost:8788/sse`. Connect your IDE (see the main README for IDE-specific steps).
 
 ---
 
-## Mac M-series (Metal)
+## NVIDIA GPU Setup
 
-### Prerequisites
+### 1. Install NVIDIA Container Toolkit
 
-✅ **System Requirements:**
-- Mac with M1, M2, M3, or M4 chip (Apple Silicon)
-- macOS 13.0+ (Ventura or newer)
-- 8GB+ unified memory (RAM)
+The NVIDIA Container Toolkit lets Docker access your GPU. You only need to do this once per host.
 
-✅ **Software Requirements:**
-- **Docker Desktop for Mac** (v4.24+)
-  - [Download Docker Desktop](https://www.docker.com/products/docker-desktop)
-  - Open `.dmg` and drag Docker to Applications
-
-### Installation Steps
-
-1. **Start Docker Desktop**
-   - Open Applications → Docker
-   - Wait for it to fully start (Docker icon in menu bar)
-
-2. **Clone or navigate to Engram directory:**
-   ```bash
-   cd ~/projects/engram
-   git pull origin main
-   ```
-
-3. **Start services (no GPU override needed)**
-   ```bash
-   docker compose up -d
-   ```
-
-   Docker Desktop on Apple Silicon automatically uses Metal acceleration. No configuration needed.
-
-4. **Verify services are healthy:**
-   ```bash
-   docker compose ps
-   ```
-
-5. **Pull the embedding model:**
-   ```bash
-   docker compose --profile init run --rm ollama-init
-   ```
-
-### Verification
-
-✅ **Metal acceleration enabled:**
+**Ubuntu / Debian:**
 ```bash
-docker logs engram-ollama | grep -i "metal\|performance"
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
+  sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+
+sudo apt-get update && sudo apt-get install -y nvidia-container-toolkit
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
 ```
 
-Ollama logs should mention Metal framework or acceleration.
-
-✅ **Embedding works:**
+**Verify the toolkit is working:**
 ```bash
-docker compose exec engram-app python -c \
-  "from engram.embeddings import create_embedder; e = create_embedder('ollama', url='http://ollama:11434'); print(e.embed('test')[:5])"
+docker run --rm --gpus all nvidia/cuda:12.3.0-base-ubuntu22.04 nvidia-smi
+```
+You should see your GPU listed in the output.
+
+### 2. Enable GPU in docker-compose.yml
+
+Open `docker-compose.yml` and find the `ollama` service. Uncomment the `deploy` block:
+
+```yaml
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 ```
 
-### Troubleshooting
+### 3. Start and pull the model
 
-**"Docker daemon is not running"**
-- Open Docker Desktop from Applications
-- Check menu bar for Docker icon
+```bash
+docker compose up -d
+docker exec engram-ollama ollama pull nomic-embed-text
+```
 
-**"connection refused" to Ollama**
-- Wait 30 seconds for Ollama to fully start
-- Check: `docker logs engram-ollama`
+### 4. Verify GPU is in use
 
-**Slow embedding performance**
-- Unified memory shared with CPU
-- Metal uses GPU but may be slower than dedicated GPUs
-- Consider system Ollama if performance critical
+```bash
+docker exec engram-ollama ollama run nomic-embed-text "test" 2>&1 | head -5
+# Should show GPU memory usage in Ollama logs:
+docker logs engram-ollama 2>&1 | grep -i "gpu\|cuda"
+```
 
 ---
 
-## System Ollama (Local/Host)
+## AMD GPU Setup (ROCm)
 
-Use this if you're running Ollama natively on your machine instead of in Docker.
+### 1. Install ROCm
 
-### Prerequisites
-
-✅ **Install Ollama**
-- [Download Ollama](https://ollama.ai)
-- Supports: macOS, Linux, Windows (WSL2)
-
-✅ **Start Ollama service**
+**Ubuntu 22.04:**
 ```bash
-# macOS/Linux
+# Add ROCm repository
+wget -q -O - https://repo.radeon.com/rocm/rocm.gpg.key | sudo apt-key add -
+echo "deb [arch=amd64] https://repo.radeon.com/rocm/apt/debian jammy main" | \
+  sudo tee /etc/apt/sources.list.d/rocm.list
+
+sudo apt-get update
+sudo apt-get install -y rocm-dkms rocm-libs
+
+# Add your user to the required groups
+sudo usermod -a -G render,video $USER
+
+# Reboot for group changes and driver loading
+sudo reboot
+```
+
+**Verify ROCm after reboot:**
+```bash
+rocm-smi
+```
+
+### 2. Enable AMD GPU in docker-compose.yml
+
+Two changes are needed. First, change the Ollama image:
+
+```yaml
+  ollama:
+    image: ollama/ollama:rocm     # ← change from :latest to :rocm
+```
+
+Then uncomment the `devices` block:
+
+```yaml
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+```
+
+### 3. Start and pull the model
+
+```bash
+docker compose up -d
+docker exec engram-ollama ollama pull nomic-embed-text
+```
+
+### 4. Verify GPU is in use
+
+```bash
+docker logs engram-ollama 2>&1 | grep -i "rocm\|gpu"
+```
+
+---
+
+## Mac M-Series (Apple Silicon)
+
+Docker Desktop on macOS does not pass through Metal GPU to containers. Running Ollama in Docker on a Mac uses CPU only. For Metal acceleration — which is dramatically faster — run Ollama natively on the host and point Engram at it.
+
+### 1. Install Ollama natively
+
+```bash
+brew install ollama
+```
+
+Or download from [ollama.com](https://ollama.com).
+
+### 2. Pull the embedding model
+
+```bash
+ollama pull nomic-embed-text
+```
+
+### 3. Start Ollama as a background service
+
+```bash
+# Start as a launchd service (starts on login, runs in background)
+brew services start ollama
+
+# Or start manually for this session
 ollama serve &
-
-# or run as service (recommended)
-systemctl start ollama  # Linux
-launchctl start com.ollama.Ollama  # macOS
 ```
 
-Verify:
+Verify it's running:
 ```bash
 curl http://localhost:11434/api/tags
+# Should return JSON listing your installed models
 ```
 
-Should return: `{"models":[]}`
+### 4. Configure Engram to use the host Ollama
 
-### Installation Steps
-
-1. **Pull the embedding model:**
-   ```bash
-   ollama pull nomic-embed-text
-   ```
-
-   Verify:
-   ```bash
-   curl http://localhost:11434/api/tags | grep nomic
-   ```
-
-2. **Start Engram pointing to host Ollama:**
-   ```bash
-   cd ~/projects/engram
-   docker compose -f docker-compose.yml -f docker-compose.host-ollama.yml up -d
-   ```
-
-   This override sets `OLLAMA_URL=http://host.docker.internal:11434` so the Docker container can reach your host Ollama.
-
-3. **Verify services are healthy:**
-   ```bash
-   docker compose ps
-   ```
-
-### Verification
-
-✅ **Ollama is accessible from Docker:**
+In your `.env`:
 ```bash
-docker compose exec engram-app curl http://host.docker.internal:11434/api/tags
+OLLAMA_URL=http://host.docker.internal:11434
 ```
 
-Should return JSON with `nomic-embed-text` in the models list.
+This routes from the Docker network to your host's Ollama process.
 
-✅ **Embedding works:**
+### 5. Disable the Docker Ollama service
+
+Since Ollama is running natively, comment out the `ollama` service in `docker-compose.yml` and remove it from `engram`'s `depends_on`:
+
+```yaml
+  # ollama:          ← comment out the entire service block
+  #   container_name: engram-ollama
+  #   ...
+
+  engram:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # ollama:      ← remove this line
+      #   condition: service_started
+```
+
+### 6. Start Engram
+
 ```bash
-docker compose exec engram-app python -c \
-  "from engram.embeddings import create_embedder; e = create_embedder('ollama', url='http://host.docker.internal:11434'); print(e.embed('test')[:5])"
+docker compose up -d
 ```
 
-### Troubleshooting
+---
 
-**"Connection refused to host.docker.internal"**
-- Ollama not running
-- Run: `ollama serve &` in another terminal
-- Or check: `curl http://localhost:11434/api/tags`
+## Pulling the Embedding Model
 
-**"HTTP 404 /api/tags"**
-- Ollama running but model not downloaded
-- Run: `ollama pull nomic-embed-text`
+Regardless of platform, Ollama needs the model downloaded before Engram can embed. Run this once after starting:
 
-**Linux users:** `host.docker.internal` not available
-- Use host IP instead: Find it with `hostname -I`
-- Set in .env: `OLLAMA_URL=http://192.168.1.100:11434`
-- Or use `--network host` in compose override
+```bash
+docker exec engram-ollama ollama pull nomic-embed-text
+```
+
+The `nomic-embed-text` model is ~300 MB. It downloads once and persists in the `ollama-data` volume across restarts.
+
+**Using a different model:**
+
+Set `ENGRAM_OLLAMA_MODEL` in your `.env` and pull that model instead:
+
+```bash
+# Example: use mxbai-embed-large for higher quality (670 MB)
+# In .env: ENGRAM_OLLAMA_MODEL=mxbai-embed-large
+docker exec engram-ollama ollama pull mxbai-embed-large
+```
+
+**Important:** Once Engram stores its first embedding, it locks the project to that model's dimensions. To switch models, export your memories first (`engram dump`), then re-ingest after switching.
 
 ---
 
 ## Verification
 
-Run this after any installation to confirm everything is working:
-
-### 1. All services healthy
+Run this after any setup to confirm the full stack is working:
 
 ```bash
+# 1. All services are up
 docker compose ps
-```
 
-All should show `healthy` or `running` status.
+# 2. Ollama has the model
+docker exec engram-ollama ollama list
+# Expected: nomic-embed-text listed
 
-### 2. Ollama model available
+# 3. Engram can reach Ollama
+docker logs engram-app 2>&1 | grep -i "ollama\|embed"
+# Expected: "Auto-detected Ollama" or "Using Ollama embeddings"
 
-```bash
-docker compose exec engram-app python -c "
+# 4. Engram MCP endpoint responds
+curl http://localhost:8788/sse
+# Expected: SSE stream headers (HTTP 200)
+
+# 5. Quick embed test
+docker exec engram-app python -c "
 from engram.embeddings import create_embedder
-embedder = create_embedder('ollama', url='http://ollama:11434')
-print('✅ Ollama embedder ready')
+e = create_embedder('ollama', ollama_url='http://ollama:11434')
+v = e.embed('hello world')
+print(f'Embedding dims: {len(v)} (expected 768 for nomic-embed-text)')
 "
 ```
-
-### 3. Memory system working
-
-```bash
-docker compose exec engram-app python -c "
-from engram.db import MemoryDB
-db = MemoryDB()
-print('✅ Memory database ready')
-"
-```
-
-### 4. IDE connection test
-
-See README.md "Connect Your IDE" section for IDE-specific verification.
 
 ---
 
 ## Troubleshooting
 
-### General
+**Engram starts but embeddings fall back to BM25-only mode**
 
-**"docker compose: command not found"**
-- Docker Compose v2 not installed
-- Upgrade: `docker --version` (should be v20.10+)
-- Then: `docker compose version` should work
-
-**"Permission denied while trying to connect to Docker daemon"**
-- Add user to docker group:
-  ```bash
-  sudo usermod -a -G docker $USER
-  newgrp docker
-  ```
-
-**Services stuck in "restarting" loop**
-- Check logs: `docker compose logs`
-- Common: Port conflicts (5432, 8788, 11434)
-- Stop: `docker compose down` then check with `lsof -i :PORT`
-
-### GPU-Specific
-
-**GPU recognized but not used by Ollama**
-
-Check configuration is correct:
+Check if Ollama is reachable from the Engram container:
 ```bash
-# NVIDIA
-docker compose config | grep -A5 nvidia
+docker exec engram-app curl -s http://ollama:11434/api/tags | head -c 200
+```
+If this returns an error, Ollama isn't reachable. Common causes: Ollama container not started, wrong `OLLAMA_URL` in `.env`, or model not pulled.
 
-# AMD
-docker compose config | grep -A5 devices
+**"nomic-embed-text model not found"**
 
-# Verify override file
-ls -la docker-compose.*.yml
+The model isn't pulled yet. Run:
+```bash
+docker exec engram-ollama ollama pull nomic-embed-text
+```
+Then restart Engram: `docker compose restart engram`
+
+**NVIDIA GPU not detected**
+
+Verify in this order:
+```bash
+# Host: driver installed?
+nvidia-smi
+
+# Host: toolkit installed?
+nvidia-ctk --version
+
+# Docker: runtime configured?
+docker run --rm --gpus all nvidia/cuda:12.3.0-base-ubuntu22.04 nvidia-smi
+
+# Compose: deploy block uncommented and correct?
+docker compose config | grep -A10 "deploy:"
 ```
 
-**Model download stuck**
+**AMD GPU: "device not found"**
 
+Check device access:
 ```bash
-docker compose logs ollama | tail -20
+ls -la /dev/kfd /dev/dri
+groups  # should include render and video
 ```
 
-Check network connection and disk space:
+If you're not in the groups, add yourself and log out/in:
 ```bash
-df -h  # disk space
-curl https://ollama.ai  # network connectivity
+sudo usermod -a -G render,video,docker $USER
 ```
 
-### Memory/Embeddings
+**Mac: "connection refused" to host.docker.internal:11434**
 
-**"ImportError: No module named 'httpx'"**
-- httpx missing from requirements
-- Rebuild image: `docker compose build --no-cache`
-
-**Embedding returns all zeros**
-- NullEmbedder fallback (Ollama not reachable)
-- Check: `docker compose logs engram-app | grep Ollama`
-- Verify URL matches actual Ollama: grep OLLAMA_URL in docker-compose output
-
-### Uninstall
-
-To cleanly remove Engram:
-
+Ollama isn't running on the host:
 ```bash
-# Stop containers
-docker compose down
-
-# Delete volumes (WARNING: loses all memory data)
-docker volume rm engram_pgdata engram_ollama-data
-
-# Delete images (optional, saves disk space)
-docker rmi engram ollama/ollama cgr.dev/chainguard/postgres
+curl http://localhost:11434/api/tags
+# If this fails, start Ollama: brew services start ollama
 ```
 
-**Before deleting volumes, export your memories:**
+**Slow embedding on Mac without GPU**
+
+If you're running Ollama in Docker instead of natively, it uses CPU only. Switch to native Ollama (see Mac M-series section above). The performance difference with Metal is substantial — typically 10–30× faster for embedding workloads.
+
+**Port conflicts**
+
+Default ports: `5432` (PostgreSQL), `11434` (Ollama), `8788` (Engram).
+
+To change any port, set the corresponding variable in `.env`:
 ```bash
-docker compose exec engram-app python -m engram dump \
-  --project global \
-  --output ./memory-backup
+ENGRAM_PORT=9000    # changes Engram's exposed port
 ```
+PostgreSQL and Ollama ports can be changed in `docker-compose.yml` if needed.
 
 ---
 
-## Next Steps
+## Connect Your IDE
 
-After successful installation:
+Once the stack is running, connect your MCP client. From the main README:
 
-1. **Store your first memory:**
-   ```bash
-   docker compose exec engram-app python -c "
-   from engram.memory import memory_store
-   memory_store(
-       content='Test memory for verification',
-       memory_type='context',
-       project='test'
-   )
-   "
-   ```
-
-2. **Connect your IDE** — See README.md "Connect Your IDE" section
-
-3. **Read the CLI docs** — See README.md "Commands" section
-
-4. **Join the community** — GitHub issues and discussions welcome
-
----
-
-## Performance Tuning
-
-### Embedding batch size
-
-For faster embedding of many documents, adjust batch size:
-
-```bash
-docker compose exec engram-app python -c "
-from engram.embeddings import create_embedder
-embedder = create_embedder('ollama', batch_size=32)  # default 16
-"
-```
-
-### Database optimization
-
-For many memories (>100k), consider:
-
-```bash
-docker compose exec engram-postgres psql -U engram -d engram -c "
-REINDEX INDEX idx_memory_project;
-ANALYZE memory;
-"
-```
-
-### Ollama model selection
-
-`nomic-embed-text` is the default (768D, balanced). For different trade-offs:
-
-- **Smaller/faster:** `nomic-embed-text-v1.5` (512D)
-- **Larger/better quality:** `bge-large-en-v1.5` (1024D)
-
-Change:
-```bash
-ollama pull bge-large-en-v1.5
-ENGRAM_OLLAMA_MODEL=bge-large-en-v1.5 docker compose up -d
-```
+- **Claude Code:** `claude mcp add engram --transport sse http://localhost:8788/sse`
+- **Cursor / VS Code:** add `{ "mcpServers": { "engram": { "url": "http://localhost:8788/sse" } } }` to your MCP config
+- **Windsurf, Claude Desktop:** see README for client-specific config
 
 ---
 
 ## Support
 
-For issues:
-1. Check logs: `docker compose logs [service]`
-2. Search GitHub issues: https://github.com/anthropics/engram/issues
-3. File new issue with: logs, docker version, GPU info, OS/version
+If something isn't working after following this guide, open a [GitHub issue](https://github.com/shugav/engram/issues) with:
+- Your OS and version
+- GPU model and driver version (if applicable)
+- Output of `docker compose ps` and `docker compose logs engram`

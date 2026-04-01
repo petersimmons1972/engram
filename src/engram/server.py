@@ -134,7 +134,7 @@ _rate_limit_lock = threading.Lock()
 def _get_engine(project: str | None = None) -> SearchEngine:
     """Return (or create) a SearchEngine for the given project.
 
-    Each project gets its own SQLite database file (~/.engram/{project}.db),
+    Each project gets its own isolated namespace in the database,
     so memories are fully isolated between projects. Uses LRU eviction to
     bound cache size to _MAX_ENGINES entries.
     """
