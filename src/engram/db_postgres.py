@@ -18,6 +18,8 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
+import hashlib
+
 from psycopg.errors import DuplicateColumn
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -31,6 +33,12 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _content_hash(content: str) -> str:
+    """Return the SHA-256 hex digest of the given content string."""
+    return hashlib.sha256(content.encode()).hexdigest()
+
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS memories (
@@ -94,7 +102,7 @@ CREATE TABLE IF NOT EXISTS project_meta (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 
 class PostgresBackend:
@@ -230,6 +238,25 @@ class PostgresBackend:
                     "UPDATE project_meta SET value=%s WHERE key='schema_version'", ("6",)
                 )
                 conn.commit()
+            if current < 7:
+                try:
+                    with conn.transaction():
+                        conn.execute("ALTER TABLE memories ADD COLUMN content_hash TEXT")
+                except DuplicateColumn:
+                    pass
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_memories_content_hash "
+                            "ON memories(content_hash) WHERE content_hash IS NOT NULL"
+                        )
+                except Exception:
+                    pass
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '7') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
+                conn.commit()
             conn.execute(
                 "INSERT INTO project_meta (key, value) VALUES ('schema_version', %s) "
                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -263,14 +290,15 @@ class PostgresBackend:
         memory.updated_at = now
         memory.last_accessed = now
         memory.project = self.project
+        memory.content_hash = _content_hash(memory.content)
 
         with self.pool.connection() as conn:
             conn.execute(
                 """INSERT INTO memories
                    (id, content, memory_type, project, tags,
                     importance, access_count, last_accessed, created_at, updated_at,
-                    immutable, expires_at)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                    immutable, expires_at, content_hash)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
                 (
                     memory.id,
                     memory.content,
@@ -284,6 +312,7 @@ class PostgresBackend:
                     now,
                     memory.immutable,
                     memory.expires_at,
+                    memory.content_hash,
                 ),
             )
             conn.commit()
@@ -296,6 +325,14 @@ class PostgresBackend:
             ).fetchone()
             if not row:
                 return None
+            stored_hash = row.get("content_hash")
+            if stored_hash is not None:
+                expected = _content_hash(row["content"])
+                if stored_hash != expected:
+                    logger.warning(
+                        "INTEGRITY: content_hash mismatch for memory %s — stored=%s… computed=%s…",
+                        row["id"], stored_hash[:8], expected[:8],
+                    )
             return self._row_to_memory(row)
 
     def update_memory(
@@ -317,14 +354,26 @@ class PostgresBackend:
         if importance is not None:
             mem.importance = importance
 
+        new_hash = _content_hash(mem.content) if content is not None else None
+
         with self.pool.connection() as conn:
-            conn.execute(
-                """UPDATE memories
-                   SET content = %s, tags = %s, importance = %s, updated_at = %s,
-                   content_compressed = NULL, compression_algo = NULL, compressed_at = NULL
-                   WHERE id = %s""",
-                (mem.content, json.dumps(mem.tags), mem.importance, now, memory_id),
-            )
+            if new_hash is not None:
+                conn.execute(
+                    """UPDATE memories
+                       SET content = %s, tags = %s, importance = %s, updated_at = %s,
+                       content_compressed = NULL, compression_algo = NULL, compressed_at = NULL,
+                       content_hash = %s
+                       WHERE id = %s""",
+                    (mem.content, json.dumps(mem.tags), mem.importance, now, new_hash, memory_id),
+                )
+            else:
+                conn.execute(
+                    """UPDATE memories
+                       SET content = %s, tags = %s, importance = %s, updated_at = %s,
+                       content_compressed = NULL, compression_algo = NULL, compressed_at = NULL
+                       WHERE id = %s""",
+                    (mem.content, json.dumps(mem.tags), mem.importance, now, memory_id),
+                )
             conn.commit()
         mem.updated_at = now
         return mem
@@ -887,6 +936,46 @@ class PostgresBackend:
             ).fetchone()
         return row["count"] if row else 0
 
+    # ── Integrity ─────────────────────────────────────────────────
+
+    def get_memories_missing_hash(self, project: str, limit: int = 500) -> list[tuple[str, str]]:
+        """Return (id, content) for memories with no content_hash."""
+        with self.pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT id, content FROM memories WHERE project = %s AND content_hash IS NULL LIMIT %s",
+                (project, limit),
+            ).fetchall()
+        return [(r["id"], r["content"]) for r in rows]
+
+    def update_memory_hash(self, memory_id: str, content_hash: str) -> None:
+        with self.pool.connection() as conn:
+            conn.execute(
+                "UPDATE memories SET content_hash = %s WHERE id = %s",
+                (content_hash, memory_id),
+            )
+            conn.commit()
+
+    def get_integrity_stats(self, project: str) -> dict:
+        """Return total, hashed, and corrupt counts for a project."""
+        with self.pool.connection() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) AS c FROM memories WHERE project = %s", (project,)
+            ).fetchone()["c"]
+            hashed = conn.execute(
+                "SELECT COUNT(*) AS c FROM memories WHERE project = %s AND content_hash IS NOT NULL",
+                (project,),
+            ).fetchone()["c"]
+            # Corrupt = hash present but doesn't match content.
+            # encode(sha256(content::bytea), 'hex') is PostgreSQL's native SHA-256
+            # and matches Python's hashlib.sha256(content.encode()).hexdigest().
+            corrupt = conn.execute(
+                "SELECT COUNT(*) AS c FROM memories "
+                "WHERE project = %s AND content_hash IS NOT NULL "
+                "AND content_hash != encode(sha256(content::bytea), 'hex')",
+                (project,),
+            ).fetchone()["c"]
+        return {"total": total, "hashed": hashed, "corrupt": corrupt}
+
     # ── Helpers ───────────────────────────────────────────────────
 
     @staticmethod
@@ -924,6 +1013,9 @@ class PostgresBackend:
         # Summary field — added in schema v6; may be None on older rows
         summary = row.get("summary")
 
+        # Integrity field — added in schema v7; may be None on older rows
+        content_hash = row.get("content_hash")
+
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -941,6 +1033,7 @@ class PostgresBackend:
             compression_algo=compression_algo,
             compressed_at=compressed_at,
             summary=summary,
+            content_hash=content_hash,
         )
 
     @staticmethod

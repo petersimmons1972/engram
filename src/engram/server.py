@@ -883,6 +883,12 @@ def memory_status(project: str = "") -> dict:
         "enabled": SUMMARIZE_ENABLED,
         "ollama_url": OLLAMA_URL,
     }
+    integrity_stats = engine.db.get_integrity_stats(proj)
+    result["integrity"] = {
+        "total": integrity_stats["total"],
+        "hashed": integrity_stats["hashed"],
+        "coverage_pct": round(integrity_stats["hashed"] / integrity_stats["total"] * 100, 1) if integrity_stats["total"] > 0 else 0.0,
+    }
     return result
 
 
@@ -981,6 +987,59 @@ def memory_compress(
         )
     except Exception as e:
         return {"error": str(e)}
+
+
+@mcp.tool()
+def memory_verify(
+    project: str = "",
+    fix: bool = False,
+) -> dict:
+    """Verify content integrity of all memories using SHA-256 hashes.
+
+    Scans all memories and checks their content_hash. Reports:
+    - ok: memories with a valid hash
+    - missing_hash: pre-v7 memories not yet hashed
+    - corrupt: hash present but doesn't match content (indicates external modification)
+
+    With fix=True, backfills missing hashes and recomputes corrupt ones.
+    """
+    from .db_postgres import _content_hash
+
+    engine = _get_engine(project or None)
+    proj = engine.db.project
+
+    stats = engine.db.get_integrity_stats(proj)
+    fixed = 0
+
+    if fix:
+        # Backfill missing hashes
+        pending = engine.db.get_memories_missing_hash(proj, limit=10_000)
+        for memory_id, content in pending:
+            engine.db.update_memory_hash(memory_id, _content_hash(content))
+            fixed += 1
+
+        # Recompute corrupt hashes — re-fetch stats to find them
+        if stats["corrupt"] > 0:
+            with engine.db.pool.connection() as conn:
+                rows = conn.execute(
+                    "SELECT id, content FROM memories "
+                    "WHERE project = %s AND content_hash IS NOT NULL "
+                    "AND content_hash != encode(sha256(content::bytea), 'hex')",
+                    (proj,),
+                ).fetchall()
+            for row in rows:
+                engine.db.update_memory_hash(row["id"], _content_hash(row["content"]))
+                fixed += 1
+
+        stats = engine.db.get_integrity_stats(proj)
+
+    return {
+        "ok": stats["hashed"] - stats["corrupt"],
+        "missing_hash": stats["total"] - stats["hashed"],
+        "corrupt": stats["corrupt"],
+        "fixed": fixed,
+        "project": proj,
+    }
 
 
 @mcp.tool()

@@ -56,6 +56,8 @@ class Memory(BaseModel):
     compressed_at: str | None = Field(default=None, exclude=True)
     # Summary field — populated asynchronously by BackgroundSummarizer; may be None.
     summary: str | None = Field(default=None)
+    # Integrity field — SHA-256 of content, stored in DB, validated on read.
+    content_hash: str | None = Field(default=None)
 
 
 class Chunk(BaseModel):
