@@ -376,6 +376,10 @@ def dump_all_projects(
 ) -> dict:
     """Dump all memories from all projects to per-project subdirectories.
 
+    Handles both backends:
+    - PostgreSQL: all projects share one DB, list_all_projects() returns all of them
+    - SQLite: each project has its own .db file; opens a separate backend per project
+
     Returns manifest dict with project names and memory counts.
     """
     output_path = Path(output_dir)
@@ -388,14 +392,28 @@ def dump_all_projects(
         "total_memories": 0,
     }
 
+    # SQLite: db_dir attribute exists; each project needs its own backend instance
+    is_sqlite = hasattr(db, "db_dir")
+
     for project_name in projects:
-        memories = db.list_memories(
-            memory_type=None, tags=[], min_importance=4, limit=100000,
-        )
-        project_dir = output_path / project_name
-        count = dump_memories_to_directory(memories, project_dir)
-        manifest["projects"][project_name] = count
-        manifest["total_memories"] += count
+        if is_sqlite:
+            # Open a temporary backend for this project's .db file
+            from .db_sqlite import SqliteBackend
+            project_db = SqliteBackend(project=project_name, db_dir=db.db_dir)
+        else:
+            project_db = db
+
+        try:
+            memories = project_db.list_memories(
+                memory_type=None, tags=[], min_importance=4, limit=100_000,
+            )
+            project_dir = output_path / project_name
+            count = dump_memories_to_directory(memories, project_dir)
+            manifest["projects"][project_name] = count
+            manifest["total_memories"] += count
+        finally:
+            if is_sqlite:
+                project_db.close()
 
     return manifest
 

@@ -183,8 +183,8 @@ def _build_content_envelope(
     if content_format == "compressed_only":
         if compressed_envelope:
             return {"content": content, "content_compressed": compressed_envelope}
-        # error case already returned above — shouldn't reach here, return base
-        return base
+        # Compressed bytes present but undecompressable (corrupt or algo unavailable)
+        return {"error": f"Memory {memory_id} compressed data unavailable: {warning}"}
 
     if content_format in ("compressed", "both"):
         result = dict(base)
@@ -445,7 +445,7 @@ def memory_recall(
     """Search memories using all three layers: keyword (BM25), semantic (vector), and graph.
 
     Results are ranked by a composite score:
-      Final = (vector * 0.45 + BM25 * 0.25 + recency * 0.15 + graph * 0.15) * importance_multiplier
+      Final = (vector * 0.50 + BM25 * 0.35 + recency * 0.15) * importance_multiplier
 
     Connected memories from the knowledge graph are attached automatically.
 
@@ -886,8 +886,9 @@ def memory_compress(
         recompress: Re-compress already-compressed memories (useful for algorithm changes).
     """
     project = _normalize_project(project)
-    if algorithm not in ("zlib", "zstd"):
-        return {"error": f"Unsupported algorithm {algorithm!r}. Use 'zlib' or 'zstd'."}
+    from .compression import SUPPORTED_ALGOS
+    if algorithm not in SUPPORTED_ALGOS:
+        return {"error": f"Unsupported algorithm {algorithm!r}. Available on this installation: {sorted(SUPPORTED_ALGOS)}"}
 
     engine = _get_engine(project)
     try:
@@ -1131,6 +1132,7 @@ def memory_ingest(
 
     # --- Pre-import backup: snapshot existing DB state before writing anything ---
     pre_import_backup: str | None = None
+    backup_warning: str | None = None
     try:
         current_memories = engine.db.list_memories(
             memory_type=None, tags=[], min_importance=4, limit=100_000
@@ -1142,7 +1144,8 @@ def memory_ingest(
             pre_import_backup = str(backup_zip)
             logger.info(f"Pre-import backup created: {pre_import_backup}")
     except Exception as e:
-        logger.warning(f"Pre-import backup failed (continuing with ingest): {e}")
+        backup_warning = f"Pre-import backup failed: {e}"
+        logger.warning(backup_warning)
 
     # Parse markdown files
     memories, failed = ingest_memories_from_directory(directory, project=engine.db.project)
@@ -1155,6 +1158,7 @@ def memory_ingest(
             "failed": len(failed),
             "message": f"No memories to ingest from {directory}",
             "pre_import_backup": pre_import_backup,
+            "backup_warning": backup_warning,
         }
 
     # Apply type filter if specified
@@ -1166,7 +1170,7 @@ def memory_ingest(
             pass
 
     # Apply importance override if specified
-    if importance and importance != 2:
+    if importance is not None and importance != 2:
         for m in memories:
             m.importance = max(0, min(4, importance))
 
@@ -1204,6 +1208,7 @@ def memory_ingest(
         "failed": len(failed),
         "failed_files": failed,
         "pre_import_backup": pre_import_backup,
+        "backup_warning": backup_warning,
         "snapshot_zip": str(snapshot_zip),
     }
 

@@ -847,14 +847,19 @@ class SqliteBackend:
                 "avg_ratio": round(row["avg_ratio"] or 0.0, 3),
             }
 
+    @property
+    def db_dir(self) -> "Path":
+        """Return the directory containing this project's database file."""
+        return self.db_path.parent
+
     def list_all_projects(self) -> list[str]:
-        """Return all distinct project names in this database."""
-        with self._lock:
-            conn = self._get_conn()
-            rows = conn.execute(
-                "SELECT DISTINCT project FROM memories ORDER BY project"
-            ).fetchall()
-            return [row["project"] for row in rows]
+        """Return all project names by scanning the database directory for .db files.
+
+        Each SQLite project has its own file ({project}.db), so we scan the
+        directory rather than querying the memories table (which only contains
+        the current project's data).
+        """
+        return sorted(f.stem for f in self.db_dir.glob("*.db") if f.is_file())
 
     def get_all_memory_ids(self, project: str) -> set[str]:
         """Return all memory IDs for a project."""
