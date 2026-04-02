@@ -129,6 +129,8 @@ If a fix is taking longer than expected and you need to disclose for legitimate 
 
 **Rate limiting:** `memory_store` is rate-limited to 100 calls per 60 seconds per project by default. This prevents runaway agents from filling your database. Adjust with `ENGRAM_RATE_LIMIT`.
 
+**Content integrity:** Every memory is stored with a SHA-256 hash of its content. On read, the hash is recomputed and compared. Mismatches (which indicate out-of-band database modification) are logged as warnings. Run `memory_verify(project="...", fix=True)` to audit and backfill hashes across all memories.
+
 **Content length:** Memory content is capped at 50,000 characters. Oversized content returns an error rather than partial processing.
 
 **Immutable memories:** Memories stored with `immutable=True` cannot be corrected or deleted via the MCP tools. This protects critical preferences from accidental or malicious overwrites.

@@ -91,10 +91,10 @@ Before opening an issue, check these first:
 - Try `ENGRAM_EMBEDDER=none` to verify BM25-only recall works — if it does, the embedding provider is the issue
 
 **Embedding mismatch error:**
-This happens when you switch embedding models on a project that already has vectors. The error message will name the stored model and the current model. Fix: export with `engram dump`, wipe the project, re-ingest with the new model.
+This happens when you switch embedding models on a project that already has vectors. Use `memory_migrate_embedder(project="your-project", new_embedder="ollama/nomic-embed-text")` to migrate in place — no export or data loss required. The tool nulls existing embeddings and re-embeds everything in the background. Vector search falls back to BM25+recency during migration.
 
 **Docker volume data loss:**
-If you accidentally ran `docker compose down -v`, check `~/.engram-archive/` for SQLite backups from before the PostgreSQL migration, and the `backups/` directory for any PostgreSQL dumps. See the README Backup & Recovery section for full restoration instructions.
+If you accidentally ran `docker compose down -v`, check the `backups/` directory for PostgreSQL dumps created before the operation. See the README Backup & Recovery section for full restoration instructions.
 
 **Ollama "model not found" warning:**
 Engram auto-detects Ollama by checking `OLLAMA_URL/api/tags` for the `nomic-embed-text` model. If it's not listed, Engram falls back to BM25-only mode. To fix: `ollama pull nomic-embed-text` (or your configured model), then restart Engram.

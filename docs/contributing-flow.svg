@@ -1,101 +1,153 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" width="100%">
   <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#00ff88" opacity="0.7"/>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#080c09"/>
+      <stop offset="100%" style="stop-color:#0a0f0c"/>
+    </linearGradient>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#00ff88" opacity="0.7"/>
     </marker>
   </defs>
 
   <!-- Background -->
-  <rect width="960" height="360" fill="#080c09"/>
+  <rect width="960" height="360" fill="url(#bg)"/>
 
   <!-- Left accent bar -->
   <rect width="5" height="360" fill="#00ff88"/>
 
-  <!-- Title bar -->
-  <rect x="0" y="0" width="960" height="50" fill="#080c09"/>
-  <line x1="24" y1="49" x2="936" y2="49" stroke="#00ff88" stroke-width="0.5" opacity="0.3"/>
-  <text x="480" y="32" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="12" fill="#00ff88" text-anchor="middle" letter-spacing="4">YOUR FIRST CONTRIBUTION — FIVE STEPS</text>
+  <!-- Top rule -->
+  <line x1="24" y1="28" x2="936" y2="28" stroke="#00ff88" stroke-width="0.4" opacity="0.3"/>
 
-  <!-- Step 1: Find -->
-  <rect x="36"  y="66" width="154" height="196" fill="#0d1510" rx="2"/>
-  <rect x="36"  y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
-  <rect x="36"  y="88" width="154" height="22"  fill="#0a1a0d"/>
-  <line x1="36" y1="66" x2="36"  y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.5"/>
-  <text x="113" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">1</text>
-  <text x="113" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">FIND AN ISSUE</text>
-  <text x="113" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Browse open</text>
-  <text x="113" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">issues. Look for</text>
-  <text x="113" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">"good first issue"</text>
-  <text x="113" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">labels. Docs PRs</text>
-  <text x="113" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">count too.</text>
+  <!-- Title -->
+  <text x="480" y="48" font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" font-size="12" fill="#00ff88" text-anchor="middle" letter-spacing="4">CONTRIBUTION FLOW — BUG TO MERGED PR</text>
+
+  <!-- Horizontal rule -->
+  <line x1="24" y1="56" x2="936" y2="56" stroke="#1a2a1a" stroke-width="0.5"/>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- ROW 1 — steps 1–4 (top row)                          -->
+  <!-- ══════════════════════════════════════════════════════ -->
+
+  <!-- Step 1: Found a bug? -->
+  <rect x="24"  y="72" width="132" height="100" fill="#0d1510" rx="2"/>
+  <rect x="24"  y="72" width="132" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="24"  y="100" width="132" height="12" fill="#0a1a0d"/>
+  <line x1="24" y1="72" x2="24"   y2="172" stroke="#00ff88" stroke-width="1.5" opacity="0.5"/>
+  <text x="90"  y="95"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">FOUND A BUG?</text>
+  <text x="90"  y="126" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Reproduce it.</text>
+  <text x="90"  y="143" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Note the exact</text>
+  <text x="90"  y="160" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">failure steps.</text>
 
   <!-- Arrow 1→2 -->
-  <line x1="196" y1="164" x2="222" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
+  <line x1="156" y1="122" x2="178" y2="122" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
 
-  <!-- Step 2: Claim -->
-  <rect x="228" y="66" width="154" height="196" fill="#0d1510" rx="2"/>
-  <rect x="228" y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
-  <rect x="228" y="88" width="154" height="22"  fill="#0a1a0d"/>
-  <line x1="228" y1="66" x2="228" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
-  <text x="305" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">2</text>
-  <text x="305" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">LEAVE A COMMENT</text>
-  <text x="305" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Say "I'll take this."</text>
-  <text x="305" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Prevents duplicate</text>
-  <text x="305" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">work. Ask any</text>
-  <text x="305" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">clarifying questions</text>
-  <text x="305" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">here first.</text>
+  <!-- Step 2: File GitHub Issue -->
+  <rect x="182" y="72" width="140" height="100" fill="#0d1510" rx="2"/>
+  <rect x="182" y="72" width="140" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="182" y="100" width="140" height="12" fill="#0a1a0d"/>
+  <line x1="182" y1="72" x2="182"  y2="172" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="252"  y="91"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">FILE GITHUB ISSUE</text>
+  <text x="252"  y="108"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="8"  fill="#00ff88" text-anchor="middle" letter-spacing="0.8">before writing code</text>
+  <text x="252"  y="129" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Title, repro steps,</text>
+  <text x="252"  y="146" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">expected behavior.</text>
+  <text x="252"  y="163" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Get an issue #.</text>
 
   <!-- Arrow 2→3 -->
-  <line x1="388" y1="164" x2="414" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
+  <line x1="322" y1="122" x2="344" y2="122" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
 
-  <!-- Step 3: Fork -->
-  <rect x="420" y="66" width="154" height="196" fill="#0d1510" rx="2"/>
-  <rect x="420" y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
-  <rect x="420" y="88" width="154" height="22"  fill="#0a1a0d"/>
-  <line x1="420" y1="66" x2="420" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
-  <text x="497" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">3</text>
-  <text x="497" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">FORK &amp; BRANCH</text>
-  <text x="497" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Fork the repo.</text>
-  <text x="497" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Create a branch</text>
-  <text x="497" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">named for the</text>
-  <text x="497" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">issue or feature.</text>
-  <text x="497" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Set up locally.</text>
+  <!-- Step 3: Set up dev env -->
+  <rect x="348" y="72" width="148" height="100" fill="#0d1510" rx="2"/>
+  <rect x="348" y="72" width="148" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="348" y="100" width="148" height="12" fill="#0a1a0d"/>
+  <line x1="348" y1="72" x2="348"  y2="172" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="422"  y="91"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">SET UP DEV ENV</text>
+  <text x="422"  y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8"  fill="#00ff88" text-anchor="middle" letter-spacing="0.8">Postgres via Docker</text>
+  <text x="422"  y="129" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">docker compose up -d</text>
+  <text x="422"  y="146" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">pip install -e ".[dev]"</text>
+  <text x="422"  y="163" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">pytest to confirm.</text>
 
   <!-- Arrow 3→4 -->
-  <line x1="580" y1="164" x2="606" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
+  <line x1="496" y1="122" x2="518" y2="122" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
 
-  <!-- Step 4: Change -->
-  <rect x="612" y="66" width="154" height="196" fill="#0d1510" rx="2"/>
-  <rect x="612" y="66" width="154" height="44"  fill="#0a1a0d" rx="2"/>
-  <rect x="612" y="88" width="154" height="22"  fill="#0a1a0d"/>
-  <line x1="612" y1="66" x2="612" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
-  <text x="689" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">4</text>
-  <text x="689" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">MAKE THE CHANGE</text>
-  <text x="689" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Keep the change</text>
-  <text x="689" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">focused. Run</text>
-  <text x="689" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">the tests. Update</text>
-  <text x="689" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">docs if behavior</text>
-  <text x="689" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">changed.</text>
+  <!-- Step 4: Write failing test -->
+  <rect x="522" y="72" width="148" height="100" fill="#0d1510" rx="2"/>
+  <rect x="522" y="72" width="148" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="522" y="100" width="148" height="12" fill="#0a1a0d"/>
+  <line x1="522" y1="72" x2="522"  y2="172" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="596"  y="91"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">WRITE FAILING TEST</text>
+  <text x="596"  y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8"  fill="#00ff88" text-anchor="middle" letter-spacing="0.8">test first, always</text>
+  <text x="596"  y="129" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">pytest must fail</text>
+  <text x="596"  y="146" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">before you write</text>
+  <text x="596"  y="163" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">implementation.</text>
 
-  <!-- Arrow 4→5 -->
-  <line x1="772" y1="164" x2="798" y2="164" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
+  <!-- Wrap arrow: down from step 4 corner, along bottom, up to step 5 -->
+  <!-- down from step 4 right edge -->
+  <line x1="670" y1="122" x2="700" y2="122" stroke="#00ff88" stroke-width="1.5" opacity="0.5"/>
+  <line x1="700" y1="122" x2="700" y2="196" stroke="#00ff88" stroke-width="1.5" opacity="0.4"/>
+  <line x1="700" y1="196" x2="440" y2="196" stroke="#00ff88" stroke-width="1.5" opacity="0.4"/>
+  <line x1="440" y1="196" x2="440" y2="218" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.5"/>
 
-  <!-- Step 5: PR -->
-  <rect x="804" y="66" width="120" height="196" fill="#0d1510" rx="2"/>
-  <rect x="804" y="66" width="120" height="44"  fill="#0a1a0d" rx="2"/>
-  <rect x="804" y="88" width="120" height="22"  fill="#0a1a0d"/>
-  <line x1="804" y1="66" x2="804" y2="262" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
-  <text x="864" y="93"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="900" fill="#00ff88" text-anchor="middle" opacity="0.8">5</text>
-  <text x="864" y="108" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="2">OPEN PR</text>
-  <text x="864" y="138" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Use the PR</text>
-  <text x="864" y="156" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">template. Link</text>
-  <text x="864" y="174" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">the issue.</text>
-  <text x="864" y="192" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">Ask questions</text>
-  <text x="864" y="210" font-family="'Helvetica Neue', Arial, sans-serif" font-size="11.5" fill="#aaaaaa" text-anchor="middle">if unsure.</text>
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- ROW 2 — steps 5–8 (bottom row)                       -->
+  <!-- ══════════════════════════════════════════════════════ -->
+
+  <!-- Step 5: Implement fix -->
+  <rect x="338" y="222" width="146" height="100" fill="#0d1510" rx="2"/>
+  <rect x="338" y="222" width="146" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="338" y="250" width="146" height="12"  fill="#0a1a0d"/>
+  <line x1="338" y1="222" x2="338"  y2="322" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="411"  y="241"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">IMPLEMENT FIX</text>
+  <text x="411"  y="258" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8"  fill="#00ff88" text-anchor="middle" letter-spacing="0.8">one change at a time</text>
+  <text x="411"  y="279" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Make it pass.</text>
+  <text x="411"  y="296" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Keep the scope</text>
+  <text x="411"  y="313" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">to the issue.</text>
+
+  <!-- Arrow 5→6 (left along row 2) -->
+  <line x1="484" y1="272" x2="508" y2="272" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
+
+  <!-- Step 6: pytest passes -->
+  <rect x="512" y="222" width="130" height="100" fill="#0d1510" rx="2"/>
+  <rect x="512" y="222" width="130" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="512" y="250" width="130" height="12"  fill="#0a1a0d"/>
+  <line x1="512" y1="222" x2="512"  y2="322" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="577"  y="241"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">PYTEST PASSES</text>
+  <text x="577"  y="258" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8"  fill="#00ff88" text-anchor="middle" letter-spacing="0.8">full suite</text>
+  <text x="577"  y="279" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Run all tests,</text>
+  <text x="577"  y="296" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">not just the</text>
+  <text x="577"  y="313" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">new one.</text>
+
+  <!-- Arrow 6→7 -->
+  <line x1="642" y1="272" x2="666" y2="272" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
+
+  <!-- Step 7: Open PR -->
+  <rect x="670" y="222" width="130" height="100" fill="#0d1510" rx="2"/>
+  <rect x="670" y="222" width="130" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="670" y="250" width="130" height="12"  fill="#0a1a0d"/>
+  <line x1="670" y1="222" x2="670"  y2="322" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="735"  y="241"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">OPEN PR</text>
+  <text x="735"  y="258" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8"  fill="#00ff88" text-anchor="middle" letter-spacing="0.8">link the issue</text>
+  <text x="735"  y="279" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Reference the</text>
+  <text x="735"  y="296" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">issue #. Use</text>
+  <text x="735"  y="313" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">the template.</text>
+
+  <!-- Arrow 7→8 -->
+  <line x1="800" y1="272" x2="824" y2="272" stroke="#00ff88" stroke-width="1.5" marker-end="url(#arrow)" opacity="0.6"/>
+
+  <!-- Step 8: Merged -->
+  <rect x="828" y="222" width="108" height="100" fill="#0d1510" rx="2"/>
+  <rect x="828" y="222" width="108" height="40"  fill="#0a1a0d" rx="2"/>
+  <rect x="828" y="250" width="108" height="12"  fill="#0a1a0d"/>
+  <line x1="828" y1="222" x2="828"  y2="322" stroke="#00ff88" stroke-width="1.5" opacity="0.35"/>
+  <text x="882"  y="241"  font-family="'Helvetica Neue', Arial, sans-serif" font-size="9"  font-weight="700" fill="#00ff88" text-anchor="middle" letter-spacing="1.5">MERGED</text>
+  <text x="882"  y="258" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8"  fill="#00ff88" text-anchor="middle" letter-spacing="0.8">review → main</text>
+  <text x="882"  y="279" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">Reviewer feedback,</text>
+  <text x="882"  y="296" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">address, approve,</text>
+  <text x="882"  y="313" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10.5" fill="#aaaaaa" text-anchor="middle">merge to main.</text>
 
   <!-- Bottom tip bar -->
-  <rect x="36" y="282" width="888" height="52" fill="#0d1510" rx="2"/>
-  <line x1="36" y1="282" x2="36"  y2="334" stroke="#00ff88" stroke-width="2" opacity="0.6"/>
-  <text x="56" y="304" font-family="'Helvetica Neue', Arial, sans-serif" font-size="10" font-weight="700" fill="#00ff88" letter-spacing="3">FIRST CONTRIBUTION TIP</text>
-  <text x="56" y="322" font-family="'Helvetica Neue', Arial, sans-serif" font-size="12" fill="#aaaaaa">Small, focused changes get reviewed and merged faster than large sweeping ones. A one-paragraph docs fix is a great first PR.</text>
+  <line x1="24" y1="334" x2="936" y2="334" stroke="#00ff88" stroke-width="0.4" opacity="0.3"/>
+  <rect x="24" y="338" width="912" height="16" fill="#0d1510" rx="2"/>
+  <line x1="24" y1="338" x2="24"  y2="354" stroke="#00ff88" stroke-width="2" opacity="0.6"/>
+  <text x="36" y="350" font-family="'Helvetica Neue', Arial, sans-serif" font-size="8" font-weight="700" fill="#00ff88" letter-spacing="2">RULE:</text>
+  <text x="70" y="350" font-family="'Helvetica Neue', Arial, sans-serif" font-size="9" fill="#aaaaaa">File the GitHub Issue before writing a single line. A fix with no issue number never happened. Dev env uses PostgreSQL via Docker — no SQLite.</text>
 </svg>

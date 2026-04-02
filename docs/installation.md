@@ -259,7 +259,7 @@ Set `ENGRAM_OLLAMA_MODEL` in your `.env` and pull that model instead:
 docker exec engram-ollama ollama pull mxbai-embed-large
 ```
 
-**Important:** Once Engram stores its first embedding, it locks the project to that model's dimensions. To switch models, export your memories first (`engram dump`), then re-ingest after switching.
+**Important:** Once Engram stores its first embedding, the project is locked to that model's dimensions. To switch models, use `memory_migrate_embedder` — it re-embeds in the background without data loss.
 
 ---
 

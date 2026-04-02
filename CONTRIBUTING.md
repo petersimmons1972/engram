@@ -94,17 +94,14 @@ docker compose --profile test up -d test-postgres
 ## Running Tests
 
 ```bash
-# All tests (SQLite-backed, fast)
-pytest tests/
+# All tests (skip without TEST_DATABASE_URL)
+pytest tests/ -v
 
-# Specific test file
-pytest tests/test_search.py -v
-
-# PostgreSQL integration tests (requires the test-postgres container)
-DATABASE_URL=postgresql://engram:test@localhost:5433/engram_test pytest tests/test_db_postgres.py -v
+# With a live PostgreSQL instance
+TEST_DATABASE_URL=postgresql://engram:test@localhost:5433/engram_test pytest tests/ -v
 
 # With coverage
-pytest --cov=src/engram tests/
+TEST_DATABASE_URL=postgresql://engram:test@localhost:5433/engram_test pytest --cov=src/engram tests/
 
 # Linting
 ruff check src/ tests/
@@ -113,9 +110,7 @@ ruff check src/ tests/
 mypy src/engram/
 ```
 
-**The SQLite backend is used as the test fixture** — it runs without any external services and covers the full store → recall → correct → forget lifecycle. PostgreSQL is the supported deployment backend; its tests (`test_db_postgres.py`) need the test container and verify everything specific to the Postgres backend (tsvector search, connection pooling, JSONB tags).
-
-If you're adding a feature, add tests in both `test_search.py` (for logic) and `test_db_postgres.py` (for the PostgreSQL implementation) where applicable.
+The integration tests require a running PostgreSQL instance. Set `TEST_DATABASE_URL` to a Postgres DSN before running tests. Tests skip automatically if `TEST_DATABASE_URL` is not set. The `docker compose --profile test up -d test-postgres` command starts a test-only PostgreSQL container on port 5433.
 
 ---
 
@@ -124,32 +119,35 @@ If you're adding a feature, add tests in both `test_search.py` (for logic) and `
 ```
 src/engram/
 ├── server.py       — MCP tool definitions and server entry point (FastMCP)
-├── db.py           — DatabaseBackend protocol + factory (picks Postgres or SQLite)
+├── db.py           — DatabaseBackend protocol + factory (requires DATABASE_URL)
 ├── db_postgres.py  — PostgreSQL backend (psycopg v3, connection pool, tsvector FTS)
-├── db_sqlite.py    — SQLite backend (FTS5, single-file, fallback/testing)
 ├── search.py       — Three-signal scoring engine (BM25 + vector + recency)
 ├── embeddings.py   — Embedding providers: OpenAI, Ollama, Null
+├── summarizer.py   — BackgroundSummarizer daemon (Ollama-powered async summaries)
+├── reembedder.py   — BackgroundReembedder daemon (re-embeds on provider migration)
 ├── chunker.py      — Text chunking with configurable overlap
 ├── markdown_io.py  — memory_dump and memory_ingest (markdown ↔ Memory objects)
 └── types.py        — Pydantic data models (Memory, Chunk, Relationship, etc.)
 
 tests/
-├── conftest.py         — Fixtures, FakeEmbedder, shared test utilities
-├── test_server.py      — MCP tool smoke tests (full store/recall/correct lifecycle)
-├── test_search.py      — SearchEngine unit tests
-├── test_db_postgres.py — PostgreSQL backend integration tests
-├── test_db.py          — SQLite backend tests
-├── test_embeddings.py  — Embedding provider tests
-├── test_markdown_io.py — Dump/ingest round-trip tests
-├── test_consolidate.py — Dedup, decay, prune tests
-├── test_batch.py       — memory_store_batch efficiency tests
+├── conftest.py          — Fixtures, FakeEmbedder, PostgresBackend test setup
+├── test_server.py       — MCP tool smoke tests (full store/recall/correct lifecycle)
+├── test_search.py       — SearchEngine unit tests
+├── test_db.py           — PostgreSQL backend integration tests
+├── test_embeddings.py   — Embedding provider tests
+├── test_markdown_io.py  — Dump/ingest round-trip tests
+├── test_consolidate.py  — Dedup, decay, prune tests
+├── test_integrity.py    — SHA-256 content hash integrity tests
+├── test_summarizer.py   — BackgroundSummarizer unit tests
+├── test_reembedder.py   — BackgroundReembedder and memory_migrate_embedder tests
+├── test_batch.py        — memory_store_batch efficiency tests
 ├── test_immutability.py — Immutable memory flag tests
-├── test_temporal.py    — expires_at and time-range recall tests
-├── test_chunker.py     — Text chunking behavior tests
-└── test_types.py       — Pydantic model validation tests
+├── test_temporal.py     — expires_at and time-range recall tests
+├── test_chunker.py      — Text chunking behavior tests
+└── test_types.py        — Pydantic model validation tests
 ```
 
-Understanding the flow: `server.py` tools call `SearchEngine` methods in `search.py`, which call `DatabaseBackend` methods in `db_postgres.py` or `db_sqlite.py`. The `create_database()` factory in `db.py` picks the right backend based on `DATABASE_URL`.
+Understanding the flow: `server.py` tools call `SearchEngine` methods in `search.py`, which call `DatabaseBackend` methods in `db_postgres.py`. The `create_database()` factory in `db.py` requires a `DATABASE_URL` environment variable pointing to PostgreSQL. Background daemons (`BackgroundSummarizer`, `BackgroundReembedder`) run as daemon threads inside each `SearchEngine` instance.
 
 ---
 
