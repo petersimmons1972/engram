@@ -140,7 +140,7 @@ def _build_content_envelope(
     content: str,
     content_compressed: bytes | None,
     compression_algo: str | None,
-    compressed_at: str | None,
+    compressed_at: "datetime | None",
     content_format: str,
 ) -> dict:
     """Build content fields for a memory response dict based on content_format.
@@ -167,7 +167,7 @@ def _build_content_envelope(
                 "data": _base64.b64encode(content_compressed).decode("ascii"),
                 "algo": compression_algo,
                 "ratio": _compression_ratio_from_fields(content, content_compressed),
-                "compressed_at": compressed_at,
+                "compressed_at": compressed_at.isoformat() if compressed_at else None,
                 "warning": None,
             }
         except CompressionAlgoUnavailableError:

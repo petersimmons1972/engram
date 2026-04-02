@@ -904,18 +904,16 @@ class PostgresBackend:
         memory_id: str,
         compressed: bytes,
         algo: str,
-        compressed_at: str,
+        compressed_at: datetime,
     ) -> bool:
         """Store compressed bytes for a memory. Returns True if row was found and updated."""
-        from datetime import datetime as _dt
-        compressed_at_dt = _dt.fromisoformat(compressed_at) if isinstance(compressed_at, str) else compressed_at
         with self.pool.connection() as conn:
             row = conn.execute(
                 "WITH updated AS ("
                 "  UPDATE memories SET content_compressed=%s, compression_algo=%s, compressed_at=%s"
                 "  WHERE id=%s RETURNING id"
                 ") SELECT count(*) AS c FROM updated",
-                (compressed, algo, compressed_at_dt, memory_id),
+                (compressed, algo, compressed_at, memory_id),
             ).fetchone()
             conn.commit()
             return row["c"] > 0
@@ -1051,8 +1049,7 @@ class PostgresBackend:
         if isinstance(content_compressed, memoryview):
             content_compressed = bytes(content_compressed)
         compression_algo = row.get("compression_algo")
-        compressed_at_raw = row.get("compressed_at")
-        compressed_at = compressed_at_raw.isoformat() if isinstance(compressed_at_raw, datetime) else compressed_at_raw
+        compressed_at = row.get("compressed_at")
 
         # Summary field — added in schema v6; may be None on older rows
         summary = row.get("summary")

@@ -434,7 +434,7 @@ class SearchEngine:
             try:
                 cbytes, algo = compress(content, algorithm)
                 ratio = compression_ratio(content, cbytes)
-                compressed_at = datetime.now(timezone.utc).isoformat()
+                compressed_at = datetime.now(timezone.utc)
                 updated = self.db.update_memory_compression(memory_id, cbytes, algo, compressed_at)
                 if updated:
                     compressed_count += 1

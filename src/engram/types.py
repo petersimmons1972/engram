@@ -53,7 +53,7 @@ class Memory(BaseModel):
     # to prevent raw bytes leaking into MCP tool response dicts.
     content_compressed: bytes | None = Field(default=None, exclude=True)
     compression_algo: str | None = Field(default=None, exclude=True)
-    compressed_at: str | None = Field(default=None, exclude=True)
+    compressed_at: datetime | None = Field(default=None, exclude=True)
     # Summary field — populated asynchronously by BackgroundSummarizer; may be None.
     summary: str | None = Field(default=None)
     # Integrity field — SHA-256 of content, stored in DB, validated on read.
