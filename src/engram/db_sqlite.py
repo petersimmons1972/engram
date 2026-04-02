@@ -102,7 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
 CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project, memory_type);
 """
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 
 class SqliteBackend:
@@ -205,6 +205,18 @@ class SqliteBackend:
                 conn.commit()
             except sqlite3.OperationalError:
                 pass
+        if current < 6:
+            try:
+                conn.execute("ALTER TABLE memories ADD COLUMN summary TEXT")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+            try:
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_summary_null ON memories(id) WHERE summary IS NULL"
+                )
+            except sqlite3.OperationalError:
+                pass
+            conn.commit()
         conn.execute("INSERT OR REPLACE INTO project_meta (key, value) VALUES ('schema_version', ?)",
                      (str(CURRENT_SCHEMA_VERSION),))
         conn.commit()
@@ -847,6 +859,31 @@ class SqliteBackend:
                 "avg_ratio": round(row["avg_ratio"] or 0.0, 3),
             }
 
+    def get_memories_pending_summary(self, project: str, limit: int = 20) -> list[tuple[str, str]]:
+        """Return list of (id, content) for memories where summary IS NULL."""
+        with self._lock:
+            conn = self._get_conn()
+            rows = conn.execute(
+                "SELECT id, content FROM memories WHERE project=? AND summary IS NULL LIMIT ?",
+                (project, limit)
+            ).fetchall()
+        return [(r[0], r[1]) for r in rows]
+
+    def store_summary(self, memory_id: str, summary: str) -> None:
+        with self._lock:
+            conn = self._get_conn()
+            conn.execute("UPDATE memories SET summary=? WHERE id=?", (summary, memory_id))
+            conn.commit()
+
+    def get_pending_summary_count(self, project: str) -> int:
+        with self._lock:
+            conn = self._get_conn()
+            row = conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE project=? AND summary IS NULL",
+                (project,)
+            ).fetchone()
+        return row[0] if row else 0
+
     @property
     def db_dir(self) -> "Path":
         """Return the directory containing this project's database file."""
@@ -882,6 +919,8 @@ class SqliteBackend:
         content_compressed = row["content_compressed"] if "content_compressed" in keys else None
         compression_algo = row["compression_algo"] if "compression_algo" in keys else None
         compressed_at = row["compressed_at"] if "compressed_at" in keys else None
+        # Summary column (optional — added in schema v6)
+        summary = row["summary"] if "summary" in keys else None
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -898,6 +937,7 @@ class SqliteBackend:
             content_compressed=content_compressed,
             compression_algo=compression_algo,
             compressed_at=compressed_at,
+            summary=summary,
         )
 
     @staticmethod

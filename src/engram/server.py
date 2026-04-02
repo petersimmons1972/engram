@@ -18,6 +18,7 @@ from .db import create_database
 from .embeddings import create_embedder
 from .errors import EmbeddingConfigMismatchError
 from .search import SearchEngine
+from .summarizer import OLLAMA_URL, SUMMARIZE_ENABLED, SUMMARIZE_MODEL
 from .types import (
     MAX_CONTENT_LENGTH,
     Memory,
@@ -441,6 +442,7 @@ def memory_recall(
     before: str = "",
     project: str = "",
     content_format: str = "text",
+    include_summary: bool = False,
 ) -> dict:
     """Search memories using all three layers: keyword (BM25), semantic (vector), and graph.
 
@@ -461,6 +463,7 @@ def memory_recall(
         before: Only return memories created at or before this ISO datetime. Empty = no upper bound.
         project: Project namespace (e.g. "my-app"). Empty = "default".
         content_format: "text" (default), "compressed" (include base64 envelope if available), or "compressed_only".
+        include_summary: If True and a summary exists, include "summary" in each result dict.
 
     Returns:
         Ranked list of memories with scores, matched chunks, and connected context.
@@ -542,6 +545,8 @@ def memory_recall(
             entry["superseded_by"] = superseded_by
         if supersedes_list:
             entry["supersedes"] = supersedes_list
+        if include_summary and r.memory.summary:
+            entry["summary"] = r.memory.summary
 
         output.append(entry)
 
@@ -616,6 +621,7 @@ def memory_list(
     limit: int = 20,
     project: str = "",
     content_format: str = "text",
+    include_summary: bool = False,
 ) -> dict:
     """List recent memories with optional filters.
 
@@ -661,7 +667,7 @@ def memory_list(
             compressed_at=m.compressed_at,
             content_format=content_format,
         )
-        result_items.append({
+        item = {
             "id": m.id,
             **content_fields,
             "type": m.memory_type.value,
@@ -670,7 +676,10 @@ def memory_list(
             "access_count": m.access_count,
             "created_at": m.created_at.isoformat(),
             "updated_at": m.updated_at.isoformat(),
-        })
+        }
+        if include_summary and m.summary:
+            item["summary"] = m.summary
+        result_items.append(item)
 
     return {
         "memories": result_items,
@@ -789,6 +798,51 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
 
 
 @mcp.tool()
+def memory_summarize(
+    project: str = "",
+    limit: int = 50,
+    model: str = "",
+) -> dict:
+    """Manually trigger summarization backfill for memories without summaries.
+
+    Runs synchronously (blocking) on the calling thread. For large backlogs,
+    the background summarizer (always running) handles this automatically.
+
+    Args:
+        project: Project namespace (e.g. "my-app"). Empty = "default".
+        limit: Maximum number of memories to summarize in this call (default 50).
+        model: Ollama model name. Empty = use ENGRAM_SUMMARIZE_MODEL env var.
+
+    Returns:
+        Count of summarized/failed memories and remaining backlog size.
+    """
+    from .summarizer import summarize_content as _summarize_content
+
+    proj = _normalize_project(project or "")
+    engine = _get_engine(proj)
+    effective_model = model or SUMMARIZE_MODEL
+
+    pending = engine.db.get_memories_pending_summary(proj, limit=limit)
+    summarized = 0
+    failed = 0
+
+    for memory_id, content in pending:
+        summary = _summarize_content(content, model=effective_model)
+        if summary:
+            engine.db.store_summary(memory_id, summary)
+            summarized += 1
+        else:
+            failed += 1
+
+    return {
+        "summarized": summarized,
+        "failed": failed,
+        "remaining": engine.db.get_pending_summary_count(proj),
+        "model": effective_model,
+    }
+
+
+@mcp.tool()
 def memory_status(project: str = "") -> dict:
     """Get statistics about the memory system.
 
@@ -801,8 +855,16 @@ def memory_status(project: str = "") -> dict:
     """
     logger.debug("memory_status called: project=%s", project)
     engine = _get_engine(project or None)
+    proj = engine.db.project
     stats = engine.db.get_stats()
-    return stats.model_dump()
+    result = stats.model_dump()
+    result["summarization"] = {
+        "pending": engine.db.get_pending_summary_count(proj),
+        "model": SUMMARIZE_MODEL,
+        "enabled": SUMMARIZE_ENABLED,
+        "ollama_url": OLLAMA_URL,
+    }
+    return result
 
 
 @mcp.tool()
