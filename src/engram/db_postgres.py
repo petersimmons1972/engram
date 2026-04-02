@@ -818,7 +818,7 @@ class PostgresBackend:
                     COUNT(*) as total,
                     COUNT(content_compressed) as compressed_count,
                     AVG(CASE WHEN content_compressed IS NOT NULL THEN
-                        CAST(char_length(content) AS REAL) / octet_length(content_compressed)
+                        CAST(octet_length(content) AS REAL) / octet_length(content_compressed)
                         ELSE NULL END) as avg_ratio
                 FROM memories WHERE project = %s""",
                 (project,),

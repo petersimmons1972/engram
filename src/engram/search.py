@@ -131,7 +131,8 @@ class SearchEngine:
                     )
                     all_chunks.append(chunk_obj)
                     all_texts.append(text)
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to process memory %s in batch: %s", memory.id, e)
                 continue  # Skip failed individual memories
 
         if all_texts and self.has_vectors:

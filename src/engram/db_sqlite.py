@@ -833,7 +833,7 @@ class SqliteBackend:
                     COUNT(*) as total,
                     COUNT(content_compressed) as compressed_count,
                     AVG(CASE WHEN content_compressed IS NOT NULL THEN
-                        CAST(LENGTH(content) AS REAL) / LENGTH(content_compressed)
+                        CAST(LENGTH(CAST(content AS BLOB)) AS REAL) / LENGTH(content_compressed)
                         ELSE NULL END) as avg_ratio
                 FROM memories WHERE project = ?""",
                 (project,),
