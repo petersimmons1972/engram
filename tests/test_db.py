@@ -264,7 +264,6 @@ class TestStatsPerProject:
         finally:
             for proj in ("stats-alpha", "stats-beta"):
                 with db_a.pool.connection() as conn:
-                    conn.execute("DELETE FROM chunks WHERE project = %s", (proj,))
                     conn.execute("DELETE FROM memories WHERE project = %s", (proj,))
                     conn.commit()
             db_a.close()
@@ -377,7 +376,7 @@ class TestRelationshipIsolation:
                     "SELECT project FROM relationships WHERE id = %s", (rel.id,)
                 ).fetchone()
             assert row is not None, "Relationship row not found"
-            assert row[0] == "rel-alpha"
+            assert row["project"] == "rel-alpha"
         finally:
             with db.pool.connection() as conn:
                 conn.execute("DELETE FROM relationships WHERE project = %s", ("rel-alpha",))
