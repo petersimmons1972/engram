@@ -5,7 +5,7 @@ import logging
 import os
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_project ON memories(project);
 CREATE INDEX IF NOT EXISTS idx_memories_project_type ON memories(project, memory_type);
 """
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 class SqliteBackend:
@@ -183,6 +183,28 @@ class SqliteBackend:
             except sqlite3.OperationalError:
                 pass  # Column already exists
             conn.commit()
+        if current < 5:
+            try:
+                conn.execute(
+                    "ALTER TABLE memories ADD COLUMN content_compressed BLOB"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
+            try:
+                conn.execute(
+                    "ALTER TABLE memories ADD COLUMN compression_algo TEXT"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
+            try:
+                conn.execute(
+                    "ALTER TABLE memories ADD COLUMN compressed_at TEXT"
+                )
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass
         conn.execute("INSERT OR REPLACE INTO project_meta (key, value) VALUES ('schema_version', ?)",
                      (str(CURRENT_SCHEMA_VERSION),))
         conn.commit()
@@ -277,7 +299,8 @@ class SqliteBackend:
                 mem.importance = importance
 
             conn.execute(
-                """UPDATE memories SET content=?, tags=?, importance=?, updated_at=?
+                """UPDATE memories SET content=?, tags=?, importance=?, updated_at=?,
+                   content_compressed=NULL, compression_algo=NULL, compressed_at=NULL
                    WHERE id=?""",
                 (mem.content, json.dumps(mem.tags), mem.importance, now, memory_id),
             )
@@ -733,6 +756,8 @@ class SqliteBackend:
 
             db_size = os.path.getsize(self.db_path) if self.db_path.exists() else 0
 
+            compression_stats = self.get_compression_stats(self.project)
+
             return MemoryStats(
                 total_memories=total,
                 total_chunks=total_chunks,
@@ -742,15 +767,116 @@ class SqliteBackend:
                 oldest=oldest_row["v"] if oldest_row else None,
                 newest=newest_row["v"] if newest_row else None,
                 db_size_bytes=db_size,
+                compression=compression_stats,
             )
 
-    # ── Helpers ──────────────────────────────────────────────────
+    # ── Compression ──────────────────────────────────────────────
+
+    def get_uncompressed_memories(
+        self,
+        project: str,
+        min_size_chars: int = 500,
+        recompress: bool = False,
+        skip_importance_zero: bool = True,
+        skip_expiring_within_days: int = 7,
+    ) -> list[tuple[str, str]]:
+        """Return list of (id, content) for memories that need compression."""
+        with self._lock:
+            conn = self._get_conn()
+            conditions = ["project = ?", "LENGTH(content) >= ?"]
+            params: list = [project, min_size_chars]
+
+            if not recompress:
+                conditions.append("content_compressed IS NULL")
+
+            if skip_importance_zero:
+                conditions.append("importance > 0")
+
+            # Skip immutable memories (decompression overhead on every read not worth it)
+            conditions.append("immutable = 0")
+
+            if skip_expiring_within_days > 0:
+                cutoff = (datetime.now(timezone.utc) + timedelta(days=skip_expiring_within_days)).isoformat()
+                conditions.append("(expires_at IS NULL OR expires_at > ?)")
+                params.append(cutoff)
+
+            where = " AND ".join(conditions)
+            rows = conn.execute(
+                f"SELECT id, content FROM memories WHERE {where}",
+                params,
+            ).fetchall()
+            return [(row["id"], row["content"]) for row in rows]
+
+    def update_memory_compression(
+        self,
+        memory_id: str,
+        compressed: bytes,
+        algo: str,
+        compressed_at: str,
+    ) -> bool:
+        """Store compressed bytes for a memory. Returns True if row was found and updated."""
+        with self._lock:
+            conn = self._get_conn()
+            cursor = conn.execute(
+                "UPDATE memories SET content_compressed=?, compression_algo=?, compressed_at=? WHERE id=?",
+                (compressed, algo, compressed_at, memory_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_compression_stats(self, project: str) -> dict:
+        """Return compression coverage statistics for a project."""
+        with self._lock:
+            conn = self._get_conn()
+            row = conn.execute(
+                """SELECT
+                    COUNT(*) as total,
+                    COUNT(content_compressed) as compressed_count,
+                    AVG(CASE WHEN content_compressed IS NOT NULL THEN
+                        CAST(LENGTH(content) AS REAL) / LENGTH(content_compressed)
+                        ELSE NULL END) as avg_ratio
+                FROM memories WHERE project = ?""",
+                (project,),
+            ).fetchone()
+            total = row["total"] or 0
+            compressed = row["compressed_count"] or 0
+            return {
+                "total_memories": total,
+                "compressed_count": compressed,
+                "coverage_pct": round(100 * compressed / total, 1) if total else 0.0,
+                "avg_ratio": round(row["avg_ratio"] or 0.0, 3),
+            }
+
+    def list_all_projects(self) -> list[str]:
+        """Return all distinct project names in this database."""
+        with self._lock:
+            conn = self._get_conn()
+            rows = conn.execute(
+                "SELECT DISTINCT project FROM memories ORDER BY project"
+            ).fetchall()
+            return [row["project"] for row in rows]
+
+    def get_all_memory_ids(self, project: str) -> set[str]:
+        """Return all memory IDs for a project."""
+        with self._lock:
+            conn = self._get_conn()
+            rows = conn.execute(
+                "SELECT id FROM memories WHERE project=?", (project,)
+            ).fetchall()
+            return {row["id"] for row in rows}
+
+    # ── Helpers ──────────────────────────────────────────────
 
     @staticmethod
     def _row_to_memory(row: sqlite3.Row) -> Memory:
-        expires_at_raw = row["expires_at"] if "expires_at" in row.keys() else None
+        keys = row.keys()
+        expires_at_raw = row["expires_at"] if "expires_at" in keys else None
         expires_at = datetime.fromisoformat(expires_at_raw) if expires_at_raw else None
-        immutable_raw = row["immutable"] if "immutable" in row.keys() else 0
+        immutable_raw = row["immutable"] if "immutable" in keys else 0
+        # Compression columns (optional — may not exist on old schemas before migration)
+        content_compressed = row["content_compressed"] if "content_compressed" in keys else None
+        compression_algo = row["compression_algo"] if "compression_algo" in keys else None
+        compressed_at = row["compressed_at"] if "compressed_at" in keys else None
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -764,6 +890,9 @@ class SqliteBackend:
             updated_at=datetime.fromisoformat(row["updated_at"]),
             immutable=bool(immutable_raw),
             expires_at=expires_at,
+            content_compressed=content_compressed,
+            compression_algo=compression_algo,
+            compressed_at=compressed_at,
         )
 
     @staticmethod

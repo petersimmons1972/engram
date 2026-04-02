@@ -332,3 +332,73 @@ class TestMemoryStatus:
         memory_store(content="A memory", project="test-project")
         stats = memory_status(project="test-project")
         assert stats["total_memories"] == 1
+
+
+class TestMemoryCompress:
+    def test_memory_compress_dry_run(self, _patch_embedder):
+        """memory_compress dry_run reports without writing."""
+        from engram.server import memory_compress, memory_store
+        memory_store(content="x" * 1000, project="test")
+        result = memory_compress(project="test", dry_run=True)
+        assert result.get("status") == "dry_run"
+        assert "compressed" in result
+
+    def test_memory_recall_content_format_text(self, _patch_embedder):
+        """content_format=text returns plain content, no compressed envelope."""
+        from engram.server import memory_recall, memory_store
+        memory_store(content="hello world " * 100, project="test")
+        results = memory_recall(query="hello", project="test", content_format="text")
+        for r in results["results"]:
+            assert isinstance(r["content"], str)
+            assert "content_compressed" not in r
+
+    def test_memory_recall_content_format_compressed_unready(self, _patch_embedder):
+        """content_format=compressed on uncompressed memory returns text with warning."""
+        from engram.server import memory_recall, memory_store
+        memory_store(content="hello world " * 100, project="test")
+        results = memory_recall(query="hello", project="test", content_format="compressed")
+        for r in results["results"]:
+            assert isinstance(r["content"], str)
+            env = r.get("content_compressed")
+            if env:
+                assert env.get("warning") == "not_yet_compressed"
+
+    def test_memory_recall_content_format_compressed_ready(self, _patch_embedder):
+        """content_format=compressed after compression returns base64 data."""
+        import base64
+        from engram.server import memory_compress, memory_recall, memory_store
+        memory_store(content="x" * 1000, project="test")
+        memory_compress(project="test", algorithm="zlib")
+        results = memory_recall(query="xxx", project="test", content_format="compressed")
+        for r in results["results"]:
+            env = r.get("content_compressed")
+            if env and env.get("data"):
+                decoded = base64.b64decode(env["data"])
+                assert len(decoded) > 0
+                assert env["algo"] == "zlib"
+                assert env["warning"] is None
+
+    def test_memory_compress_unknown_algo_returns_error(self, _patch_embedder):
+        from engram.server import memory_compress
+        result = memory_compress(project="test", algorithm="magic-algo")
+        assert "error" in result
+
+    def test_concurrent_consolidate_returns_already_running(self, _patch_embedder):
+        """Second concurrent consolidate returns already_running status when lock is held."""
+        from engram.server import _get_engine
+        engine = _get_engine("test")
+        # Manually hold the lock to simulate in-progress consolidation
+        engine._consolidation_lock.acquire()
+        try:
+            result = engine.consolidate()
+            assert result.get("status") == "already_running"
+        finally:
+            engine._consolidation_lock.release()
+
+    def test_memory_status_includes_compression(self, _patch_embedder):
+        """memory_status response includes compression sub-dict."""
+        from engram.server import memory_status, memory_store
+        memory_store(content="A memory", project="test")
+        stats = memory_status(project="test")
+        assert "compression" in stats
+        assert "compressed_count" in stats["compression"]

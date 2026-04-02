@@ -262,3 +262,172 @@ def create_snapshot_zip(
 
     logger.info(f"Created snapshot zip: {zip_path}")
     return zip_path
+
+
+def parse_claudemd_memories(
+    file_path: "str | Path",
+    project: str = "global",
+) -> "list[Memory]":
+    """Extract non-operational memories from a CLAUDE.md-style file.
+
+    Extracts lessons/patterns from:
+    - Bullet lists under headings containing: Lessons, Learned, Anti-Pattern, Key, Pattern
+    - Lines matching "(Nx) <lesson text>" format (usage-counted lessons)
+
+    Skips operational content:
+    - Behavioral rules (NEVER/ALWAYS sections)
+    - Workflow steps, CLI commands
+    - Topic file references (lines with " -> " or "→" pointers)
+    - Code blocks
+    """
+    import re as _re
+    from pathlib import Path as _Path
+
+    content = _Path(file_path).read_text(encoding="utf-8")
+    memories: list[Memory] = []
+
+    # Section headings that contain extractable lessons
+    LESSON_HEADING_KEYWORDS = _re.compile(
+        r"lesson|learned|anti.?pattern|key lesson|patterns?|quick ref",
+        _re.IGNORECASE,
+    )
+    # Headings to skip (operational)
+    SKIP_HEADING_KEYWORDS = _re.compile(
+        r"never|always|workflow|rules|critical|decisions|pre.?flight|behavior",
+        _re.IGNORECASE,
+    )
+    # Usage-counted lesson format: "(4x) Lesson text"
+    COUNTED_LESSON = _re.compile(r"^\s*\((\d+)x\)\s+(.+)$")
+    # Topic file reference (skip these)
+    TOPIC_REF = _re.compile(r"[→]|->")
+    # Code block detection
+    in_code_block = False
+
+    current_tags: list[str] = []
+    in_lesson_section = False
+
+    for line in content.splitlines():
+        # Track code blocks
+        if line.strip().startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+
+        # Detect section headings
+        heading_match = _re.match(r"^#{1,3}\s+(.+)$", line)
+        if heading_match:
+            current_heading = heading_match.group(1).strip()
+            if LESSON_HEADING_KEYWORDS.search(current_heading):
+                in_lesson_section = True
+                # Derive tags from heading words
+                words = _re.sub(r"[^a-zA-Z0-9 ]", "", current_heading).lower().split()
+                current_tags = [w for w in words if len(w) > 3][:3]
+            elif SKIP_HEADING_KEYWORDS.search(current_heading):
+                in_lesson_section = False
+            else:
+                in_lesson_section = False
+            continue
+
+        if not in_lesson_section:
+            continue
+
+        # Skip topic file references
+        if TOPIC_REF.search(line):
+            continue
+
+        # Usage-counted format: "(4x) lesson text"
+        counted = COUNTED_LESSON.match(line)
+        if counted:
+            count = int(counted.group(1))
+            lesson_text = counted.group(2).strip()
+            # Higher count = more important = lower importance number
+            importance = max(1, 3 - min(count // 2, 2))
+            memories.append(Memory(
+                content=lesson_text,
+                memory_type=MemoryType.PATTERN,
+                project=project,
+                tags=current_tags + ["lessons-learned"],
+                importance=importance,
+            ))
+            continue
+
+        # Regular bullet point
+        bullet_match = _re.match(r"^\s*[-*]\s+(.+)$", line)
+        if bullet_match:
+            lesson_text = bullet_match.group(1).strip()
+            if len(lesson_text) < 20:  # skip trivially short bullets
+                continue
+            memories.append(Memory(
+                content=lesson_text,
+                memory_type=MemoryType.PATTERN,
+                project=project,
+                tags=current_tags + ["lessons-learned"],
+                importance=2,
+            ))
+
+    return memories
+
+
+def dump_all_projects(
+    db: Any,
+    output_dir: "str | Path",
+    include_compressed: bool = False,
+) -> dict:
+    """Dump all memories from all projects to per-project subdirectories.
+
+    Returns manifest dict with project names and memory counts.
+    """
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    projects = db.list_all_projects()
+    manifest: dict[str, Any] = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "projects": {},
+        "total_memories": 0,
+    }
+
+    for project_name in projects:
+        memories = db.list_memories(
+            memory_type=None, tags=[], min_importance=4, limit=100000,
+        )
+        project_dir = output_path / project_name
+        count = dump_memories_to_directory(memories, project_dir)
+        manifest["projects"][project_name] = count
+        manifest["total_memories"] += count
+
+    return manifest
+
+
+def create_export_readme(manifest: dict, output_dir: "str | Path") -> Path:
+    """Write a README.md to the export directory with re-import instructions."""
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    projects = manifest.get("projects", {})
+    project_lines = "\n".join(
+        f"    engram ingest --project {p} --directory ./{p}/"
+        for p in sorted(projects.keys())
+    )
+    content = f"""# Engram Memory Export
+
+Exported: {manifest['exported_at']} | Projects: {len(projects)} | Memories: {manifest['total_memories']}
+
+## Re-import instructions
+
+To restore to a fresh Engram instance:
+
+{project_lines}
+
+## Format
+
+Each .md file has YAML frontmatter (id, type, tags, importance, created, project)
+followed by the memory content. Compatible with `memory_ingest` / `engram ingest`.
+
+## Projects in this export
+
+{chr(10).join(f"- **{p}**: {c} memories" for p, c in sorted(projects.items()))}
+"""
+    readme_path = output_path / "README.md"
+    readme_path.write_text(content, encoding="utf-8")
+    return readme_path

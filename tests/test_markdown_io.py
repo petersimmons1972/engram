@@ -196,3 +196,118 @@ class TestMarkdownRoundTrip:
         assert result is not None, "Failed to parse frontmatter with --- in YAML value"
         assert result.project == "my---project"
         assert result.content == "Content here"
+
+
+def test_pre_import_backup_created(tmp_path, engine):
+    """create_snapshot_zip produces a dated zip file."""
+    from engram.markdown_io import create_snapshot_zip, ingest_memories_from_directory
+    from engram.types import Memory
+
+    # Store a memory and write a markdown file to import
+    m = Memory(content="existing memory " * 50, project="test")
+    engine.store(m)
+
+    md_file = tmp_path / "001-context-abc12345.md"
+    md_file.write_text(
+        "---\nid: abc12345abc12345abc12345abc12345\ntype: context\ntags: []\n"
+        "importance: 2\nproject: test\ncreated: 2026-01-01T00:00:00+00:00\n"
+        "last_accessed: 2026-01-01T00:00:00+00:00\n---\n\nThis is a new memory to import.\n"
+    )
+
+    memories, failed = ingest_memories_from_directory(tmp_path, project="test")
+    assert len(memories) == 1
+
+    zip_path = create_snapshot_zip(tmp_path, memories, tmp_path)
+    assert zip_path.exists()
+    assert zip_path.suffix == ".zip"
+
+
+def test_claudemd_parser_extracts_lessons():
+    """parse_claudemd_memories extracts counted lessons and skips topic refs."""
+    import os
+    import tempfile
+
+    from engram.markdown_io import parse_claudemd_memories
+
+    content = """# Claude Instructions
+
+## Behavioral Rules
+Never do X. Always do Y.
+
+## Key Lessons
+
+- (4x) Backup before modifying critical files
+- (2x) Validate what the customer sees, not intermediate formats
+- cert-manager patterns -> memory/homelab-cert-manager.md
+
+## Workflow
+1. Step one
+2. Step two
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write(content)
+        fname = f.name
+
+    try:
+        memories = parse_claudemd_memories(fname, project="test")
+        # Should extract the two counted lessons, skip the topic ref and behavioral rules
+        assert len(memories) == 2
+        contents = [m.content for m in memories]
+        assert any("Backup before modifying" in c for c in contents)
+        assert any("Validate what the customer" in c for c in contents)
+        # Topic reference should be skipped
+        assert not any("cert-manager" in c for c in contents)
+    finally:
+        os.unlink(fname)
+
+
+def test_claudemd_parser_skips_operational_sections():
+    """NEVER/ALWAYS/Workflow sections are not extracted."""
+    import os
+    import tempfile
+
+    from engram.markdown_io import parse_claudemd_memories
+
+    content = """# Instructions
+
+## Critical Rules
+NEVER commit secrets.
+ALWAYS run tests.
+
+## Key Lessons
+- (1x) One real lesson here
+
+## Workflow
+- Do this step
+- Do that step
+"""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
+        f.write(content)
+        fname = f.name
+
+    try:
+        memories = parse_claudemd_memories(fname, project="test")
+        assert len(memories) == 1
+        assert "One real lesson" in memories[0].content
+    finally:
+        os.unlink(fname)
+
+
+def test_export_all_creates_readme(tmp_path, engine):
+    """dump_all_projects + create_export_readme produce correct outputs."""
+    from engram.markdown_io import create_export_readme, dump_all_projects
+    from engram.types import Memory
+
+    # Store a memory to ensure there's at least one project
+    m = Memory(content="A test memory for export", project="test")
+    engine.store(m)
+
+    export_dir = tmp_path / "export"
+    manifest = dump_all_projects(engine.db, export_dir)
+    assert "projects" in manifest
+    assert "total_memories" in manifest
+
+    readme = create_export_readme(manifest, export_dir)
+    assert readme.exists()
+    content = readme.read_text()
+    assert "Re-import instructions" in content

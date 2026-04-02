@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 from datetime import datetime, timezone
 
 from .chunker import chunk_hash, chunk_text
@@ -29,6 +30,7 @@ class SearchEngine:
         self.db = db
         self.embedder = embedder
         self._is_null = isinstance(embedder, NullEmbedder)
+        self._consolidation_lock = threading.Lock()
 
     @property
     def has_vectors(self) -> bool:
@@ -333,28 +335,106 @@ class SearchEngine:
         2. Decay all edge strengths and prune weak edges
         3. Prune stale, never-accessed, low-importance memories
         """
-        # Stage 1: Dedup chunks
-        deduped = self._dedup_chunks()
+        if not self._consolidation_lock.acquire(blocking=False):
+            return {
+                "status": "already_running",
+                "chunks_deduped": 0,
+                "edges_decayed": 0,
+                "edges_pruned": 0,
+                "stale_memories_pruned": 0,
+                "message": "Consolidation already in progress for this project",
+            }
+        try:
+            # Stage 1: Dedup chunks
+            deduped = self._dedup_chunks()
 
-        # Stage 1b: Rebuild FTS index to remove stale entries from deduped/pruned memories
-        if deduped > 0:
-            self.db.rebuild_fts()
+            # Stage 1b: Rebuild FTS index to remove stale entries from deduped/pruned memories
+            if deduped > 0:
+                self.db.rebuild_fts()
 
-        # Stage 2: Decay and prune edges
-        decayed, pruned_edges = self.db.decay_all_edges(decay_factor=0.02, min_strength=0.1)
+            # Stage 2: Decay and prune edges
+            decayed, pruned_edges = self.db.decay_all_edges(decay_factor=0.02, min_strength=0.1)
 
-        # Stage 3: Prune stale memories (30 days, low importance, never accessed)
-        pruned_memories = self.db.prune_stale_memories(max_age_hours=720, max_importance=3)
+            # Stage 3: Prune stale memories (30 days, low importance, never accessed)
+            pruned_memories = self.db.prune_stale_memories(max_age_hours=720, max_importance=3)
 
-        # Rebuild FTS if any memories were pruned (triggers may not fire for all deletions)
-        if pruned_memories > 0:
-            self.db.rebuild_fts()
+            # Rebuild FTS if any memories were pruned (triggers may not fire for all deletions)
+            if pruned_memories > 0:
+                self.db.rebuild_fts()
+
+            return {
+                "chunks_deduped": deduped,
+                "edges_decayed": decayed,
+                "edges_pruned": pruned_edges,
+                "stale_memories_pruned": pruned_memories,
+            }
+        finally:
+            self._consolidation_lock.release()
+
+    @property
+    def project(self) -> str:
+        """Convenience accessor for the underlying DB project name."""
+        return self.db.project
+
+    def compress_memories(
+        self,
+        algorithm: str = "zlib",
+        min_size_chars: int = 500,
+        dry_run: bool = False,
+        recompress: bool = False,
+    ) -> dict:
+        """Compress stored memories to reduce context window cost.
+
+        The original ``content`` field is never modified. Compressed bytes are
+        stored in ``content_compressed`` only.
+        """
+        from .compression import compress, compression_ratio, CompressionAlgoUnavailableError
+
+        rows = self.db.get_uncompressed_memories(
+            self.db.project, min_size_chars=min_size_chars, recompress=recompress
+        )
+
+        compressed_count = 0
+        failed_count = 0
+        total_bytes_saved = 0
+        ratios: list[float] = []
+
+        for memory_id, content in rows:
+            if dry_run:
+                try:
+                    cbytes, algo = compress(content, algorithm)
+                    ratio = compression_ratio(content, cbytes)
+                    ratios.append(ratio)
+                    compressed_count += 1
+                except Exception:
+                    failed_count += 1
+                continue
+
+            try:
+                cbytes, algo = compress(content, algorithm)
+                ratio = compression_ratio(content, cbytes)
+                compressed_at = datetime.now(timezone.utc).isoformat()
+                updated = self.db.update_memory_compression(memory_id, cbytes, algo, compressed_at)
+                if updated:
+                    compressed_count += 1
+                    ratios.append(ratio)
+                    total_bytes_saved += max(0, len(content.encode()) - len(cbytes))
+                # If updated=False, memory was deleted between select and update — safe to ignore
+            except CompressionAlgoUnavailableError:
+                raise  # surface this — not a per-memory failure
+            except Exception as e:
+                failed_count += 1
+                logger.warning(f"Failed to compress memory {memory_id}: {e}")
+
+        avg_ratio = round(sum(ratios) / len(ratios), 3) if ratios else 0.0
 
         return {
-            "chunks_deduped": deduped,
-            "edges_decayed": decayed,
-            "edges_pruned": pruned_edges,
-            "stale_memories_pruned": pruned_memories,
+            "status": "dry_run" if dry_run else "compressed",
+            "compressed": compressed_count,
+            "failed": failed_count,
+            "bytes_saved": total_bytes_saved,
+            "avg_ratio": avg_ratio,
+            "algorithm": algorithm,
         }
 
     def _dedup_chunks(self) -> int:
