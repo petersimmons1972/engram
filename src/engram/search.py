@@ -9,6 +9,7 @@ from .chunker import chunk_hash, chunk_text
 from .db import DatabaseBackend
 from .embeddings import EmbeddingProvider, NullEmbedder, cosine_similarity, from_blob, to_blob
 from .errors import EmbeddingConfigMismatchError
+from .summarizer import BackgroundSummarizer
 from .types import (
     Chunk,
     ConnectedMemory,
@@ -31,6 +32,8 @@ class SearchEngine:
         self.embedder = embedder
         self._is_null = isinstance(embedder, NullEmbedder)
         self._consolidation_lock = threading.Lock()
+        self._summarizer = BackgroundSummarizer(db=self.db, project=self.db.project)
+        self._summarizer.start()
 
     @property
     def has_vectors(self) -> bool:
@@ -376,6 +379,10 @@ class SearchEngine:
     def project(self) -> str:
         """Convenience accessor for the underlying DB project name."""
         return self.db.project
+
+    def close(self) -> None:
+        """Stop background threads cleanly."""
+        self._summarizer.stop()
 
     def compress_memories(
         self,

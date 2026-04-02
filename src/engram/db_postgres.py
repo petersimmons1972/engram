@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS project_meta (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
 
 
 class PostgresBackend:
@@ -212,6 +212,23 @@ class PostgresBackend:
                         )
                 except DuplicateColumn:
                     pass
+                conn.commit()
+            if current < 6:
+                try:
+                    with conn.transaction():
+                        conn.execute("ALTER TABLE memories ADD COLUMN summary TEXT")
+                except DuplicateColumn:
+                    pass
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "CREATE INDEX IF NOT EXISTS idx_memories_summary_null ON memories(id) WHERE summary IS NULL"
+                        )
+                except Exception:
+                    pass
+                conn.execute(
+                    "UPDATE project_meta SET value=%s WHERE key='schema_version'", ("6",)
+                )
                 conn.commit()
             conn.execute(
                 "INSERT INTO project_meta (key, value) VALUES ('schema_version', %s) "
@@ -848,6 +865,28 @@ class PostgresBackend:
             ).fetchall()
             return {row["id"] for row in rows}
 
+    def get_memories_pending_summary(self, project: str, limit: int = 20) -> list[tuple[str, str]]:
+        """Return list of (id, content) for memories where summary IS NULL."""
+        with self.pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT id, content FROM memories WHERE project=%s AND summary IS NULL LIMIT %s",
+                (project, limit)
+            ).fetchall()
+        return [(r["id"], r["content"]) for r in rows]
+
+    def store_summary(self, memory_id: str, summary: str) -> None:
+        with self.pool.connection() as conn:
+            conn.execute("UPDATE memories SET summary=%s WHERE id=%s", (summary, memory_id))
+            conn.commit()
+
+    def get_pending_summary_count(self, project: str) -> int:
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE project=%s AND summary IS NULL",
+                (project,)
+            ).fetchone()
+        return row["count"] if row else 0
+
     # ── Helpers ───────────────────────────────────────────────────
 
     @staticmethod
@@ -882,6 +921,9 @@ class PostgresBackend:
         compressed_at_raw = row.get("compressed_at")
         compressed_at = compressed_at_raw.isoformat() if isinstance(compressed_at_raw, datetime) else compressed_at_raw
 
+        # Summary field — added in schema v6; may be None on older rows
+        summary = row.get("summary")
+
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -898,6 +940,7 @@ class PostgresBackend:
             content_compressed=content_compressed,
             compression_algo=compression_algo,
             compressed_at=compressed_at,
+            summary=summary,
         )
 
     @staticmethod

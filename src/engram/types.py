@@ -54,6 +54,8 @@ class Memory(BaseModel):
     content_compressed: bytes | None = Field(default=None, exclude=True)
     compression_algo: str | None = Field(default=None, exclude=True)
     compressed_at: str | None = Field(default=None, exclude=True)
+    # Summary field — populated asynchronously by BackgroundSummarizer; may be None.
+    summary: str | None = Field(default=None)
 
 
 class Chunk(BaseModel):
@@ -100,6 +102,8 @@ class MemoryStats(BaseModel):
     newest: str | None = None
     db_size_bytes: int = 0
     compression: dict = Field(default_factory=dict)
+    pending_summarization: int = 0
+    summarization: dict = Field(default_factory=dict)
 
 
 # Pydantic forward ref resolution
