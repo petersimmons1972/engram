@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64 as _base64
 import logging
 import os
 import re
@@ -128,77 +127,24 @@ def _normalize_project(project: str) -> str:
     return re.sub(r'[^a-z0-9_-]', '', (project or "default").strip().lower()) or "default"
 
 
-def _compression_ratio_from_fields(content: str, compressed: bytes) -> float:
-    """Compute compression ratio from plaintext content and compressed bytes."""
-    if not compressed:
-        return 0.0
-    return round(len(content.encode("utf-8")) / len(compressed), 3)
+def _resolve_content(memory: "Memory", matched_chunk: str, detail: str) -> str:
+    """Return the appropriate content string based on detail level.
 
-
-def _build_content_envelope(
-    memory_id: str,
-    content: str,
-    content_compressed: bytes | None,
-    compression_algo: str | None,
-    compressed_at: "datetime | None",
-    content_format: str,
-) -> dict:
-    """Build content fields for a memory response dict based on content_format.
-
-    INVARIANT: 'content' in the returned dict is ALWAYS the plaintext string.
-    Binary bytes never appear in response dicts — always base64-encoded.
+    "full"    — full original content (exact previous default behaviour)
+    "chunk"   — matched excerpt (~200 chars), falls back to first 300 of content
+    "summary" — 1-2 sentence summary when available, matched_chunk fallback,
+                300-char truncation as last resort
     """
-    from .compression import CompressionAlgoUnavailableError, decompress
-
-    base = {"content": content}  # always present, always plaintext
-
-    if content_format == "text":
-        return base
-
-    # Build compressed envelope
-    compressed_envelope = None
-    warning = None
-
-    if content_compressed is not None:
-        try:
-            # Verify decompressable (round-trip check)
-            decompress(content_compressed, compression_algo or "zlib")
-            compressed_envelope = {
-                "data": _base64.b64encode(content_compressed).decode("ascii"),
-                "algo": compression_algo,
-                "ratio": _compression_ratio_from_fields(content, content_compressed),
-                "compressed_at": compressed_at.isoformat() if compressed_at else None,
-                "warning": None,
-            }
-        except CompressionAlgoUnavailableError:
-            warning = f"algo_unavailable:{compression_algo}"
-            compressed_envelope = None
-        except Exception:
-            warning = "decompression_failed"
-            compressed_envelope = None
-    else:
-        if content_format == "compressed_only":
-            return {"error": f"Memory {memory_id} not yet compressed"}
-        warning = "not_yet_compressed"
-
-    if content_format == "compressed_only":
-        if compressed_envelope:
-            return {"content": content, "content_compressed": compressed_envelope}
-        # Compressed bytes present but undecompressable (corrupt or algo unavailable)
-        return {"error": f"Memory {memory_id} compressed data unavailable: {warning}"}
-
-    if content_format in ("compressed", "both"):
-        result = dict(base)
-        if compressed_envelope:
-            result["content_compressed"] = compressed_envelope
-        elif warning:
-            result["content_compressed"] = {
-                "data": None, "algo": None, "ratio": None,
-                "compressed_at": None, "warning": warning,
-            }
-        return result
-
-    return base  # fallback for unknown format values
+    if detail == "full":
+        return memory.content
+    if detail == "chunk":
+        return matched_chunk if matched_chunk else memory.content[:300]
+    # detail == "summary" (default)
+    if memory.summary:
+        return memory.summary
+    if matched_chunk:
+        return matched_chunk
+    return memory.content[:300]
 
 
 MAX_ENGINE_CACHE_SIZE = 64
@@ -460,8 +406,7 @@ def memory_recall(
     since: str = "",
     before: str = "",
     project: str = "",
-    content_format: str = "text",
-    include_summary: bool = False,
+    detail: str = "summary",
 ) -> dict:
     """Search memories using all three layers: keyword (BM25), semantic (vector), and graph.
 
@@ -481,8 +426,9 @@ def memory_recall(
         since: Only return memories created at or after this ISO datetime (e.g. "2026-03-01T00:00:00+00:00"). Empty = no lower bound.
         before: Only return memories created at or before this ISO datetime. Empty = no upper bound.
         project: Project namespace (e.g. "my-app"). Empty = "default".
-        content_format: "text" (default), "compressed" (include base64 envelope if available), or "compressed_only".
-        include_summary: If True and a summary exists, include "summary" in each result dict.
+        detail: Content verbosity — "summary" (default, 1-2 sentence summary or matched chunk),
+            "chunk" (matched excerpt ~200 chars), or "full" (complete original content).
+            Use "summary" to minimize LLM context window cost.
 
     Returns:
         Ranked list of memories with scores, matched chunks, and connected context.
@@ -529,18 +475,11 @@ def memory_recall(
                 # the old version still exists.
                 supersedes_list.append({"id": c.memory.id, "content": c.memory.content[:300]})
 
-        content_fields = _build_content_envelope(
-            memory_id=r.memory.id,
-            content=r.memory.content,
-            content_compressed=r.memory.content_compressed,
-            compression_algo=r.memory.compression_algo,
-            compressed_at=r.memory.compressed_at,
-            content_format=content_format,
-        )
-
         entry = {
             "id": r.memory.id,
-            **content_fields,
+            "content": _resolve_content(r.memory, r.matched_chunk, detail),
+            "content_length": len(r.memory.content),
+            "summary_available": r.memory.summary is not None,
             "type": r.memory.memory_type.value,
             "tags": r.memory.tags,
             "importance": r.memory.importance,
@@ -564,8 +503,6 @@ def memory_recall(
             entry["superseded_by"] = superseded_by
         if supersedes_list:
             entry["supersedes"] = supersedes_list
-        if include_summary and r.memory.summary:
-            entry["summary"] = r.memory.summary
 
         output.append(entry)
 
@@ -639,8 +576,7 @@ def memory_list(
     min_importance: int = 4,
     limit: int = 20,
     project: str = "",
-    content_format: str = "text",
-    include_summary: bool = False,
+    detail: str = "summary",
 ) -> dict:
     """List recent memories with optional filters.
 
@@ -650,7 +586,7 @@ def memory_list(
         min_importance: Only return memories with importance <= this (0=only critical, 4=all).
         limit: Max number of memories to return.
         project: Project namespace (e.g. "my-app"). Empty = "default".
-        content_format: "text" (default) or "compressed" to include compression envelope.
+        detail: Content verbosity — "summary" (default), "chunk", or "full".
 
     Returns:
         List of memories sorted by most recently updated.
@@ -678,17 +614,11 @@ def memory_list(
 
     result_items = []
     for m in memories:
-        content_fields = _build_content_envelope(
-            memory_id=m.id,
-            content=m.content[:300],
-            content_compressed=m.content_compressed,
-            compression_algo=m.compression_algo,
-            compressed_at=m.compressed_at,
-            content_format=content_format,
-        )
         item = {
             "id": m.id,
-            **content_fields,
+            "content": _resolve_content(m, "", detail),
+            "content_length": len(m.content),
+            "summary_available": m.summary is not None,
             "type": m.memory_type.value,
             "tags": m.tags,
             "importance": m.importance,
@@ -696,8 +626,6 @@ def memory_list(
             "created_at": m.created_at.isoformat(),
             "updated_at": m.updated_at.isoformat(),
         }
-        if include_summary and m.summary:
-            item["summary"] = m.summary
         result_items.append(item)
 
     return {
@@ -930,7 +858,7 @@ def memory_feedback(
 
 
 @mcp.tool()
-def memory_consolidate(project: str = "", compress: bool = False) -> dict:
+def memory_consolidate(project: str = "") -> dict:
     """Run a memory consolidation pass — dedup, decay, and prune.
 
     Three stages:
@@ -948,50 +876,10 @@ def memory_consolidate(project: str = "", compress: bool = False) -> dict:
     Returns:
         Breakdown of chunks deduped, edges decayed/pruned, and stale memories removed.
     """
-    logger.debug("memory_consolidate called: project=%s, compress=%s", project, compress)
+    logger.debug("memory_consolidate called: project=%s", project)
     engine = _get_engine(project or None)
     result = engine.consolidate()
-    if compress:
-        compress_result = engine.compress_memories()
-        result["compression"] = compress_result
     return {"status": "consolidated", **result}
-
-
-@mcp.tool()
-def memory_compress(
-    project: str = "",
-    algorithm: str = "zlib",
-    min_size_chars: int = 500,
-    dry_run: bool = False,
-    recompress: bool = False,
-) -> dict:
-    """Compress stored memories to reduce context window cost.
-
-    Compression is deferred/additive — the original `content` field is ALWAYS preserved.
-    Use `memory_recall(content_format="compressed")` to retrieve compressed form.
-
-    Args:
-        project: Project namespace.
-        algorithm: Compression algorithm — "zlib" (default, stdlib) or "zstd" (requires engram[zstd]).
-        min_size_chars: Skip memories shorter than this (default 500 chars).
-        dry_run: Report what would be compressed without writing.
-        recompress: Re-compress already-compressed memories (useful for algorithm changes).
-    """
-    project = _normalize_project(project)
-    from .compression import SUPPORTED_ALGOS
-    if algorithm not in SUPPORTED_ALGOS:
-        return {"error": f"Unsupported algorithm {algorithm!r}. Available on this installation: {sorted(SUPPORTED_ALGOS)}"}
-
-    engine = _get_engine(project)
-    try:
-        return engine.compress_memories(
-            algorithm=algorithm,
-            min_size_chars=min_size_chars,
-            dry_run=dry_run,
-            recompress=recompress,
-        )
-    except Exception as e:
-        return {"error": str(e)}
 
 
 @mcp.tool()
@@ -1152,7 +1040,6 @@ def memory_migrate_embedder(
 @mcp.tool()
 def memory_export_all(
     output_path: str = "./engram-export",
-    include_compressed: bool = False,
 ) -> dict:
     """Export ALL memories from ALL projects to a portable ZIP archive.
 
@@ -1169,7 +1056,6 @@ def memory_export_all(
 
     Args:
         output_path: Directory to write export into (default: ./engram-export).
-        include_compressed: Include compression metadata in YAML frontmatter.
     """
     from datetime import datetime, timezone
     import json
@@ -1187,7 +1073,7 @@ def memory_export_all(
     export_dir = base_path / export_dir_name
 
     try:
-        manifest = dump_all_projects(engine.db, export_dir, include_compressed=include_compressed)
+        manifest = dump_all_projects(engine.db, export_dir)
         readme_path = create_export_readme(manifest, export_dir)
 
         # Write manifest.json

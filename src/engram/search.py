@@ -397,67 +397,6 @@ class SearchEngine:
         self._summarizer.stop()
         self._reembedder.stop()
 
-    def compress_memories(
-        self,
-        algorithm: str = "zlib",
-        min_size_chars: int = 500,
-        dry_run: bool = False,
-        recompress: bool = False,
-    ) -> dict:
-        """Compress stored memories to reduce context window cost.
-
-        The original ``content`` field is never modified. Compressed bytes are
-        stored in ``content_compressed`` only.
-        """
-        from .compression import compress, compression_ratio, CompressionAlgoUnavailableError
-
-        rows = self.db.get_uncompressed_memories(
-            self.db.project, min_size_chars=min_size_chars, recompress=recompress
-        )
-
-        compressed_count = 0
-        failed_count = 0
-        total_bytes_saved = 0
-        ratios: list[float] = []
-
-        for memory_id, content in rows:
-            if dry_run:
-                try:
-                    cbytes, algo = compress(content, algorithm)
-                    ratio = compression_ratio(content, cbytes)
-                    ratios.append(ratio)
-                    compressed_count += 1
-                except Exception:
-                    failed_count += 1
-                continue
-
-            try:
-                cbytes, algo = compress(content, algorithm)
-                ratio = compression_ratio(content, cbytes)
-                compressed_at = datetime.now(timezone.utc)
-                updated = self.db.update_memory_compression(memory_id, cbytes, algo, compressed_at)
-                if updated:
-                    compressed_count += 1
-                    ratios.append(ratio)
-                    total_bytes_saved += max(0, len(content.encode()) - len(cbytes))
-                # If updated=False, memory was deleted between select and update — safe to ignore
-            except CompressionAlgoUnavailableError:
-                raise  # surface this — not a per-memory failure
-            except Exception as e:
-                failed_count += 1
-                logger.warning(f"Failed to compress memory {memory_id}: {e}")
-
-        avg_ratio = round(sum(ratios) / len(ratios), 3) if ratios else 0.0
-
-        return {
-            "status": "dry_run" if dry_run else "compressed",
-            "compressed": compressed_count,
-            "failed": failed_count,
-            "bytes_saved": total_bytes_saved,
-            "avg_ratio": avg_ratio,
-            "algorithm": algorithm,
-        }
-
     def _dedup_chunks(self) -> int:
         all_chunks = self.db.get_all_chunks_with_embeddings()
         seen_hashes: set[str] = set()

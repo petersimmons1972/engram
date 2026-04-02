@@ -49,11 +49,6 @@ class Memory(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     immutable: bool = False
     expires_at: datetime | None = None
-    # Compression fields — populated by memory_compress, excluded from JSON serialization
-    # to prevent raw bytes leaking into MCP tool response dicts.
-    content_compressed: bytes | None = Field(default=None, exclude=True)
-    compression_algo: str | None = Field(default=None, exclude=True)
-    compressed_at: datetime | None = Field(default=None, exclude=True)
     # Summary field — populated asynchronously by BackgroundSummarizer; may be None.
     summary: str | None = Field(default=None)
     # Integrity field — SHA-256 of content, stored in DB, validated on read.
@@ -103,7 +98,6 @@ class MemoryStats(BaseModel):
     oldest: str | None = None
     newest: str | None = None
     db_size_bytes: int = 0
-    compression: dict = Field(default_factory=dict)
     pending_summarization: int = 0
     summarization: dict = Field(default_factory=dict)
 

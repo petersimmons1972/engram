@@ -372,7 +372,6 @@ def parse_claudemd_memories(
 def dump_all_projects(
     db: Any,
     output_dir: "str | Path",
-    include_compressed: bool = False,
 ) -> dict:
     """Dump all memories from all projects to per-project subdirectories.
 
