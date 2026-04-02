@@ -889,6 +889,11 @@ def memory_status(project: str = "") -> dict:
         "hashed": integrity_stats["hashed"],
         "coverage_pct": round(integrity_stats["hashed"] / integrity_stats["total"] * 100, 1) if integrity_stats["total"] > 0 else 0.0,
     }
+    result["embedding_migration"] = {
+        "in_progress": engine.db.get_meta("embedding_migration_in_progress") == "true",
+        "pending_chunks": engine.db.get_pending_embedding_count(proj),
+        "embedder": engine.db.get_meta("embedder_name") or "none",
+    }
     return result
 
 
@@ -1039,6 +1044,108 @@ def memory_verify(
         "corrupt": stats["corrupt"],
         "fixed": fixed,
         "project": proj,
+    }
+
+
+@mcp.tool()
+def memory_migrate_embedder(
+    project: str = "",
+    new_embedder: str = "",
+    dry_run: bool = False,
+) -> dict:
+    """Switch the embedding provider for a project.
+
+    Nulls all existing chunk embeddings and updates the project's embedder
+    metadata. Vector search degrades to BM25+recency during re-embedding.
+    Re-embedding runs in the background automatically.
+
+    Args:
+        project: Project namespace. Empty = "default".
+        new_embedder: Embedder in "provider/model" format.
+            Examples: "ollama/nomic-embed-text", "openai/text-embedding-3-small"
+        dry_run: If true, report what would happen without making changes.
+
+    Returns:
+        Migration status, chunk count queued, old and new embedder names,
+        and estimated completion time in minutes.
+    """
+    from .embeddings import create_embedder as _create_embedder
+    import os as _os
+
+    proj = _normalize_project(project)
+    engine = _get_engine(proj)
+
+    old_embedder = engine.db.get_meta("embedder_name") or "unknown"
+    total_chunks = engine.db.get_pending_embedding_count(proj)
+
+    if dry_run:
+        # Count all chunks (not just pending) for the dry-run estimate
+        with engine.db.pool.connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS c FROM chunks c "
+                "JOIN memories m ON m.id = c.memory_id "
+                "WHERE m.project = %s",
+                (proj,),
+            ).fetchone()
+        all_chunks = row["c"] if row else 0
+        return {
+            "status": "dry_run",
+            "old_embedder": old_embedder,
+            "new_embedder": new_embedder or "(current)",
+            "chunks_would_be_queued": all_chunks,
+        }
+
+    if not new_embedder:
+        return {"error": "new_embedder is required"}
+
+    # Null all embeddings — triggers BM25-only fallback during migration
+    nulled = engine.db.null_all_embeddings(proj)
+
+    # Parse "provider/model" format
+    parts = new_embedder.split("/", 1)
+    provider = parts[0] if len(parts) > 1 else "ollama"
+    model = parts[1] if len(parts) > 1 else parts[0]
+
+    # Create the new embedder to read its .name and .dimensions, then restore env
+    old_provider_env = _os.environ.get("ENGRAM_EMBEDDER")
+    old_model_env = _os.environ.get("ENGRAM_OLLAMA_MODEL") or _os.environ.get("ENGRAM_OPENAI_MODEL")
+    try:
+        _os.environ["ENGRAM_EMBEDDER"] = provider
+        if provider == "ollama":
+            _os.environ["ENGRAM_OLLAMA_MODEL"] = model
+        elif provider == "openai":
+            _os.environ["ENGRAM_OPENAI_MODEL"] = model
+        new_emb = _create_embedder()
+        engine.db.set_meta("embedder_name", new_emb.name)
+        engine.db.set_meta("embedder_dimensions", str(new_emb.dimensions))
+        engine.db.set_meta("embedder_version", getattr(new_emb, "version", "unknown"))
+    finally:
+        # Restore env — engine will use updated project_meta from now on
+        if old_provider_env is not None:
+            _os.environ["ENGRAM_EMBEDDER"] = old_provider_env
+        elif "ENGRAM_EMBEDDER" in _os.environ:
+            del _os.environ["ENGRAM_EMBEDDER"]
+
+    # Set migration flag and timestamp
+    from datetime import datetime, timezone
+    engine.db.set_meta("embedding_migration_in_progress", "true")
+    engine.db.set_meta("embedding_migration_started_at", datetime.now(timezone.utc).isoformat())
+
+    # Restart the reembedder with the new embedder instance
+    engine._reembedder.stop()
+    from .reembedder import BackgroundReembedder
+    engine._reembedder = BackgroundReembedder(db=engine.db, embedder=new_emb, project=proj)
+    engine._reembedder.start()
+
+    # Rough estimate: ~0.5s per batch of 20
+    estimated_minutes = round((nulled / 20) * 0.5 / 60, 1)
+
+    return {
+        "status": "migration_started",
+        "chunks_queued": nulled,
+        "old_embedder": old_embedder,
+        "new_embedder": new_emb.name,
+        "estimated_minutes": estimated_minutes,
     }
 
 

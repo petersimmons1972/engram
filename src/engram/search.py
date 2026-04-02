@@ -9,6 +9,7 @@ from .chunker import chunk_hash, chunk_text
 from .db import DatabaseBackend
 from .embeddings import EmbeddingProvider, NullEmbedder, cosine_similarity, from_blob, to_blob
 from .errors import EmbeddingConfigMismatchError
+from .reembedder import BackgroundReembedder
 from .summarizer import BackgroundSummarizer
 from .types import (
     Chunk,
@@ -34,6 +35,8 @@ class SearchEngine:
         self._consolidation_lock = threading.Lock()
         self._summarizer = BackgroundSummarizer(db=self.db, project=self.db.project)
         self._summarizer.start()
+        self._reembedder = BackgroundReembedder(db=self.db, embedder=self.embedder, project=self.db.project)
+        self._reembedder.start()
 
     @property
     def has_vectors(self) -> bool:
@@ -45,8 +48,17 @@ class SearchEngine:
 
         On first embed, stores the embedder name and dimensions.
         On subsequent embeds, raises EmbeddingConfigMismatchError on mismatch.
+
+        When a migration is in progress, the embedder metadata has already been
+        updated to the new provider — skip the mismatch check so stores and
+        recalls can continue during re-embedding.
         """
         if self._is_null:
+            return
+
+        # If a migration is in progress, the embedder has already been updated in
+        # project_meta — don't block operations during re-embedding
+        if self.db.get_meta("embedding_migration_in_progress") == "true":
             return
 
         stored_name = self.db.get_meta("embedder_name")
@@ -383,6 +395,7 @@ class SearchEngine:
     def close(self) -> None:
         """Stop background threads cleanly."""
         self._summarizer.stop()
+        self._reembedder.stop()
 
     def compress_memories(
         self,

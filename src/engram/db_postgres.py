@@ -540,6 +540,50 @@ class PostgresBackend:
             conn.commit()
             return row["c"]
 
+    # ── Embedding migration ───────────────────────────────────────
+
+    def null_all_embeddings(self, project: str) -> int:
+        """Set embedding=NULL on all chunks for this project. Returns chunk count."""
+        with self.pool.connection() as conn:
+            result = conn.execute(
+                "UPDATE chunks SET embedding = NULL "
+                "WHERE memory_id IN (SELECT id FROM memories WHERE project = %s)",
+                (project,),
+            )
+            conn.commit()
+        return result.rowcount
+
+    def get_chunks_pending_embedding(self, project: str, limit: int = 50) -> list:
+        """Return Chunk objects with NULL embedding for this project."""
+        with self.pool.connection() as conn:
+            rows = conn.execute(
+                """SELECT c.* FROM chunks c
+                   JOIN memories m ON m.id = c.memory_id
+                   WHERE m.project = %s AND c.embedding IS NULL
+                   ORDER BY m.last_accessed DESC
+                   LIMIT %s""",
+                (project, limit),
+            ).fetchall()
+        return [self._row_to_chunk(r) for r in rows]
+
+    def update_chunk_embedding(self, chunk_id: str, embedding: bytes) -> None:
+        with self.pool.connection() as conn:
+            conn.execute(
+                "UPDATE chunks SET embedding = %s WHERE id = %s",
+                (embedding, chunk_id),
+            )
+            conn.commit()
+
+    def get_pending_embedding_count(self, project: str) -> int:
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS c FROM chunks c "
+                "JOIN memories m ON m.id = c.memory_id "
+                "WHERE m.project = %s AND c.embedding IS NULL",
+                (project,),
+            ).fetchone()
+        return row["c"] if row else 0
+
     # ── Relationship CRUD ─────────────────────────────────────────
 
     def store_relationship(self, rel: Relationship) -> Relationship:
