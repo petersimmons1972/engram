@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64 as _base64
 import logging
 import os
 import re
@@ -119,6 +120,85 @@ and the user's conventions for this codebase. This bootstraps future agents.
 """
 
 mcp = FastMCP("engram", instructions=ENGRAM_INSTRUCTIONS)
+
+
+def _normalize_project(project: str) -> str:
+    """Sanitize a project name for use as a DB namespace."""
+    return re.sub(r'[^a-z0-9_-]', '', (project or "default").strip().lower()) or "default"
+
+
+def _compression_ratio_from_fields(content: str, compressed: bytes) -> float:
+    """Compute compression ratio from plaintext content and compressed bytes."""
+    if not compressed:
+        return 0.0
+    return round(len(content.encode("utf-8")) / len(compressed), 3)
+
+
+def _build_content_envelope(
+    memory_id: str,
+    content: str,
+    content_compressed: bytes | None,
+    compression_algo: str | None,
+    compressed_at: str | None,
+    content_format: str,
+) -> dict:
+    """Build content fields for a memory response dict based on content_format.
+
+    INVARIANT: 'content' in the returned dict is ALWAYS the plaintext string.
+    Binary bytes never appear in response dicts — always base64-encoded.
+    """
+    from .compression import CompressionAlgoUnavailableError, decompress
+
+    base = {"content": content}  # always present, always plaintext
+
+    if content_format == "text":
+        return base
+
+    # Build compressed envelope
+    compressed_envelope = None
+    warning = None
+
+    if content_compressed is not None:
+        try:
+            # Verify decompressable (round-trip check)
+            decompress(content_compressed, compression_algo or "zlib")
+            compressed_envelope = {
+                "data": _base64.b64encode(content_compressed).decode("ascii"),
+                "algo": compression_algo,
+                "ratio": _compression_ratio_from_fields(content, content_compressed),
+                "compressed_at": compressed_at,
+                "warning": None,
+            }
+        except CompressionAlgoUnavailableError:
+            warning = f"algo_unavailable:{compression_algo}"
+            compressed_envelope = None
+        except Exception:
+            warning = "decompression_failed"
+            compressed_envelope = None
+    else:
+        if content_format == "compressed_only":
+            return {"error": f"Memory {memory_id} not yet compressed"}
+        warning = "not_yet_compressed"
+
+    if content_format == "compressed_only":
+        if compressed_envelope:
+            return {"content": content, "content_compressed": compressed_envelope}
+        # Compressed bytes present but undecompressable (corrupt or algo unavailable)
+        return {"error": f"Memory {memory_id} compressed data unavailable: {warning}"}
+
+    if content_format in ("compressed", "both"):
+        result = dict(base)
+        if compressed_envelope:
+            result["content_compressed"] = compressed_envelope
+        elif warning:
+            result["content_compressed"] = {
+                "data": None, "algo": None, "ratio": None,
+                "compressed_at": None, "warning": warning,
+            }
+        return result
+
+    return base  # fallback for unknown format values
+
 
 MAX_ENGINE_CACHE_SIZE = 64
 _engines: OrderedDict[str, SearchEngine] = OrderedDict()
@@ -360,11 +440,12 @@ def memory_recall(
     since: str = "",
     before: str = "",
     project: str = "",
+    content_format: str = "text",
 ) -> dict:
     """Search memories using all three layers: keyword (BM25), semantic (vector), and graph.
 
     Results are ranked by a composite score:
-      Final = (vector * 0.45 + BM25 * 0.25 + recency * 0.15 + graph * 0.15) * importance_multiplier
+      Final = (vector * 0.50 + BM25 * 0.35 + recency * 0.15) * importance_multiplier
 
     Connected memories from the knowledge graph are attached automatically.
 
@@ -379,6 +460,7 @@ def memory_recall(
         since: Only return memories created at or after this ISO datetime (e.g. "2026-03-01T00:00:00+00:00"). Empty = no lower bound.
         before: Only return memories created at or before this ISO datetime. Empty = no upper bound.
         project: Project namespace (e.g. "my-app"). Empty = "default".
+        content_format: "text" (default), "compressed" (include base64 envelope if available), or "compressed_only".
 
     Returns:
         Ranked list of memories with scores, matched chunks, and connected context.
@@ -425,9 +507,18 @@ def memory_recall(
                 # the old version still exists.
                 supersedes_list.append({"id": c.memory.id, "content": c.memory.content[:300]})
 
+        content_fields = _build_content_envelope(
+            memory_id=r.memory.id,
+            content=r.memory.content,
+            content_compressed=r.memory.content_compressed,
+            compression_algo=r.memory.compression_algo,
+            compressed_at=r.memory.compressed_at,
+            content_format=content_format,
+        )
+
         entry = {
             "id": r.memory.id,
-            "content": r.memory.content,
+            **content_fields,
             "type": r.memory.memory_type.value,
             "tags": r.memory.tags,
             "importance": r.memory.importance,
@@ -524,6 +615,7 @@ def memory_list(
     min_importance: int = 4,
     limit: int = 20,
     project: str = "",
+    content_format: str = "text",
 ) -> dict:
     """List recent memories with optional filters.
 
@@ -533,6 +625,7 @@ def memory_list(
         min_importance: Only return memories with importance <= this (0=only critical, 4=all).
         limit: Max number of memories to return.
         project: Project namespace (e.g. "my-app"). Empty = "default".
+        content_format: "text" (default) or "compressed" to include compression envelope.
 
     Returns:
         List of memories sorted by most recently updated.
@@ -558,20 +651,29 @@ def memory_list(
         limit=limit,
     )
 
+    result_items = []
+    for m in memories:
+        content_fields = _build_content_envelope(
+            memory_id=m.id,
+            content=m.content[:300],
+            content_compressed=m.content_compressed,
+            compression_algo=m.compression_algo,
+            compressed_at=m.compressed_at,
+            content_format=content_format,
+        )
+        result_items.append({
+            "id": m.id,
+            **content_fields,
+            "type": m.memory_type.value,
+            "tags": m.tags,
+            "importance": m.importance,
+            "access_count": m.access_count,
+            "created_at": m.created_at.isoformat(),
+            "updated_at": m.updated_at.isoformat(),
+        })
+
     return {
-        "memories": [
-            {
-                "id": m.id,
-                "content": m.content[:300],
-                "type": m.memory_type.value,
-                "tags": m.tags,
-                "importance": m.importance,
-                "access_count": m.access_count,
-                "created_at": m.created_at.isoformat(),
-                "updated_at": m.updated_at.isoformat(),
-            }
-            for m in memories
-        ],
+        "memories": result_items,
         "count": len(memories),
     }
 
@@ -736,7 +838,7 @@ def memory_feedback(
 
 
 @mcp.tool()
-def memory_consolidate(project: str = "") -> dict:
+def memory_consolidate(project: str = "", compress: bool = False) -> dict:
     """Run a memory consolidation pass — dedup, decay, and prune.
 
     Three stages:
@@ -754,10 +856,198 @@ def memory_consolidate(project: str = "") -> dict:
     Returns:
         Breakdown of chunks deduped, edges decayed/pruned, and stale memories removed.
     """
-    logger.debug("memory_consolidate called: project=%s", project)
+    logger.debug("memory_consolidate called: project=%s, compress=%s", project, compress)
     engine = _get_engine(project or None)
     result = engine.consolidate()
+    if compress:
+        compress_result = engine.compress_memories()
+        result["compression"] = compress_result
     return {"status": "consolidated", **result}
+
+
+@mcp.tool()
+def memory_compress(
+    project: str = "",
+    algorithm: str = "zlib",
+    min_size_chars: int = 500,
+    dry_run: bool = False,
+    recompress: bool = False,
+) -> dict:
+    """Compress stored memories to reduce context window cost.
+
+    Compression is deferred/additive — the original `content` field is ALWAYS preserved.
+    Use `memory_recall(content_format="compressed")` to retrieve compressed form.
+
+    Args:
+        project: Project namespace.
+        algorithm: Compression algorithm — "zlib" (default, stdlib) or "zstd" (requires engram[zstd]).
+        min_size_chars: Skip memories shorter than this (default 500 chars).
+        dry_run: Report what would be compressed without writing.
+        recompress: Re-compress already-compressed memories (useful for algorithm changes).
+    """
+    project = _normalize_project(project)
+    from .compression import SUPPORTED_ALGOS
+    if algorithm not in SUPPORTED_ALGOS:
+        return {"error": f"Unsupported algorithm {algorithm!r}. Available on this installation: {sorted(SUPPORTED_ALGOS)}"}
+
+    engine = _get_engine(project)
+    try:
+        return engine.compress_memories(
+            algorithm=algorithm,
+            min_size_chars=min_size_chars,
+            dry_run=dry_run,
+            recompress=recompress,
+        )
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def memory_export_all(
+    output_path: str = "./engram-export",
+    include_compressed: bool = False,
+) -> dict:
+    """Export ALL memories from ALL projects to a portable ZIP archive.
+
+    Use this as the uninstall story: walk away with everything in portable markdown.
+
+    Structure:
+        engram-export-<timestamp>/
+            <project>/
+                001-type-id.md
+                ...
+            README.md
+            manifest.json
+        engram-export-<timestamp>.zip
+
+    Args:
+        output_path: Directory to write export into (default: ./engram-export).
+        include_compressed: Include compression metadata in YAML frontmatter.
+    """
+    from datetime import datetime, timezone
+    import json
+    import zipfile
+    from pathlib import Path
+
+    from .markdown_io import dump_all_projects, create_export_readme
+
+    # Use the global engine to get a DB handle, then access all projects
+    engine = _get_engine("global")
+
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(":", "-") + "Z"
+    export_dir_name = f"engram-export-{timestamp}"
+    base_path = Path(output_path)
+    export_dir = base_path / export_dir_name
+
+    try:
+        manifest = dump_all_projects(engine.db, export_dir, include_compressed=include_compressed)
+        readme_path = create_export_readme(manifest, export_dir)
+
+        # Write manifest.json
+        manifest_path = export_dir / "manifest.json"
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+        # Create ZIP
+        zip_path = base_path / f"{export_dir_name}.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for file_path in export_dir.rglob("*"):
+                if file_path.is_file():
+                    zf.write(file_path, arcname=file_path.relative_to(base_path))
+
+        return {
+            "status": "exported",
+            "projects": list(manifest["projects"].keys()),
+            "total_memories": manifest["total_memories"],
+            "export_dir": str(export_dir),
+            "zip_path": str(zip_path),
+        }
+    except Exception as e:
+        logger.exception("Export failed")
+        return {"error": str(e)}
+
+
+@mcp.tool()
+def memory_import_claudemd(
+    file_path: str,
+    project: str = "global",
+    dry_run: bool = False,
+    backup_dir: str = "",
+) -> dict:
+    """Import non-operational memories from a CLAUDE.md-style file.
+
+    Extracts lessons, patterns, and anti-patterns from structured headings.
+    Does NOT import behavioral rules, workflow steps, or CLI commands.
+    Creates a pre-import backup ZIP before writing anything.
+
+    Args:
+        file_path: Path to CLAUDE.md or similar markdown file.
+        project: Target project namespace (default: "global").
+        dry_run: Preview extracted memories without writing.
+        backup_dir: Where to write pre-import backup ZIP (default: same dir as file_path).
+    """
+    from pathlib import Path
+    project = _normalize_project(project)
+
+    if not Path(file_path).exists():
+        return {"error": f"File not found: {file_path}"}
+
+    from .markdown_io import (
+        create_snapshot_zip,
+        dump_memories_to_directory,
+        parse_claudemd_memories,
+    )
+
+    extracted = parse_claudemd_memories(file_path, project=project)
+
+    if dry_run:
+        return {
+            "status": "dry_run",
+            "extracted": len(extracted),
+            "preview": [
+                {"content": m.content[:100], "type": m.memory_type.value,
+                 "tags": m.tags, "importance": m.importance}
+                for m in extracted[:10]
+            ],
+        }
+
+    if not extracted:
+        return {"status": "no_memories_found", "extracted": 0}
+
+    engine = _get_engine(project)
+
+    # Pre-import backup
+    import tempfile
+    backup_path = None
+    try:
+        current_memories = engine.db.list_memories(
+            memory_type=None, tags=[], min_importance=4, limit=10000
+        )
+        out_dir = backup_dir or str(Path(file_path).parent)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dump_memories_to_directory(current_memories, tmp_dir)
+            backup_zip = create_snapshot_zip(tmp_dir, current_memories, out_dir)
+            backup_path = str(backup_zip)
+    except Exception as e:
+        logger.warning(f"Pre-import backup failed (continuing): {e}")
+
+    # Store extracted memories
+    stored = 0
+    failed = 0
+    for memory in extracted:
+        try:
+            engine.store(memory)
+            stored += 1
+        except Exception as e:
+            failed += 1
+            logger.warning(f"Failed to store memory: {e}")
+
+    return {
+        "status": "imported",
+        "extracted": len(extracted),
+        "stored": stored,
+        "failed": failed,
+        "pre_import_backup": backup_path,
+    }
 
 
 @mcp.tool()
@@ -807,27 +1097,55 @@ def memory_ingest(
     directory: str = "./memory-ingest",
     memory_type: str = "",
     importance: int = 2,
+    backup_dir: str = "",
+    skip_existing_ids: bool = True,
 ) -> dict:
     """Import markdown files from a directory as memories.
 
     Reads all .md files with YAML frontmatter from a directory and stores them as memories.
-    Also creates an install-time snapshot zip containing original files and memory snapshot.
+    Creates a pre-import backup ZIP of existing memories BEFORE writing anything, so
+    existing data is always preserved.
 
     Args:
         project: Project namespace to ingest into (e.g. "my-app"). Empty = "default".
         directory: Directory containing markdown files to import.
         memory_type: Optional type filter - only ingest memories of this type.
         importance: Optional importance override for all ingested memories.
+        backup_dir: Where to write the pre-import backup ZIP. Defaults to the source directory.
+        skip_existing_ids: If True (default), skip memories whose ID already exists in the DB.
+            This makes ingest non-destructive — existing memories are never overwritten.
 
     Returns:
-        Count of memories ingested, path to snapshot zip, and any failed files.
+        Count of memories ingested, path to pre-import backup zip, skipped count, and any failed files.
     """
+    import tempfile
     from pathlib import Path
 
-    from .markdown_io import create_snapshot_zip, ingest_memories_from_directory
+    from .markdown_io import (
+        create_snapshot_zip,
+        dump_memories_to_directory,
+        ingest_memories_from_directory,
+    )
 
     logger.debug("memory_ingest called: project=%s, directory=%s", project, directory)
     engine = _get_engine(project or None)
+
+    # --- Pre-import backup: snapshot existing DB state before writing anything ---
+    pre_import_backup: str | None = None
+    backup_warning: str | None = None
+    try:
+        current_memories = engine.db.list_memories(
+            memory_type=None, tags=[], min_importance=4, limit=100_000
+        )
+        out_dir = backup_dir or directory
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dump_memories_to_directory(current_memories, tmp_dir)
+            backup_zip = create_snapshot_zip(tmp_dir, current_memories, out_dir)
+            pre_import_backup = str(backup_zip)
+            logger.info(f"Pre-import backup created: {pre_import_backup}")
+    except Exception as e:
+        backup_warning = f"Pre-import backup failed: {e}"
+        logger.warning(backup_warning)
 
     # Parse markdown files
     memories, failed = ingest_memories_from_directory(directory, project=engine.db.project)
@@ -839,6 +1157,8 @@ def memory_ingest(
             "count": 0,
             "failed": len(failed),
             "message": f"No memories to ingest from {directory}",
+            "pre_import_backup": pre_import_backup,
+            "backup_warning": backup_warning,
         }
 
     # Apply type filter if specified
@@ -850,9 +1170,22 @@ def memory_ingest(
             pass
 
     # Apply importance override if specified
-    if importance and importance != 2:
+    if importance is not None and importance != 2:
         for m in memories:
             m.importance = max(0, min(4, importance))
+
+    # Skip memories whose ID already exists in the DB (non-destructive ingest)
+    skipped_existing = 0
+    if skip_existing_ids:
+        existing_ids = engine.db.get_all_memory_ids(engine.db.project)
+        to_import = []
+        for m in memories:
+            if m.id in existing_ids:
+                skipped_existing += 1
+                logger.debug(f"Skipping existing memory {m.id}")
+            else:
+                to_import.append(m)
+        memories = to_import
 
     # Store all memories
     stored_count = 0
@@ -863,7 +1196,7 @@ def memory_ingest(
         except Exception as e:
             logger.error(f"Failed to store memory: {e}")
 
-    # Create snapshot zip
+    # Create source-files snapshot zip (existing behavior — documents what was imported)
     snapshot_zip = create_snapshot_zip(directory, memories, ".")
     logger.info(f"Created snapshot zip: {snapshot_zip}")
 
@@ -871,8 +1204,11 @@ def memory_ingest(
         "status": "ingested",
         "project": engine.db.project,
         "count": stored_count,
+        "skipped_existing": skipped_existing,
         "failed": len(failed),
         "failed_files": failed,
+        "pre_import_backup": pre_import_backup,
+        "backup_warning": backup_warning,
         "snapshot_zip": str(snapshot_zip),
     }
 

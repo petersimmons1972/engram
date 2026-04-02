@@ -18,6 +18,7 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
+from psycopg.errors import DuplicateColumn
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
@@ -93,7 +94,7 @@ CREATE TABLE IF NOT EXISTS project_meta (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 class PostgresBackend:
@@ -160,7 +161,7 @@ class PostgresBackend:
                         conn.execute(
                             "ALTER TABLE relationships ADD COLUMN project TEXT NOT NULL DEFAULT ''"
                         )
-                except Exception:
+                except DuplicateColumn:
                     pass  # Column already exists (fresh DB created with new schema)
                 conn.execute(
                     "CREATE INDEX IF NOT EXISTS idx_rel_project ON relationships(project)"
@@ -179,15 +180,38 @@ class PostgresBackend:
                         conn.execute(
                             "ALTER TABLE memories ADD COLUMN immutable BOOLEAN NOT NULL DEFAULT FALSE"
                         )
-                except Exception:
+                except DuplicateColumn:
                     pass  # Column already exists (fresh DB created with new schema)
                 try:
                     with conn.transaction():
                         conn.execute(
                             "ALTER TABLE memories ADD COLUMN expires_at TIMESTAMPTZ"
                         )
-                except Exception:
+                except DuplicateColumn:
                     pass  # Column already exists (fresh DB created with new schema)
+                conn.commit()
+            if current < 5:
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE memories ADD COLUMN content_compressed BYTEA"
+                        )
+                except DuplicateColumn:
+                    pass
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE memories ADD COLUMN compression_algo TEXT"
+                        )
+                except DuplicateColumn:
+                    pass
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE memories ADD COLUMN compressed_at TIMESTAMPTZ"
+                        )
+                except DuplicateColumn:
+                    pass
                 conn.commit()
             conn.execute(
                 "INSERT INTO project_meta (key, value) VALUES ('schema_version', %s) "
@@ -279,7 +303,8 @@ class PostgresBackend:
         with self.pool.connection() as conn:
             conn.execute(
                 """UPDATE memories
-                   SET content = %s, tags = %s, importance = %s, updated_at = %s
+                   SET content = %s, tags = %s, importance = %s, updated_at = %s,
+                   content_compressed = NULL, compression_algo = NULL, compressed_at = NULL
                    WHERE id = %s""",
                 (mem.content, json.dumps(mem.tags), mem.importance, now, memory_id),
             )
@@ -715,6 +740,8 @@ class PostgresBackend:
             oldest = oldest_row["v"].isoformat() if oldest_row and oldest_row["v"] else None
             newest = newest_row["v"].isoformat() if newest_row and newest_row["v"] else None
 
+        compression_stats = self.get_compression_stats(self.project)
+
         return MemoryStats(
             total_memories=total,
             total_chunks=total_chunks,
@@ -724,7 +751,102 @@ class PostgresBackend:
             oldest=oldest,
             newest=newest,
             db_size_bytes=0,  # No single file for Postgres
+            compression=compression_stats,
         )
+
+    # ── Compression ───────────────────────────────────────────────
+
+    def get_uncompressed_memories(
+        self,
+        project: str,
+        min_size_chars: int = 500,
+        recompress: bool = False,
+        skip_importance_zero: bool = True,
+        skip_expiring_within_days: int = 7,
+    ) -> list[tuple[str, str]]:
+        """Return list of (id, content) for memories that need compression."""
+        conditions = ["project = %s", "char_length(content) >= %s"]
+        params: list = [project, min_size_chars]
+
+        if not recompress:
+            conditions.append("content_compressed IS NULL")
+
+        if skip_importance_zero:
+            conditions.append("importance > 0")
+
+        conditions.append("NOT immutable")
+
+        if skip_expiring_within_days > 0:
+            cutoff = datetime.now(timezone.utc) + timedelta(days=skip_expiring_within_days)
+            conditions.append("(expires_at IS NULL OR expires_at > %s)")
+            params.append(cutoff)
+
+        where = " AND ".join(conditions)
+        with self.pool.connection() as conn:
+            rows = conn.execute(
+                f"SELECT id, content FROM memories WHERE {where}",
+                params,
+            ).fetchall()
+            return [(row["id"], row["content"]) for row in rows]
+
+    def update_memory_compression(
+        self,
+        memory_id: str,
+        compressed: bytes,
+        algo: str,
+        compressed_at: str,
+    ) -> bool:
+        """Store compressed bytes for a memory. Returns True if row was found and updated."""
+        from datetime import datetime as _dt
+        compressed_at_dt = _dt.fromisoformat(compressed_at) if isinstance(compressed_at, str) else compressed_at
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "WITH updated AS ("
+                "  UPDATE memories SET content_compressed=%s, compression_algo=%s, compressed_at=%s"
+                "  WHERE id=%s RETURNING id"
+                ") SELECT count(*) AS c FROM updated",
+                (compressed, algo, compressed_at_dt, memory_id),
+            ).fetchone()
+            conn.commit()
+            return row["c"] > 0
+
+    def get_compression_stats(self, project: str) -> dict:
+        """Return compression coverage statistics for a project."""
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                """SELECT
+                    COUNT(*) as total,
+                    COUNT(content_compressed) as compressed_count,
+                    AVG(CASE WHEN content_compressed IS NOT NULL THEN
+                        CAST(char_length(content) AS REAL) / octet_length(content_compressed)
+                        ELSE NULL END) as avg_ratio
+                FROM memories WHERE project = %s""",
+                (project,),
+            ).fetchone()
+            total = row["total"] or 0
+            compressed = row["compressed_count"] or 0
+            return {
+                "total_memories": total,
+                "compressed_count": compressed,
+                "coverage_pct": round(100 * compressed / total, 1) if total else 0.0,
+                "avg_ratio": round(float(row["avg_ratio"] or 0.0), 3),
+            }
+
+    def list_all_projects(self) -> list[str]:
+        """Return all distinct project names in this database."""
+        with self.pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT project FROM memories ORDER BY project"
+            ).fetchall()
+            return [row["project"] for row in rows]
+
+    def get_all_memory_ids(self, project: str) -> set[str]:
+        """Return all memory IDs for a project."""
+        with self.pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT id FROM memories WHERE project=%s", (project,)
+            ).fetchall()
+            return {row["id"] for row in rows}
 
     # ── Helpers ───────────────────────────────────────────────────
 
@@ -752,6 +874,14 @@ class PostgresBackend:
             expires_at_raw = datetime.fromisoformat(expires_at_raw)
         # datetime objects pass through as-is; None stays None
 
+        # Compression fields — may not exist before schema v5
+        content_compressed = row.get("content_compressed")
+        if isinstance(content_compressed, memoryview):
+            content_compressed = bytes(content_compressed)
+        compression_algo = row.get("compression_algo")
+        compressed_at_raw = row.get("compressed_at")
+        compressed_at = compressed_at_raw.isoformat() if isinstance(compressed_at_raw, datetime) else compressed_at_raw
+
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -765,6 +895,9 @@ class PostgresBackend:
             updated_at=updated_at,
             immutable=bool(row.get("immutable", False)),
             expires_at=expires_at_raw,
+            content_compressed=content_compressed,
+            compression_algo=compression_algo,
+            compressed_at=compressed_at,
         )
 
     @staticmethod
