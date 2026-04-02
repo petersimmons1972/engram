@@ -8,7 +8,7 @@ import os
 import re
 import threading
 import time
-from collections import OrderedDict, defaultdict, deque
+from collections import defaultdict, deque
 
 from mcp.server.fastmcp import FastMCP
 
@@ -202,8 +202,10 @@ def _build_content_envelope(
 
 
 MAX_ENGINE_CACHE_SIZE = 64
-_engines: OrderedDict[str, SearchEngine] = OrderedDict()
-_engines_lock = threading.Lock()
+_engines: dict[str, SearchEngine] = {}
+_engines_lock = threading.Lock()            # guards dict reads/writes only
+_creation_locks: dict[str, threading.Lock] = {}
+_creation_locks_lock = threading.Lock()     # guards _creation_locks dict
 
 # Rate limiting for memory_store — sliding window per project
 _RATE_LIMIT_WINDOW = 60  # seconds
@@ -215,24 +217,42 @@ _rate_limit_lock = threading.Lock()
 def _get_engine(project: str | None = None) -> SearchEngine:
     """Return (or create) a SearchEngine for the given project.
 
-    Each project gets its own isolated namespace in the database,
-    so memories are fully isolated between projects. Uses LRU eviction to
-    bound cache size to _MAX_ENGINES entries.
+    Uses double-checked locking: a short global lock guards the cache dict,
+    and per-project locks guard expensive engine creation. Two threads
+    requesting different projects never block each other.
     """
+    raw = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
+    proj = re.sub(r"[^a-z0-9_-]", "", raw) or "default"
+
+    # Fast path — engine already cached
     with _engines_lock:
-        raw = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
-        project = re.sub(r'[^a-z0-9_-]', '', raw) or "default"
-        if project in _engines:
-            _engines.move_to_end(project)
-            return _engines[project]
-        db = create_database(project=project)
+        if proj in _engines:
+            return _engines[proj]
+
+    # Slow path — get or create a per-project creation lock
+    with _creation_locks_lock:
+        if proj not in _creation_locks:
+            _creation_locks[proj] = threading.Lock()
+        proj_lock = _creation_locks[proj]
+
+    with proj_lock:
+        # Double-check after acquiring project lock
+        with _engines_lock:
+            if proj in _engines:
+                return _engines[proj]
+
+        db = create_database(project=proj)
         embedder = create_embedder()
         engine = SearchEngine(db=db, embedder=embedder)
-        _engines[project] = engine
-        if len(_engines) > MAX_ENGINE_CACHE_SIZE:
-            _, evicted = _engines.popitem(last=False)
-            evicted.db.close()
-            logger.info("Evicted least-recently-used engine from cache")
+
+        with _engines_lock:
+            _engines[proj] = engine
+            if len(_engines) > MAX_ENGINE_CACHE_SIZE:
+                oldest = next(iter(_engines))
+                evicted = _engines.pop(oldest)
+                logger.info("Evicted engine for project=%s", oldest)
+                evicted.close()
+
         return engine
 
 
