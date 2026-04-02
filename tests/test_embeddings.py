@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 
 import numpy as np
 import pytest
 
-from engram.db import MemoryDB
+from engram.db_postgres import PostgresBackend
 from engram.embeddings import NullEmbedder, OllamaEmbedder, cosine_similarity, create_embedder, from_blob, to_blob
 from engram.errors import EmbeddingConfigMismatchError
 from engram.search import SearchEngine
 from engram.types import Memory
 from tests.conftest import FakeEmbedder
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("TEST_DATABASE_URL"),
+    reason="No TEST_DATABASE_URL set",
+)
 
 
 class TestNullEmbedder:
@@ -104,96 +109,117 @@ class TestCosineSimilarityDimensionMismatch:
         assert cosine_similarity(a, b) == 0.0
 
 
+def _make_db(project: str) -> PostgresBackend:
+    return PostgresBackend(project=project, dsn=os.environ["TEST_DATABASE_URL"])
+
+
+def _cleanup(db: PostgresBackend, project: str) -> None:
+    with db.pool.connection() as conn:
+        conn.execute("DELETE FROM chunks WHERE project = %s", (project,))
+        conn.execute("DELETE FROM memories WHERE project = %s", (project,))
+        conn.execute("DELETE FROM project_meta WHERE project = %s", (project,))
+        conn.commit()
+    db.close()
+
+
 class TestMetadataEnforcement:
-    def test_first_store_sets_metadata(self, tmp_path: Path):
-        db = MemoryDB(project="meta-test", db_dir=tmp_path)
-        emb = FakeEmbedder()
-        engine = SearchEngine(db=db, embedder=emb)
+    def test_first_store_sets_metadata(self):
+        db = _make_db("meta-test")
+        try:
+            emb = FakeEmbedder()
+            engine = SearchEngine(db=db, embedder=emb)
+            engine.store(Memory(content="First memory"))
+            assert db.get_meta("embedder_name") == "fake/test-embedder"
+            assert db.get_meta("embedder_dimensions") == "64"
+        finally:
+            _cleanup(db, "meta-test")
 
-        engine.store(Memory(content="First memory"))
+    def test_same_embedder_succeeds(self):
+        db = _make_db("meta-test2")
+        try:
+            emb = FakeEmbedder()
+            engine = SearchEngine(db=db, embedder=emb)
+            engine.store(Memory(content="First"))
+            engine.store(Memory(content="Second"))
+        finally:
+            _cleanup(db, "meta-test2")
 
-        assert db.get_meta("embedder_name") == "fake/test-embedder"
-        assert db.get_meta("embedder_dimensions") == "64"
+    def test_different_embedder_raises_error(self):
+        db = _make_db("meta-test3")
+        try:
+            emb1 = FakeEmbedder()
+            engine1 = SearchEngine(db=db, embedder=emb1)
+            engine1.store(Memory(content="Stored with fake embedder"))
 
-    def test_same_embedder_succeeds(self, tmp_path: Path):
-        db = MemoryDB(project="meta-test2", db_dir=tmp_path)
-        emb = FakeEmbedder()
-        engine = SearchEngine(db=db, embedder=emb)
+            class DifferentEmbedder:
+                name = "other/model"
+                dimensions = 128
+                def embed(self, text):
+                    return np.zeros(128, dtype=np.float32)
+                def embed_batch(self, texts, batch_size=64):
+                    return [self.embed(t) for t in texts]
 
-        engine.store(Memory(content="First"))
-        engine.store(Memory(content="Second"))
+            engine2 = SearchEngine(db=db, embedder=DifferentEmbedder())
 
-    def test_different_embedder_raises_error(self, tmp_path: Path):
-        db = MemoryDB(project="meta-test3", db_dir=tmp_path)
+            with pytest.raises(EmbeddingConfigMismatchError) as exc_info:
+                engine2.store(Memory(content="This should fail"))
 
-        emb1 = FakeEmbedder()
-        engine1 = SearchEngine(db=db, embedder=emb1)
-        engine1.store(Memory(content="Stored with fake embedder"))
+            assert "fake/test-embedder" in str(exc_info.value)
+            assert "other/model" in str(exc_info.value)
+        finally:
+            _cleanup(db, "meta-test3")
 
-        class DifferentEmbedder:
-            name = "other/model"
-            dimensions = 128
-            def embed(self, text):
-                return np.zeros(128, dtype=np.float32)
-            def embed_batch(self, texts, batch_size=64):
-                return [self.embed(t) for t in texts]
-
-        engine2 = SearchEngine(db=db, embedder=DifferentEmbedder())
-
-        with pytest.raises(EmbeddingConfigMismatchError) as exc_info:
-            engine2.store(Memory(content="This should fail"))
-
-        assert "fake/test-embedder" in str(exc_info.value)
-        assert "other/model" in str(exc_info.value)
-
-    def test_null_embedder_skips_metadata(self, tmp_path: Path):
-        db = MemoryDB(project="meta-null", db_dir=tmp_path)
-        emb = NullEmbedder()
-        engine = SearchEngine(db=db, embedder=emb)
-
-        engine.store(Memory(content="BM25 only mode"))
-
-        assert db.get_meta("embedder_name") is None
-        assert db.get_meta("embedder_dimensions") is None
+    def test_null_embedder_skips_metadata(self):
+        db = _make_db("meta-null")
+        try:
+            emb = NullEmbedder()
+            engine = SearchEngine(db=db, embedder=emb)
+            engine.store(Memory(content="BM25 only mode"))
+            assert db.get_meta("embedder_name") is None
+            assert db.get_meta("embedder_dimensions") is None
+        finally:
+            _cleanup(db, "meta-null")
 
 
 class TestNullEmbedderSearch:
     """Verify the full store/recall cycle works in BM25-only mode."""
 
-    def test_store_and_recall_bm25_only(self, tmp_path: Path):
-        db = MemoryDB(project="bm25-test", db_dir=tmp_path)
-        emb = NullEmbedder()
-        engine = SearchEngine(db=db, embedder=emb)
+    def test_store_and_recall_bm25_only(self):
+        db = _make_db("bm25-test")
+        try:
+            emb = NullEmbedder()
+            engine = SearchEngine(db=db, embedder=emb)
+            engine.store(Memory(content="PostgreSQL is our main database"))
+            results = engine.recall("PostgreSQL database")
+            assert len(results) >= 1
+            assert "PostgreSQL" in results[0].memory.content
+        finally:
+            _cleanup(db, "bm25-test")
 
-        engine.store(Memory(content="PostgreSQL is our main database"))
-        results = engine.recall("PostgreSQL database")
+    def test_no_vector_score_in_bm25_mode(self):
+        db = _make_db("bm25-score")
+        try:
+            emb = NullEmbedder()
+            engine = SearchEngine(db=db, embedder=emb)
+            engine.store(Memory(content="Authentication uses JWT tokens"))
+            results = engine.recall("JWT authentication")
+            if results:
+                assert results[0].score_breakdown["vector"] == 0.0
+        finally:
+            _cleanup(db, "bm25-score")
 
-        assert len(results) >= 1
-        assert "PostgreSQL" in results[0].memory.content
-
-    def test_no_vector_score_in_bm25_mode(self, tmp_path: Path):
-        db = MemoryDB(project="bm25-score", db_dir=tmp_path)
-        emb = NullEmbedder()
-        engine = SearchEngine(db=db, embedder=emb)
-
-        engine.store(Memory(content="Authentication uses JWT tokens"))
-        results = engine.recall("JWT authentication")
-
-        if results:
-            assert results[0].score_breakdown["vector"] == 0.0
-
-    def test_bm25_dedup_works_without_embeddings(self, tmp_path: Path):
+    def test_bm25_dedup_works_without_embeddings(self):
         """Bug fix: dedup must work in NullEmbedder mode (no embeddings on chunks)."""
-        db = MemoryDB(project="bm25-dedup", db_dir=tmp_path)
-        emb = NullEmbedder()
-        engine = SearchEngine(db=db, embedder=emb)
-
-        engine.store(Memory(content="Exact same content stored twice"))
-        engine.store(Memory(content="Exact same content stored twice"))
-
-        # hash-based dedup should prevent the second chunk from being stored
-        stats = db.get_stats()
-        assert stats.total_chunks == 1
+        db = _make_db("bm25-dedup")
+        try:
+            emb = NullEmbedder()
+            engine = SearchEngine(db=db, embedder=emb)
+            engine.store(Memory(content="Exact same content stored twice"))
+            engine.store(Memory(content="Exact same content stored twice"))
+            stats = db.get_stats()
+            assert stats.total_chunks == 1
+        finally:
+            _cleanup(db, "bm25-dedup")
 
 
 class TestAutoDetectOllamaUrl:
@@ -203,8 +229,6 @@ class TestAutoDetectOllamaUrl:
         monkeypatch.delenv("ENGRAM_EMBEDDER", raising=False)
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-        # Auto-detect will try custom-host, fail (unreachable), and fall back to NullEmbedder.
-        # The important thing is it TRIED the custom URL, not localhost.
         emb = create_embedder()
         assert isinstance(emb, NullEmbedder)
 
@@ -228,14 +252,15 @@ class TestSSRFProtection:
 
 
 class TestMetadataVersion:
-    def test_version_stored_on_first_embed(self, tmp_path: Path):
-        db = MemoryDB(project="version-test", db_dir=tmp_path)
-        emb = FakeEmbedder()
-        engine = SearchEngine(db=db, embedder=emb)
-
-        engine.store(Memory(content="Test version storage"))
-
-        assert db.get_meta("embedder_version") == "v1-test"
+    def test_version_stored_on_first_embed(self):
+        db = _make_db("version-test")
+        try:
+            emb = FakeEmbedder()
+            engine = SearchEngine(db=db, embedder=emb)
+            engine.store(Memory(content="Test version storage"))
+            assert db.get_meta("embedder_version") == "v1-test"
+        finally:
+            _cleanup(db, "version-test")
 
 
 class TestOllamaAuth:

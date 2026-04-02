@@ -1,19 +1,21 @@
-"""Shared fixtures for engram tests.
-
-Provides a FakeEmbedder (deterministic, no API calls), temporary database
-directories, and pre-wired SearchEngine instances for fast, isolated testing.
-"""
+"""Shared fixtures for engram tests."""
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 from typing import Sequence
 
 import numpy as np
 import pytest
 
-from engram.db import MemoryDB
+from engram.db_postgres import PostgresBackend
 from engram.search import SearchEngine
+
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("TEST_DATABASE_URL"),
+    reason="No TEST_DATABASE_URL set",
+)
 
 
 class FakeEmbedder:
@@ -42,15 +44,21 @@ class FakeEmbedder:
 
 
 @pytest.fixture
-def tmp_db_dir(tmp_path: Path) -> Path:
-    """Provide a fresh temporary directory for database files."""
-    return tmp_path
+def db():
+    """PostgresBackend in a clean test project. Cleans up after each test."""
+    dsn = os.environ.get("TEST_DATABASE_URL")
+    if not dsn:
+        pytest.skip("No TEST_DATABASE_URL set")
 
-
-@pytest.fixture
-def db(tmp_db_dir: Path) -> MemoryDB:
-    """Provide a MemoryDB instance in a temp directory."""
-    return MemoryDB(project="test", db_dir=tmp_db_dir)
+    backend = PostgresBackend(project="test", dsn=dsn)
+    yield backend
+    with backend.pool.connection() as conn:
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM relationships")
+        conn.execute("DELETE FROM memories")
+        conn.execute("DELETE FROM project_meta")
+        conn.commit()
+    backend.close()
 
 
 @pytest.fixture
@@ -59,6 +67,6 @@ def embedder() -> FakeEmbedder:
 
 
 @pytest.fixture
-def engine(db: MemoryDB, embedder: FakeEmbedder) -> SearchEngine:
-    """Provide a SearchEngine wired to a temp DB and fake embedder."""
+def engine(db, embedder: FakeEmbedder) -> SearchEngine:
+    """Provide a SearchEngine wired to a Postgres DB and fake embedder."""
     return SearchEngine(db=db, embedder=embedder)

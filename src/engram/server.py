@@ -225,8 +225,7 @@ def _get_engine(project: str | None = None) -> SearchEngine:
         if project in _engines:
             _engines.move_to_end(project)
             return _engines[project]
-        db_dir = os.environ.get("ENGRAM_DIR", None)
-        db = create_database(project=project, db_dir=db_dir)
+        db = create_database(project=project)
         embedder = create_embedder()
         engine = SearchEngine(db=db, embedder=embedder)
         _engines[project] = engine

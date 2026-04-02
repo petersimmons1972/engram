@@ -8,21 +8,30 @@ async complexity while still validating the full store -> recall -> correct
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
 
 import pytest
 
-from engram.db import MemoryDB
+from engram.db_postgres import PostgresBackend
 from engram.search import SearchEngine
 from tests.conftest import FakeEmbedder
 
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("TEST_DATABASE_URL"),
+    reason="No TEST_DATABASE_URL set",
+)
+
 
 @pytest.fixture(autouse=True)
-def _isolate_engines(tmp_path: Path, monkeypatch):
-    """Ensure each test gets a fresh engine pool with temp DB dir."""
+def _isolate_engines(monkeypatch):
+    """Ensure each test gets a fresh engine pool backed by TEST_DATABASE_URL."""
+    dsn = os.environ.get("TEST_DATABASE_URL")
+    if not dsn:
+        pytest.skip("No TEST_DATABASE_URL set")
     import engram.server as srv
     srv._engines.clear()
-    monkeypatch.setenv("ENGRAM_DIR", str(tmp_path))
+    # Point server's create_database at the test database
+    monkeypatch.setenv("DATABASE_URL", dsn)
     monkeypatch.setenv("ENGRAM_EMBEDDER", "none")
     yield
     srv._engines.clear()
@@ -30,22 +39,38 @@ def _isolate_engines(tmp_path: Path, monkeypatch):
 
 @pytest.fixture
 def _patch_embedder(monkeypatch):
-    """Patch _get_engine to use FakeEmbedder instead of real one."""
+    """Patch _get_engine to use FakeEmbedder and PostgresBackend."""
     import engram.server as srv
 
     def patched_get_engine(project=None):
-        import os
         import re
         raw = (project or "default").strip().lower()
-        project = re.sub(r'[^a-z0-9_-]', '', raw) or "default"
-        if project not in srv._engines:
-            db_dir = os.environ.get("ENGRAM_DIR", None)
-            db = MemoryDB(project=project, db_dir=db_dir)
+        project_key = re.sub(r'[^a-z0-9_-]', '', raw) or "default"
+        if project_key not in srv._engines:
+            dsn = os.environ["TEST_DATABASE_URL"]
+            db = PostgresBackend(project=project_key, dsn=dsn)
             embedder = FakeEmbedder()
-            srv._engines[project] = SearchEngine(db=db, embedder=embedder)
-        return srv._engines[project]
+            srv._engines[project_key] = SearchEngine(db=db, embedder=embedder)
+        return srv._engines[project_key]
 
     monkeypatch.setattr(srv, "_get_engine", patched_get_engine)
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_test_data():
+    """Remove test rows from Postgres after each test."""
+    yield
+    dsn = os.environ.get("TEST_DATABASE_URL")
+    if not dsn:
+        return
+    db = PostgresBackend(project="__cleanup__", dsn=dsn)
+    with db.pool.connection() as conn:
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM relationships")
+        conn.execute("DELETE FROM memories")
+        conn.execute("DELETE FROM project_meta")
+        conn.commit()
+    db.close()
 
 
 class TestMemoryStoreRecall:
@@ -158,18 +183,15 @@ class TestInputValidation:
 
     def test_rate_limit_blocks_excess_calls(self, _patch_embedder):
         import engram.server as srv
-        # Use a fresh project key and patch the limit to 3 for speed
         proj = "rate-limit-test"
         original_max = srv._RATE_LIMIT_MAX
         srv._RATE_LIMIT_MAX = 3
-        # Clear any prior state for this project
         with srv._rate_limit_lock:
             srv._store_calls.pop(proj, None)
         try:
             for _ in range(3):
                 r = srv.memory_store(content="ok", project=proj)
                 assert "error" not in r
-            # 4th call must be rejected
             r = srv.memory_store(content="overflow", project=proj)
             assert "error" in r
             assert "Rate limit" in r["error"]
@@ -201,7 +223,7 @@ class TestAuthMiddleware:
 
         scope = {"type": "websocket", "headers": []}
         await wrapped(scope, None, mock_send)
-        assert len(responses) > 0  # Should have sent a rejection
+        assert len(responses) > 0
 
     @pytest.mark.asyncio
     async def test_auth_allows_lifespan(self):
@@ -215,7 +237,7 @@ class TestAuthMiddleware:
         wrapped = _wrap_with_api_key_auth(fake_app, "test-key")
         scope = {"type": "lifespan"}
         await wrapped(scope, None, None)
-        assert called  # App should have been called
+        assert called
 
     @pytest.mark.asyncio
     async def test_auth_rejects_unknown_scope(self):
@@ -239,7 +261,7 @@ class TestProjectNormalization:
     def test_project_name_normalized_consistently(self, _patch_embedder):
         from engram.server import memory_recall, memory_store
 
-        result = memory_store(content="Test content for normalization", project="My-App")
+        memory_store(content="Test content for normalization", project="My-App")
         recall = memory_recall(query="Test", project="my-app")
         assert recall["count"] >= 1
 
@@ -268,11 +290,9 @@ class TestEngineCacheLRU:
             for i in range(5):
                 srv._get_engine(f"proj-{i}")
             assert len(srv._engines) <= 3
-            # Most recent 3 should survive
             assert "proj-4" in srv._engines
             assert "proj-3" in srv._engines
             assert "proj-2" in srv._engines
-            # Oldest should be evicted
             assert "proj-0" not in srv._engines
             assert "proj-1" not in srv._engines
         finally:
@@ -292,9 +312,7 @@ class TestEngineCacheLRU:
             srv._get_engine("proj-a")
             srv._get_engine("proj-b")
             srv._get_engine("proj-c")
-            # Access proj-a again (moves to end, so proj-b is now oldest)
             srv._get_engine("proj-a")
-            # Adding one more should evict proj-b (the LRU)
             srv._get_engine("proj-d")
             assert "proj-a" in srv._engines
             assert "proj-c" in srv._engines
@@ -387,7 +405,6 @@ class TestMemoryCompress:
         """Second concurrent consolidate returns already_running status when lock is held."""
         from engram.server import _get_engine
         engine = _get_engine("test")
-        # Manually hold the lock to simulate in-progress consolidation
         engine._consolidation_lock.acquire()
         try:
             result = engine.consolidate()

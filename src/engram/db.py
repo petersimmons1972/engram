@@ -1,9 +1,4 @@
-"""Database abstraction layer for engram.
-
-Provides a ``DatabaseBackend`` protocol that both SQLite and Postgres backends
-implement, a ``create_database`` factory driven by the ``DATABASE_URL`` env-var,
-and a backwards-compatible ``MemoryDB`` re-export so existing imports keep working.
-"""
+"""Database abstraction layer for engram."""
 
 from __future__ import annotations
 
@@ -19,7 +14,7 @@ from .types import Chunk, Memory, MemoryStats, MemoryType, Relationship
 # ── Helpers ──────────────────────────────────────────────────────────
 
 def _normalize_project(project: str) -> str:
-    """Sanitize a project name to safe filesystem/table characters."""
+    """Sanitize a project name to safe table characters."""
     return re.sub(r"[^a-zA-Z0-9_-]", "", project) or "default"
 
 
@@ -27,7 +22,7 @@ def _normalize_project(project: str) -> str:
 
 @runtime_checkable
 class DatabaseBackend(Protocol):
-    """Common interface that every engram storage backend must implement."""
+    """Common interface every engram storage backend must implement."""
 
     project: str
 
@@ -104,34 +99,16 @@ class DatabaseBackend(Protocol):
 
 # ── Factory ──────────────────────────────────────────────────────────
 
-def create_database(
-    project: str = "default",
-    db_dir: str | Path | None = None,
-) -> DatabaseBackend:
-    """Create the appropriate backend based on the ``DATABASE_URL`` env var.
+def create_database(project: str = "default") -> "DatabaseBackend":
+    """Create a PostgresBackend from the DATABASE_URL env var.
 
-    * If ``DATABASE_URL`` starts with ``"postgresql"``, returns a
-      ``PostgresBackend`` (imported lazily to avoid hard dependency on psycopg).
-    * Otherwise returns a ``SqliteBackend``.
+    Raises RuntimeError if DATABASE_URL is not set.
     """
+    from .db_postgres import PostgresBackend
     database_url = os.environ.get("DATABASE_URL", "")
-
-    if database_url.startswith("postgresql"):
-        from .db_postgres import PostgresBackend  # type: ignore[import-not-found]
-        return PostgresBackend(project=_normalize_project(project), dsn=database_url)
-
-    from .db_sqlite import SqliteBackend
-    return SqliteBackend(project=_normalize_project(project), db_dir=db_dir)
+    if not database_url:
+        raise RuntimeError("DATABASE_URL environment variable is required")
+    return PostgresBackend(project=_normalize_project(project), dsn=database_url)
 
 
-# ── Backwards-compatible re-export ───────────────────────────────────
-
-from .db_sqlite import SqliteBackend as MemoryDB  # noqa: E402, F811
-
-__all__ = [
-    "DatabaseBackend",
-    "MemoryDB",
-    "SqliteBackend",
-    "create_database",
-    "_normalize_project",
-]
+__all__ = ["DatabaseBackend", "create_database", "_normalize_project"]

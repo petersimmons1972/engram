@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from engram.search import SearchEngine
 from engram.types import Memory, MemoryType, Relationship, RelationType
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("TEST_DATABASE_URL"),
+    reason="No TEST_DATABASE_URL set",
+)
 
 
 class TestStoreRecallRoundTrip:
@@ -133,15 +140,23 @@ class TestBM25Normalization:
 
 
 class TestBM25OnlyWeights:
-    def test_bm25_only_redistributes_vector_weight(self, tmp_path):
-        from engram.db import MemoryDB
+    def test_bm25_only_redistributes_vector_weight(self):
+        from engram.db_postgres import PostgresBackend
         from engram.embeddings import NullEmbedder
-        db = MemoryDB(project="bm25weights", db_dir=tmp_path)
-        engine = SearchEngine(db=db, embedder=NullEmbedder())
-        engine.store(Memory(content="Test BM25 weight redistribution"))
-        results = engine.recall("BM25 weight")
-        if results:
-            assert results[0].score_breakdown["vector"] == 0.0
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="bm25weights", dsn=dsn)
+        try:
+            engine = SearchEngine(db=db, embedder=NullEmbedder())
+            engine.store(Memory(content="Test BM25 weight redistribution"))
+            results = engine.recall("BM25 weight")
+            if results:
+                assert results[0].score_breakdown["vector"] == 0.0
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("bm25weights",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("bm25weights",))
+                conn.commit()
+            db.close()
 
 
 class TestStoreDedup:
@@ -206,22 +221,30 @@ class TestSimplifiedScoring:
         variance = mults[0] / mults[4]
         assert variance <= 2.0, f"Importance variance {variance} > 2.0"
 
-    def test_bm25_single_result_normalization(self, tmp_path):
+    def test_bm25_single_result_normalization(self):
         """Single result must have valid BM25 score (not NaN/Inf)."""
         import math
 
-        from engram.db import MemoryDB
+        from engram.db_postgres import PostgresBackend
         from engram.embeddings import NullEmbedder
-        db = MemoryDB(project="bm25single", db_dir=tmp_path)
-        engine = SearchEngine(db=db, embedder=NullEmbedder())
-        engine.store(Memory(content="Unique xylophone testing content"))
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="bm25single", dsn=dsn)
+        try:
+            engine = SearchEngine(db=db, embedder=NullEmbedder())
+            engine.store(Memory(content="Unique xylophone testing content"))
 
-        results = engine.recall("xylophone")
-        assert len(results) == 1
-        bm25_score = results[0].score_breakdown["bm25"]
-        assert not math.isnan(bm25_score), "BM25 score is NaN"
-        assert not math.isinf(bm25_score), "BM25 score is Inf"
-        assert bm25_score == 1.0, f"Single result BM25 should be 1.0, got {bm25_score}"
+            results = engine.recall("xylophone")
+            assert len(results) == 1
+            bm25_score = results[0].score_breakdown["bm25"]
+            assert not math.isnan(bm25_score), "BM25 score is NaN"
+            assert not math.isinf(bm25_score), "BM25 score is Inf"
+            assert bm25_score == 1.0, f"Single result BM25 should be 1.0, got {bm25_score}"
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("bm25single",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("bm25single",))
+                conn.commit()
+            db.close()
 
     def test_connected_memories_still_attached(self, engine):
         """Graph enrichment must survive — connected list populated."""
@@ -241,92 +264,116 @@ class TestSimplifiedScoring:
         other_id = m2.id if top.memory.id == m1.id else m1.id
         assert other_id in connected_ids, "Connected memories not attached"
 
-    def test_null_embedder_weight_redistribution(self, tmp_path):
+    def test_null_embedder_weight_redistribution(self):
         """With NullEmbedder, BM25 must get full non-recency weight."""
-        from engram.db import MemoryDB
+        from engram.db_postgres import PostgresBackend
         from engram.embeddings import NullEmbedder
-        db = MemoryDB(project="nullredist", db_dir=tmp_path)
-        engine = SearchEngine(db=db, embedder=NullEmbedder())
-        engine.store(Memory(content="Test null embedder weight redistribution"))
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="nullredist", dsn=dsn)
+        try:
+            engine = SearchEngine(db=db, embedder=NullEmbedder())
+            engine.store(Memory(content="Test null embedder weight redistribution"))
 
-        results = engine.recall("null embedder weight")
-        assert len(results) >= 1
-        bd = results[0].score_breakdown
-        assert bd["vector"] == 0.0, "Vector should be 0 with NullEmbedder"
-        # BM25 should get all non-recency weight (i.e., 1.0 - WEIGHT_RECENCY)
-        # For a single result with BM25=1.0 and recency~1.0, total before importance
-        # should be approximately (1.0 - WEIGHT_RECENCY) * 1.0 + WEIGHT_RECENCY * recency
-        # The key check: no weight goes to graph, and vector weight goes to BM25
-        assert "graph" not in bd, "graph should not be in score_breakdown"
+            results = engine.recall("null embedder weight")
+            assert len(results) >= 1
+            bd = results[0].score_breakdown
+            assert bd["vector"] == 0.0, "Vector should be 0 with NullEmbedder"
+            assert "graph" not in bd, "graph should not be in score_breakdown"
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("nullredist",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("nullredist",))
+                conn.commit()
+            db.close()
 
 
 class TestTransactionalStore:
     """B6: Transactional store — atomic memory+chunks+embeddings with rollback."""
 
-    def test_failed_embedding_leaves_no_orphan(self, tmp_path):
+    def test_failed_embedding_leaves_no_orphan(self):
         """Mock embedder to raise. Assert no orphan memory or chunks in DB."""
         from unittest.mock import MagicMock
 
-        from engram.db import MemoryDB
+        from engram.db_postgres import PostgresBackend
         from engram.search import SearchEngine
 
-        db = MemoryDB(project="txntest1", db_dir=tmp_path)
-        embedder = MagicMock()
-        embedder.name = "mock/embedder"
-        embedder.dimensions = 64
-        embedder.version = "v1-mock"
-        engine = SearchEngine(db=db, embedder=embedder)
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="txntest1", dsn=dsn)
+        try:
+            embedder = MagicMock()
+            embedder.name = "mock/embedder"
+            embedder.dimensions = 64
+            embedder.version = "v1-mock"
+            engine = SearchEngine(db=db, embedder=embedder)
 
-        # Make embed_batch raise after memory is stored
-        embedder.embed_batch.side_effect = RuntimeError("Embedding service down")
+            embedder.embed_batch.side_effect = RuntimeError("Embedding service down")
 
-        mem = Memory(content="This should not persist if embedding fails")
-        with pytest.raises(ValueError, match="Failed to store memory"):
-            engine.store(mem)
+            mem = Memory(content="This should not persist if embedding fails")
+            with pytest.raises(ValueError, match="Failed to store memory"):
+                engine.store(mem)
 
-        # No orphan memory or chunks should remain
-        stats = db.get_stats()
-        assert stats.total_memories == 0, f"Orphan memory found: {stats.total_memories}"
-        assert stats.total_chunks == 0, f"Orphan chunks found: {stats.total_chunks}"
+            stats = db.get_stats()
+            assert stats.total_memories == 0, f"Orphan memory found: {stats.total_memories}"
+            assert stats.total_chunks == 0, f"Orphan chunks found: {stats.total_chunks}"
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("txntest1",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("txntest1",))
+                conn.commit()
+            db.close()
 
-    def test_failed_chunk_store_rolls_back_memory(self, tmp_path):
+    def test_failed_chunk_store_rolls_back_memory(self):
         """Mock db.store_chunks to raise. Assert memory is also gone."""
         from unittest.mock import patch
 
-        from engram.db import MemoryDB
+        from engram.db_postgres import PostgresBackend
         from engram.search import SearchEngine
         from tests.conftest import FakeEmbedder
 
-        db = MemoryDB(project="txntest2", db_dir=tmp_path)
-        engine = SearchEngine(db=db, embedder=FakeEmbedder())
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="txntest2", dsn=dsn)
+        try:
+            engine = SearchEngine(db=db, embedder=FakeEmbedder())
 
-        with patch.object(db, "store_chunks", side_effect=RuntimeError("DB write error")):
-            with pytest.raises((RuntimeError, ValueError)):
-                engine.store(Memory(content="This should not persist if chunk store fails"))
+            with patch.object(db, "store_chunks", side_effect=RuntimeError("DB write error")):
+                with pytest.raises((RuntimeError, ValueError)):
+                    engine.store(Memory(content="This should not persist if chunk store fails"))
 
-        # Memory should be rolled back too
-        stats = db.get_stats()
-        assert stats.total_memories == 0, f"Orphan memory found: {stats.total_memories}"
+            stats = db.get_stats()
+            assert stats.total_memories == 0, f"Orphan memory found: {stats.total_memories}"
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("txntest2",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("txntest2",))
+                conn.commit()
+            db.close()
 
-    def test_successful_store_is_atomic(self, tmp_path):
+    def test_successful_store_is_atomic(self):
         """Store succeeds: both memory and chunks appear together."""
-        from engram.db import MemoryDB
+        from engram.db_postgres import PostgresBackend
         from engram.search import SearchEngine
         from tests.conftest import FakeEmbedder
 
-        db = MemoryDB(project="txntest3", db_dir=tmp_path)
-        engine = SearchEngine(db=db, embedder=FakeEmbedder())
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="txntest3", dsn=dsn)
+        try:
+            engine = SearchEngine(db=db, embedder=FakeEmbedder())
 
-        stored = engine.store(Memory(content="Atomic store test memory"))
-        stats = db.get_stats()
-        assert stats.total_memories == 1
-        assert stats.total_chunks >= 1
+            stored = engine.store(Memory(content="Atomic store test memory"))
+            stats = db.get_stats()
+            assert stats.total_memories == 1
+            assert stats.total_chunks >= 1
 
-        # Delete should remove both
-        db.delete_memory_atomic(stored.id)
-        stats2 = db.get_stats()
-        assert stats2.total_memories == 0
-        assert stats2.total_chunks == 0
+            db.delete_memory_atomic(stored.id)
+            stats2 = db.get_stats()
+            assert stats2.total_memories == 0
+            assert stats2.total_chunks == 0
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("txntest3",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("txntest3",))
+                conn.commit()
+            db.close()
 
 
 class TestGoldenQueryRegression:
@@ -433,31 +480,34 @@ class TestGoldenQueryRegression:
 class TestFTSFirst:
     """B4: FTS-first retrieval — vector search scoped to FTS candidates only."""
 
-    def test_fts_candidates_limit_vector_scope(self, tmp_path):
+    def test_fts_candidates_limit_vector_scope(self):
         """Store many memories. Recall should NOT load all embeddings."""
         from unittest.mock import patch
 
-        from engram.db import MemoryDB
+        from engram.db_postgres import PostgresBackend
         from engram.search import SearchEngine
-
-        db = MemoryDB(project="ftsscope", db_dir=tmp_path)
-
         from tests.conftest import FakeEmbedder
-        embedder = FakeEmbedder()
-        engine = SearchEngine(db=db, embedder=embedder)
 
-        # Store 30 memories with unique words so FTS can find them
-        for i in range(30):
-            engine.store(Memory(content=f"Memory number {i} about topic alpha bravo charlie"))
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="ftsscope", dsn=dsn)
+        try:
+            embedder = FakeEmbedder()
+            engine = SearchEngine(db=db, embedder=embedder)
 
-        # Patch get_all_chunks_with_embeddings to detect if it's called
-        original = db.get_all_chunks_with_embeddings
-        with patch.object(db, "get_all_chunks_with_embeddings", wraps=original) as spy:
-            results = engine.recall("alpha bravo charlie", top_k=5)
-            assert len(results) >= 1
-            # The key assertion: get_all_chunks_with_embeddings must NOT be called
-            # when FTS returns enough candidates
-            spy.assert_not_called()
+            for i in range(30):
+                engine.store(Memory(content=f"Memory number {i} about topic alpha bravo charlie"))
+
+            original = db.get_all_chunks_with_embeddings
+            with patch.object(db, "get_all_chunks_with_embeddings", wraps=original) as spy:
+                results = engine.recall("alpha bravo charlie", top_k=5)
+                assert len(results) >= 1
+                spy.assert_not_called()
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("ftsscope",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("ftsscope",))
+                conn.commit()
+            db.close()
 
     def test_fts_first_still_returns_semantic_matches(self, engine):
         """Vector re-rank must still work on FTS candidates."""
@@ -465,42 +515,46 @@ class TestFTSFirst:
         engine.store(Memory(content="We use Postgres for persistence"))
 
         results = engine.recall("relational database choice")
-        # At least one should be returned (BM25 finds "database", vector helps rank)
         assert len(results) >= 1
         top_content = " ".join(r.memory.content for r in results)
         assert "database" in top_content.lower() or "Postgres" in top_content
 
-    def test_bm25_only_mode_unchanged(self, tmp_path):
+    def test_bm25_only_mode_unchanged(self):
         """NullEmbedder path must still work with FTS-first."""
-        from engram.db import MemoryDB
+        from engram.db_postgres import PostgresBackend
         from engram.embeddings import NullEmbedder
         from engram.search import SearchEngine
 
-        db = MemoryDB(project="bm25only", db_dir=tmp_path)
-        engine = SearchEngine(db=db, embedder=NullEmbedder())
-
-        engine.store(Memory(content="BM25 only mode testing with unique words"))
-        results = engine.recall("BM25 testing unique")
-        assert len(results) >= 1
-        assert "BM25" in results[0].memory.content
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="bm25only", dsn=dsn)
+        try:
+            engine = SearchEngine(db=db, embedder=NullEmbedder())
+            engine.store(Memory(content="BM25 only mode testing with unique words"))
+            results = engine.recall("BM25 testing unique")
+            assert len(results) >= 1
+            assert "BM25" in results[0].memory.content
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM chunks WHERE project = %s", ("bm25only",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("bm25only",))
+                conn.commit()
+            db.close()
 
     def test_vector_fallback_when_fts_insufficient(self, engine):
         """When FTS returns < top_k, vector fills remaining slots."""
-        # Store a memory with no lexical overlap with the query
         engine.store(Memory(content="The cat sat on the mat quietly"))
-        # Store a memory with lexical overlap
         engine.store(Memory(content="Dogs are loyal animals and great pets"))
 
-        # Query that partially matches one but not both via BM25
         results = engine.recall("loyal pets animals", top_k=5)
         assert len(results) >= 1
-        # The lexical match should be found
         assert any("loyal" in r.memory.content for r in results)
 
-    def test_get_chunks_for_memories_method_exists(self, tmp_path):
+    def test_get_chunks_for_memories_method_exists(self):
         """DB backend must have get_chunks_for_memories method."""
-        from engram.db import MemoryDB
-        db = MemoryDB(project="methodcheck", db_dir=tmp_path)
+        from engram.db_postgres import PostgresBackend
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="methodcheck", dsn=dsn)
         assert hasattr(db, "get_chunks_for_memories"), (
-            "SqliteBackend must implement get_chunks_for_memories(memory_ids)"
+            "PostgresBackend must implement get_chunks_for_memories(memory_ids)"
         )
+        db.close()

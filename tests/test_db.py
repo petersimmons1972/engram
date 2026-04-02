@@ -1,19 +1,24 @@
-"""Tests for engram.db.MemoryDB -- CRUD, FTS, relationships, project isolation."""
+"""Tests for engram database backend -- CRUD, FTS, relationships, project isolation."""
 
 from __future__ import annotations
 
+import os
 import threading
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import pytest
 
-from engram.db import MemoryDB
+from engram.db_postgres import PostgresBackend
 from engram.types import Memory, MemoryType, Relationship, RelationType
+
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("TEST_DATABASE_URL"),
+    reason="No TEST_DATABASE_URL set",
+)
 
 
 class TestMemoryCRUD:
-    def test_store_and_retrieve(self, db: MemoryDB):
+    def test_store_and_retrieve(self, db):
         mem = Memory(content="PostgreSQL chosen for the main database")
         stored = db.store_memory(mem)
 
@@ -22,10 +27,10 @@ class TestMemoryCRUD:
         assert retrieved.content == "PostgreSQL chosen for the main database"
         assert retrieved.project == "test"
 
-    def test_get_nonexistent_returns_none(self, db: MemoryDB):
+    def test_get_nonexistent_returns_none(self, db):
         assert db.get_memory("does-not-exist") is None
 
-    def test_update_memory(self, db: MemoryDB):
+    def test_update_memory(self, db):
         mem = Memory(content="Old content", tags=["old"])
         stored = db.store_memory(mem)
 
@@ -34,17 +39,17 @@ class TestMemoryCRUD:
         assert updated.content == "New content"
         assert updated.tags == ["new"]
 
-    def test_delete_memory(self, db: MemoryDB):
+    def test_delete_memory(self, db):
         mem = Memory(content="To be deleted")
         stored = db.store_memory(mem)
 
         assert db.delete_memory(stored.id) is True
         assert db.get_memory(stored.id) is None
 
-    def test_delete_nonexistent_returns_false(self, db: MemoryDB):
+    def test_delete_nonexistent_returns_false(self, db):
         assert db.delete_memory("nope") is False
 
-    def test_touch_increments_access(self, db: MemoryDB):
+    def test_touch_increments_access(self, db):
         mem = Memory(content="Touch me")
         stored = db.store_memory(mem)
 
@@ -53,7 +58,7 @@ class TestMemoryCRUD:
         retrieved = db.get_memory(stored.id)
         assert retrieved.access_count == 2
 
-    def test_list_memories_filters_by_type(self, db: MemoryDB):
+    def test_list_memories_filters_by_type(self, db):
         db.store_memory(Memory(content="A decision", memory_type=MemoryType.DECISION))
         db.store_memory(Memory(content="An error", memory_type=MemoryType.ERROR))
         db.store_memory(Memory(content="A pattern", memory_type=MemoryType.PATTERN))
@@ -62,7 +67,7 @@ class TestMemoryCRUD:
         assert len(decisions) == 1
         assert decisions[0].memory_type == MemoryType.DECISION
 
-    def test_list_memories_filters_by_importance(self, db: MemoryDB):
+    def test_list_memories_filters_by_importance(self, db):
         db.store_memory(Memory(content="Critical", importance=0))
         db.store_memory(Memory(content="Trivial", importance=4))
 
@@ -70,7 +75,7 @@ class TestMemoryCRUD:
         assert len(critical) == 1
         assert critical[0].content == "Critical"
 
-    def test_list_memories_filters_by_tags(self, db: MemoryDB):
+    def test_list_memories_filters_by_tags(self, db):
         db.store_memory(Memory(content="Auth stuff", tags=["auth", "jwt"]))
         db.store_memory(Memory(content="DB stuff", tags=["postgres", "sql"]))
 
@@ -80,54 +85,55 @@ class TestMemoryCRUD:
 
 
 class TestProjectIsolation:
-    def test_separate_db_files(self, tmp_db_dir: Path):
-        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
-        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
+    def test_memories_do_not_leak(self):
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db_a = PostgresBackend(project="isolation-alpha", dsn=dsn)
+        db_b = PostgresBackend(project="isolation-beta", dsn=dsn)
+        try:
+            db_a.store_memory(Memory(content="Alpha secret"))
+            db_b.store_memory(Memory(content="Beta secret"))
 
-        assert db_a.db_path != db_b.db_path
-        assert db_a.db_path.name == "alpha.db"
-        assert db_b.db_path.name == "beta.db"
+            alpha_mems = db_a.list_memories()
+            beta_mems = db_b.list_memories()
 
-    def test_memories_do_not_leak(self, tmp_db_dir: Path):
-        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
-        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
+            assert len(alpha_mems) == 1
+            assert alpha_mems[0].content == "Alpha secret"
+            assert len(beta_mems) == 1
+            assert beta_mems[0].content == "Beta secret"
+        finally:
+            with db_a.pool.connection() as conn:
+                conn.execute(
+                    "DELETE FROM memories WHERE project = %s", ("isolation-alpha",)
+                )
+                conn.commit()
+            with db_b.pool.connection() as conn:
+                conn.execute(
+                    "DELETE FROM memories WHERE project = %s", ("isolation-beta",)
+                )
+                conn.commit()
+            db_a.close()
+            db_b.close()
 
-        db_a.store_memory(Memory(content="Alpha secret"))
-        db_b.store_memory(Memory(content="Beta secret"))
-
-        alpha_mems = db_a.list_memories()
-        beta_mems = db_b.list_memories()
-
-        assert len(alpha_mems) == 1
-        assert alpha_mems[0].content == "Alpha secret"
-        assert len(beta_mems) == 1
-        assert beta_mems[0].content == "Beta secret"
-
-    def test_fts_isolated_between_projects(self, tmp_db_dir: Path):
-        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
-        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
-
-        db_a.store_memory(Memory(content="Alpha uses PostgreSQL for everything"))
-
-        results = db_b.fts_search("PostgreSQL")
-        assert len(results) == 0
-
-
-class TestFTSRebuildStaleCleanup:
-    def test_rebuild_fts_removes_stale_entries(self, db: MemoryDB):
-        mem = db.store_memory(Memory(content="Ephemeral data to be deleted"))
-        assert len(db.fts_search("Ephemeral")) > 0
-        # Delete the memory directly (bypassing triggers won't fire for manual FTS cleanup)
-        conn = db._get_conn()
-        conn.execute("DELETE FROM memories WHERE id = ?", (mem.id,))
-        conn.commit()
-        # Rebuild should clean up stale FTS entries
-        db.rebuild_fts()
-        assert len(db.fts_search("Ephemeral")) == 0
+    def test_fts_isolated_between_projects(self):
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db_a = PostgresBackend(project="fts-alpha", dsn=dsn)
+        db_b = PostgresBackend(project="fts-beta", dsn=dsn)
+        try:
+            db_a.store_memory(Memory(content="Alpha uses PostgreSQL for everything"))
+            results = db_b.fts_search("PostgreSQL")
+            assert len(results) == 0
+        finally:
+            with db_a.pool.connection() as conn:
+                conn.execute(
+                    "DELETE FROM memories WHERE project = %s", ("fts-alpha",)
+                )
+                conn.commit()
+            db_a.close()
+            db_b.close()
 
 
 class TestFTSSearch:
-    def test_basic_search(self, db: MemoryDB):
+    def test_basic_search(self, db):
         db.store_memory(Memory(content="JWT authentication with refresh tokens"))
         db.store_memory(Memory(content="Database migration using alembic"))
 
@@ -135,19 +141,19 @@ class TestFTSSearch:
         assert len(results) >= 1
         assert "JWT" in results[0][0].content
 
-    def test_empty_query_returns_empty(self, db: MemoryDB):
+    def test_empty_query_returns_empty(self, db):
         db.store_memory(Memory(content="Some content"))
         results = db.fts_search("")
         assert results == []
 
-    def test_no_match_returns_empty(self, db: MemoryDB):
+    def test_no_match_returns_empty(self, db):
         db.store_memory(Memory(content="Python web framework"))
         results = db.fts_search("quantum entanglement")
         assert len(results) == 0
 
 
 class TestRelationships:
-    def test_store_and_get_connected(self, db: MemoryDB):
+    def test_store_and_get_connected(self, db):
         m1 = db.store_memory(Memory(content="Memory A"))
         m2 = db.store_memory(Memory(content="Memory B"))
 
@@ -162,7 +168,7 @@ class TestRelationships:
         assert connected[0][0].id == m2.id
         assert connected[0][1] == "relates_to"
 
-    def test_supersedes_relationship(self, db: MemoryDB):
+    def test_supersedes_relationship(self, db):
         old = db.store_memory(Memory(content="Use MySQL"))
         new = db.store_memory(Memory(content="Use PostgreSQL instead"))
 
@@ -176,7 +182,7 @@ class TestRelationships:
         assert len(connected) == 1
         assert connected[0][1] == "supersedes"
 
-    def test_boost_and_decay_edges(self, db: MemoryDB):
+    def test_boost_and_decay_edges(self, db):
         m1 = db.store_memory(Memory(content="A"))
         m2 = db.store_memory(Memory(content="B"))
 
@@ -194,7 +200,7 @@ class TestRelationships:
         connected = db.get_connected(m1.id)
         assert connected[0][3] == pytest.approx(0.4, abs=0.01)
 
-    def test_delete_relationships_for_memory(self, db: MemoryDB):
+    def test_delete_relationships_for_memory(self, db):
         m1 = db.store_memory(Memory(content="A"))
         m2 = db.store_memory(Memory(content="B"))
 
@@ -226,25 +232,8 @@ class TestTagFilterBeforeLimit:
         assert len(results) == 10
 
 
-class TestBFSPhantomNodes:
-    def test_deleted_memory_not_in_frontier(self, db):
-        m1 = db.store_memory(Memory(content="Existing"))
-        m2 = db.store_memory(Memory(content="Will be deleted"))
-        rel = Relationship(source_id=m1.id, target_id=m2.id)
-        db.store_relationship(rel)
-        # Delete the memory but relationship persists (bypass CASCADE with FK off)
-        conn = db._get_conn()
-        conn.execute("PRAGMA foreign_keys=OFF")
-        conn.execute("DELETE FROM memories WHERE id = ?", (m2.id,))
-        conn.execute("PRAGMA foreign_keys=ON")
-        conn.commit()
-        connected = db.get_connected(m1.id, max_hops=2)
-        for mem, *_ in connected:
-            assert mem is not None
-
-
 class TestStats:
-    def test_stats_reflect_stored_data(self, db: MemoryDB):
+    def test_stats_reflect_stored_data(self, db):
         db.store_memory(Memory(content="Decision 1", memory_type=MemoryType.DECISION))
         db.store_memory(Memory(content="Error 1", memory_type=MemoryType.ERROR))
 
@@ -255,41 +244,31 @@ class TestStats:
 
 
 class TestStatsPerProject:
-    def test_chunks_counted_per_project(self, tmp_db_dir):
+    def test_chunks_counted_per_project(self):
         from engram.search import SearchEngine
         from tests.conftest import FakeEmbedder
 
-        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
-        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
-        eng_a = SearchEngine(db=db_a, embedder=FakeEmbedder())
-        eng_b = SearchEngine(db=db_b, embedder=FakeEmbedder())
-        eng_a.store(Memory(content="Alpha memory about databases"))
-        eng_b.store(Memory(content="Beta memory about APIs"))
-        eng_b.store(Memory(content="Beta memory about auth"))
-        stats_a = db_a.get_stats()
-        stats_b = db_b.get_stats()
-        assert stats_a.total_chunks >= 1
-        assert stats_b.total_chunks >= 2
-
-
-class TestFTSRebuild:
-    def test_rebuild_fts_restores_search(self, db):
-        db.store_memory(Memory(content="PostgreSQL database"))
-        # Verify search works
-        assert len(db.fts_search("PostgreSQL")) >= 1
-
-        # Clear FTS index content (simulates index corruption/staleness)
-        conn = db._get_conn()
-        conn.execute("INSERT INTO memory_fts(memory_fts) VALUES('delete-all')")
-        conn.commit()
-
-        # Search should return nothing now
-        assert db.fts_search("PostgreSQL") == []
-
-        # Rebuild should fix it
-        db.rebuild_fts()
-        results = db.fts_search("PostgreSQL")
-        assert len(results) >= 1
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db_a = PostgresBackend(project="stats-alpha", dsn=dsn)
+        db_b = PostgresBackend(project="stats-beta", dsn=dsn)
+        try:
+            eng_a = SearchEngine(db=db_a, embedder=FakeEmbedder())
+            eng_b = SearchEngine(db=db_b, embedder=FakeEmbedder())
+            eng_a.store(Memory(content="Alpha memory about databases"))
+            eng_b.store(Memory(content="Beta memory about APIs"))
+            eng_b.store(Memory(content="Beta memory about auth"))
+            stats_a = db_a.get_stats()
+            stats_b = db_b.get_stats()
+            assert stats_a.total_chunks >= 1
+            assert stats_b.total_chunks >= 2
+        finally:
+            for proj in ("stats-alpha", "stats-beta"):
+                with db_a.pool.connection() as conn:
+                    conn.execute("DELETE FROM chunks WHERE project = %s", (proj,))
+                    conn.execute("DELETE FROM memories WHERE project = %s", (proj,))
+                    conn.commit()
+            db_a.close()
+            db_b.close()
 
 
 class TestTransactionSafety:
@@ -318,33 +297,34 @@ class TestTransactionSafety:
 
 
 class TestPruning:
-    def test_prune_stale_memories(self, db: MemoryDB):
+    def test_prune_stale_memories(self, db):
         old = Memory(content="Old and forgotten", importance=4)
         stored = db.store_memory(old)
 
-        conn = db._get_conn()
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
-        conn.execute(
-            "UPDATE memories SET last_accessed = ? WHERE id = ?",
-            (cutoff, stored.id),
-        )
-        conn.commit()
+        # Back-date last_accessed via the Postgres pool
+        cutoff = datetime.now(timezone.utc) - timedelta(days=31)
+        with db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE memories SET last_accessed = %s WHERE id = %s",
+                (cutoff, stored.id),
+            )
+            conn.commit()
 
         pruned = db.prune_stale_memories(max_age_hours=720, max_importance=3)
         assert pruned == 1
         assert db.get_memory(stored.id) is None
 
-    def test_important_memories_survive_pruning(self, db: MemoryDB):
+    def test_important_memories_survive_pruning(self, db):
         important = Memory(content="Critical decision", importance=0)
         stored = db.store_memory(important)
 
-        conn = db._get_conn()
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
-        conn.execute(
-            "UPDATE memories SET last_accessed = ? WHERE id = ?",
-            (cutoff, stored.id),
-        )
-        conn.commit()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=60)
+        with db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE memories SET last_accessed = %s WHERE id = %s",
+                (cutoff, stored.id),
+            )
+            conn.commit()
 
         pruned = db.prune_stale_memories(max_age_hours=720, max_importance=3)
         assert pruned == 0
@@ -352,8 +332,9 @@ class TestPruning:
 
 
 class TestThreadSafety:
-    def test_concurrent_stores(self, tmp_db_dir):
-        db = MemoryDB(project="threadsafe", db_dir=tmp_db_dir)
+    def test_concurrent_stores(self):
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="threadsafe", dsn=dsn)
         errors = []
 
         def store_batch(start):
@@ -368,136 +349,85 @@ class TestThreadSafety:
             t.start()
         for t in threads:
             t.join()
+
         assert not errors, f"Errors: {errors}"
         mems = db.list_memories(limit=200)
         assert len(mems) == 100
 
-    def test_close_releases_connection(self, tmp_db_dir):
-        db = MemoryDB(project="closetest", db_dir=tmp_db_dir)
-        db.store_memory(Memory(content="test"))
+        with db.pool.connection() as conn:
+            conn.execute("DELETE FROM memories WHERE project = %s", ("threadsafe",))
+            conn.commit()
         db.close()
-        assert db._conn is None
-
-    def test_context_manager(self, tmp_db_dir):
-        with MemoryDB(project="ctxtest", db_dir=tmp_db_dir) as db:
-            db.store_memory(Memory(content="test"))
-        assert db._conn is None
-
-
-class TestSchemaMigration:
-    def test_schema_version_stored(self, tmp_db_dir):
-        db = MemoryDB(project="migration", db_dir=tmp_db_dir)
-        version = db.get_meta("schema_version")
-        assert version is not None
-        assert int(version) >= 2
-
-    def test_date_indexes_exist(self, tmp_db_dir):
-        db = MemoryDB(project="indexes", db_dir=tmp_db_dir)
-        conn = db._get_conn()
-        indexes = conn.execute("SELECT name FROM sqlite_master WHERE type='index'").fetchall()
-        index_names = {r["name"] for r in indexes}
-        assert "idx_memories_last_accessed" in index_names
-        assert "idx_memories_updated_at" in index_names
-        assert "idx_memories_project" in index_names
-
-    def test_old_db_gets_migrated(self, tmp_db_dir):
-        db = MemoryDB(project="olddb", db_dir=tmp_db_dir)
-        conn = db._get_conn()
-        conn.execute("DELETE FROM project_meta WHERE key = 'schema_version'")
-        conn.commit()
-        db.close()
-        db2 = MemoryDB(project="olddb", db_dir=tmp_db_dir)
-        version = db2.get_meta("schema_version")
-        assert version == "6"
 
 
 class TestRelationshipIsolation:
-    def test_relationship_stores_project_column(self, tmp_db_dir):
+    def test_relationship_stores_project_column(self):
         """After storing a relationship, the DB row must have a project column
-        matching the engine's project."""
-        db = MemoryDB(project="alpha", db_dir=tmp_db_dir)
-        m1 = db.store_memory(Memory(content="Alpha memory one"))
-        m2 = db.store_memory(Memory(content="Alpha memory two"))
-        rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
-        db.store_relationship(rel)
+        matching the backend's project."""
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db = PostgresBackend(project="rel-alpha", dsn=dsn)
+        try:
+            m1 = db.store_memory(Memory(content="Alpha memory one"))
+            m2 = db.store_memory(Memory(content="Alpha memory two"))
+            rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
+            db.store_relationship(rel)
 
-        # Query raw DB to verify the project column exists and matches
-        conn = db._get_conn()
-        row = conn.execute("SELECT project FROM relationships WHERE id = ?", (rel.id,)).fetchone()
-        assert row is not None, "Relationship row not found"
-        assert row["project"] == "alpha"
+            with db.pool.connection() as conn:
+                row = conn.execute(
+                    "SELECT project FROM relationships WHERE id = %s", (rel.id,)
+                ).fetchone()
+            assert row is not None, "Relationship row not found"
+            assert row[0] == "rel-alpha"
+        finally:
+            with db.pool.connection() as conn:
+                conn.execute("DELETE FROM relationships WHERE project = %s", ("rel-alpha",))
+                conn.execute("DELETE FROM memories WHERE project = %s", ("rel-alpha",))
+                conn.commit()
+            db.close()
 
-    def test_relationship_invisible_cross_project(self, tmp_db_dir):
+    def test_relationship_invisible_cross_project(self):
         """Relationships in project A must not appear when querying from project B."""
-        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
-        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db_a = PostgresBackend(project="cross-alpha", dsn=dsn)
+        db_b = PostgresBackend(project="cross-beta", dsn=dsn)
+        try:
+            m1 = db_a.store_memory(Memory(content="Alpha mem one"))
+            m2 = db_a.store_memory(Memory(content="Alpha mem two"))
+            rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
+            db_a.store_relationship(rel)
 
-        # Create and connect memories in alpha
-        m1 = db_a.store_memory(Memory(content="Alpha mem one"))
-        m2 = db_a.store_memory(Memory(content="Alpha mem two"))
-        rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
-        db_a.store_relationship(rel)
+            m3 = db_b.store_memory(Memory(content="Beta mem one"))
+            connected = db_b.get_connected(m3.id, max_hops=2)
+            assert len(connected) == 0
+        finally:
+            for proj in ("cross-alpha", "cross-beta"):
+                with db_a.pool.connection() as conn:
+                    conn.execute("DELETE FROM relationships WHERE project = %s", (proj,))
+                    conn.execute("DELETE FROM memories WHERE project = %s", (proj,))
+                    conn.commit()
+            db_a.close()
+            db_b.close()
 
-        # Create memories in beta
-        m3 = db_b.store_memory(Memory(content="Beta mem one"))
-
-        # From beta's perspective, get_connected should find nothing for beta's memory
-        connected = db_b.get_connected(m3.id, max_hops=2)
-        assert len(connected) == 0
-
-    def test_get_connection_count_scoped_to_project(self, tmp_db_dir):
+    def test_get_connection_count_scoped_to_project(self):
         """Connection count must be scoped to the project."""
-        db_a = MemoryDB(project="alpha", db_dir=tmp_db_dir)
-        db_b = MemoryDB(project="beta", db_dir=tmp_db_dir)
+        dsn = os.environ["TEST_DATABASE_URL"]
+        db_a = PostgresBackend(project="scope-alpha", dsn=dsn)
+        db_b = PostgresBackend(project="scope-beta", dsn=dsn)
+        try:
+            m1 = db_a.store_memory(Memory(content="Alpha A"))
+            m2 = db_a.store_memory(Memory(content="Alpha B"))
+            rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
+            db_a.store_relationship(rel)
 
-        # Create and connect memories in alpha
-        m1 = db_a.store_memory(Memory(content="Alpha A"))
-        m2 = db_a.store_memory(Memory(content="Alpha B"))
-        rel = Relationship(source_id=m1.id, target_id=m2.id, rel_type=RelationType.RELATES_TO)
-        db_a.store_relationship(rel)
+            assert db_a.get_connection_count(m1.id) == 1
 
-        # Alpha should see 1 connection for m1
-        assert db_a.get_connection_count(m1.id) == 1
-
-        # Beta's memories should have 0 connections
-        m3 = db_b.store_memory(Memory(content="Beta A"))
-        assert db_b.get_connection_count(m3.id) == 0
-
-
-class TestGetConnPragmaFailure:
-    """Regression tests for #38: _get_conn leaves broken connection on PRAGMA failure."""
-
-    def test_pragma_failure_does_not_persist_broken_connection(self, tmp_db_dir):
-        """If PRAGMAs fail, self._conn must stay None so the next call retries."""
-        import unittest.mock as mock
-        db = MemoryDB(project="pragma-test", db_dir=tmp_db_dir)
-        db.close()
-        db._conn = None
-
-        # Wrap Connection in a proxy that raises on PRAGMA journal_mode
-        original_connect = __import__("sqlite3").connect
-
-        class FailingConnection:
-            def __init__(self, real_conn):
-                self._real = real_conn
-
-            def execute(self, sql, *a, **kw):
-                if "journal_mode" in sql.lower():
-                    raise RuntimeError("Simulated PRAGMA failure")
-                return self._real.execute(sql, *a, **kw)
-
-            def close(self):
-                return self._real.close()
-
-            def __getattr__(self, name):
-                return getattr(self._real, name)
-
-        def failing_connect(*args, **kwargs):
-            conn = original_connect(*args, **kwargs)
-            return FailingConnection(conn)
-
-        with mock.patch("sqlite3.connect", side_effect=failing_connect):
-            with pytest.raises(RuntimeError, match="Simulated PRAGMA failure"):
-                db._get_conn()
-            # Connection must NOT be cached after failure
-            assert db._conn is None
+            m3 = db_b.store_memory(Memory(content="Beta A"))
+            assert db_b.get_connection_count(m3.id) == 0
+        finally:
+            for proj in ("scope-alpha", "scope-beta"):
+                with db_a.pool.connection() as conn:
+                    conn.execute("DELETE FROM relationships WHERE project = %s", (proj,))
+                    conn.execute("DELETE FROM memories WHERE project = %s", (proj,))
+                    conn.commit()
+            db_a.close()
+            db_b.close()
