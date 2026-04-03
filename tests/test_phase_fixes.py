@@ -250,7 +250,7 @@ class TestStoreBatchRollbackOnEmbedFailure:
     """If embedding fails mid-batch, no memories should be stored."""
 
     def test_embedding_failure_stores_nothing(self):
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock, call, patch
         import engram.search as search_mod
         from engram.types import Memory
 
@@ -258,6 +258,14 @@ class TestStoreBatchRollbackOnEmbedFailure:
         mock_db.project = "test"
         mock_db.get_meta.return_value = None
         mock_db.chunk_hash_exists.return_value = False
+
+        # store_memory returns a Memory with a predictable id
+        stored_ids = ["id-one", "id-two"]
+        side_effects = [
+            Memory(id="id-one", content="Memory one"),
+            Memory(id="id-two", content="Memory two"),
+        ]
+        mock_db.store_memory.side_effect = side_effects
 
         class FailingEmbedder:
             name = "failing/test"
@@ -278,20 +286,25 @@ class TestStoreBatchRollbackOnEmbedFailure:
             Memory(content="Memory two"),
         ]
 
-        # store_batch should either store nothing or raise — not partially store
-        result = engine.store_batch(memories)
+        # store_batch must raise (embedding failed) and must not leave orphan records
+        with pytest.raises(RuntimeError, match="API down"):
+            engine.store_batch(memories)
 
-        # If embedding failed, no chunks should have been stored
-        # (store_memory may have been called but store_chunks must not succeed
-        # when embedding raises)
-        if mock_db.store_chunks.called:
-            # If store_chunks was called, the chunks must have no embeddings
-            # (because embedding failed) — this is acceptable, but ideally
-            # store_batch rolls back. The fix requires collecting embeddings FIRST.
-            pytest.fail(
-                "store_chunks was called despite embedding failure — "
-                "batch should embed all-or-nothing before storing chunks"
-            )
+        # No chunks should have been stored
+        assert not mock_db.store_chunks.called, (
+            "store_chunks was called despite embedding failure — "
+            "batch should embed all-or-nothing before storing chunks"
+        )
+
+        # Every memory that was committed to the DB must have been rolled back
+        assert mock_db.store_memory.call_count == 2, (
+            "Expected store_memory to be called for each input memory"
+        )
+        deleted = {c.args[0] for c in mock_db.delete_memory_atomic.call_args_list}
+        assert deleted == set(stored_ids), (
+            f"Orphan rollback incomplete — expected delete_memory_atomic called "
+            f"for {stored_ids}, got {deleted}"
+        )
 
 
 # ---------------------------------------------------------------------------

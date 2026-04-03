@@ -125,9 +125,13 @@ class SearchEngine:
 
         Chunks all memories, embeds all chunks in one batch call, then stores.
         Individual memory failures are skipped without aborting the batch.
+
+        If embed_batch raises, all memory records committed so far are rolled
+        back via delete_memory_atomic to prevent orphaned records.
         """
         self._check_embedder_metadata()
         stored: list[Memory] = []
+        stored_ids: list[str] = []
         all_chunks: list[Chunk] = []
         all_texts: list[str] = []
 
@@ -135,6 +139,7 @@ class SearchEngine:
             try:
                 memory = self.db.store_memory(memory)
                 stored.append(memory)
+                stored_ids.append(memory.id)
                 chunks = chunk_text(memory.content)
                 for i, text in enumerate(chunks):
                     h = chunk_hash(text)
@@ -150,13 +155,25 @@ class SearchEngine:
                 logger.warning("Failed to process memory %s in batch: %s", memory.id, e)
                 continue  # Skip failed individual memories
 
-        if all_texts and self.has_vectors:
-            embeddings = self.embedder.embed_batch(all_texts)
-            for chunk_obj, emb in zip(all_chunks, embeddings):
-                chunk_obj.embedding = to_blob(emb)
+        try:
+            if all_texts and self.has_vectors:
+                embeddings = self.embedder.embed_batch(all_texts)
+                for chunk_obj, emb in zip(all_chunks, embeddings):
+                    chunk_obj.embedding = to_blob(emb)
 
-        if all_chunks:
-            self.db.store_chunks(all_chunks)
+            if all_chunks:
+                self.db.store_chunks(all_chunks)
+        except Exception:
+            # Roll back all memory records committed before the failure to
+            # prevent orphaned memory rows with no associated chunks.
+            for memory_id in stored_ids:
+                try:
+                    self.db.delete_memory_atomic(memory_id)
+                except Exception:
+                    logger.warning(
+                        "store_batch rollback failed for memory_id %s", memory_id
+                    )
+            raise
 
         return stored
 
