@@ -13,6 +13,21 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: engram_test
+          POSTGRES_USER: engram
+          POSTGRES_PASSWORD: engram_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
 
@@ -30,4 +45,6 @@ jobs:
         run: ruff check src/ tests/
 
       - name: Run tests
+        env:
+          TEST_DATABASE_URL: postgresql://engram:engram_test@localhost:5432/engram_test
         run: pytest -v --tb=short

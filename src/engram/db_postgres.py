@@ -119,8 +119,29 @@ class PostgresBackend:
             max_size=10,
             kwargs={"row_factory": dict_row},
         )
+        self._warn_default_password(dsn)
         self._validate_connection()
         self._init_db()
+
+    @staticmethod
+    def _warn_default_password(dsn: str) -> None:
+        """Emit a security warning if the default 'engram' password is in use.
+
+        The default password is only acceptable for local development. Production
+        deployments must set a strong POSTGRES_PASSWORD (and DATABASE_URL) to
+        prevent unauthorized database access.
+        """
+        import os as _os
+        pg_password = _os.environ.get("POSTGRES_PASSWORD", "")
+        # Also check if the DSN contains the default password
+        dsn_has_default = ":engram@" in dsn or "%3Aengram%40" in dsn
+        if pg_password == "engram" or dsn_has_default:
+            logger.warning(
+                "SECURITY WARNING: PostgreSQL is using the default password 'engram'. "
+                "This is only safe for local development. "
+                "Set a strong POSTGRES_PASSWORD before exposing this service. "
+                "See docker-compose.yml for configuration."
+            )
 
     def _validate_connection(self) -> None:
         """Verify the database is reachable before running schema migrations.
@@ -182,6 +203,10 @@ class PostgresBackend:
                            SELECT m.project FROM memories m WHERE m.id = relationships.source_id
                        ) WHERE project = ''"""
                 )
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '3') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
                 conn.commit()
             if current < 4:
                 # Add immutability and TTL columns (Wave 1 enhancements)
@@ -199,6 +224,10 @@ class PostgresBackend:
                         )
                 except DuplicateColumn:
                     pass  # Column already exists (fresh DB created with new schema)
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '4') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
                 conn.commit()
             if current < 5:
                 try:
@@ -222,6 +251,10 @@ class PostgresBackend:
                         )
                 except DuplicateColumn:
                     pass
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '5') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
                 conn.commit()
             if current < 6:
                 try:
