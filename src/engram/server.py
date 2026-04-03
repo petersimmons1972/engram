@@ -1064,6 +1064,20 @@ def memory_export_all(
 
     from .markdown_io import dump_all_projects, create_export_readme
 
+    # Security: reject paths outside the user's home directory to prevent
+    # MCP clients from writing to arbitrary filesystem locations (path traversal).
+    resolved = Path(output_path).resolve()
+    home = Path.home().resolve()
+    try:
+        resolved.relative_to(home)
+    except ValueError:
+        return {
+            "error": (
+                f"Export path must be within home directory ({home}). "
+                f"Resolved path '{resolved}' is outside the allowed area."
+            )
+        }
+
     # Use the global engine to get a DB handle, then access all projects
     engine = _get_engine("global")
 
