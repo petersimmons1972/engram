@@ -74,15 +74,41 @@ class OpenAIEmbedder:
         from openai import OpenAI
         self._client = OpenAI(api_key=api_key)
 
+    _MAX_RETRIES = 3
+    _RETRY_BASE_DELAY = 1.0  # seconds; doubles on each retry (exponential backoff)
+
+    def _embed_with_retry(self, **kwargs) -> object:
+        """Call the OpenAI embeddings API with exponential backoff on 429."""
+        import time as _time
+        try:
+            from openai import RateLimitError
+        except ImportError:
+            RateLimitError = Exception  # type: ignore[misc,assignment]
+
+        delay = self._RETRY_BASE_DELAY
+        for attempt in range(self._MAX_RETRIES):
+            try:
+                return self._client.embeddings.create(**kwargs)
+            except RateLimitError:
+                if attempt == self._MAX_RETRIES - 1:
+                    raise
+                logger.warning(
+                    "OpenAI rate limit (429) hit — retrying in %.1fs (attempt %d/%d)",
+                    delay, attempt + 1, self._MAX_RETRIES,
+                )
+                _time.sleep(delay)
+                delay *= 2
+        raise RuntimeError("Unreachable")  # pragma: no cover
+
     def embed(self, text: str) -> np.ndarray:
-        resp = self._client.embeddings.create(input=[text], model="text-embedding-3-small")
+        resp = self._embed_with_retry(input=[text], model="text-embedding-3-small")
         return np.array(resp.data[0].embedding, dtype=np.float32)
 
     def embed_batch(self, texts: Sequence[str], batch_size: int = 64) -> list[np.ndarray]:
         all_embeddings: list[np.ndarray] = []
         for i in range(0, len(texts), batch_size):
             batch = list(texts[i : i + batch_size])
-            resp = self._client.embeddings.create(input=batch, model="text-embedding-3-small")
+            resp = self._embed_with_retry(input=batch, model="text-embedding-3-small")
             sorted_data = sorted(resp.data, key=lambda d: d.index)
             all_embeddings.extend(
                 np.array(d.embedding, dtype=np.float32) for d in sorted_data
