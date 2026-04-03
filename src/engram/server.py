@@ -308,72 +308,71 @@ def memory_store(
             }
         window.append(now)
 
-    engine = _get_engine(project or None)
-
-    try:
-        mt = MemoryType(memory_type)
-    except ValueError:
-        mt = MemoryType.CONTEXT
-
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
-    importance = max(0, min(4, importance))
-
-    expires_at_dt = None
-    if expires_at:
+    with _get_engine(project or None) as engine:
         try:
-            from datetime import datetime
-            expires_at_dt = datetime.fromisoformat(expires_at)
+            mt = MemoryType(memory_type)
         except ValueError:
-            return {"error": f"Invalid expires_at format: '{expires_at}'. Use ISO 8601 (e.g. '2026-04-30T00:00:00+00:00')."}
+            mt = MemoryType.CONTEXT
 
-    # Prompt injection sanitization for critical/immutable memories.
-    # Injection patterns in importance=0 + immutable=True memories would survive
-    # indefinitely in the graph and surface in every recall — highest risk vector.
-    if importance == 0 and immutable:
-        _INJECTION_PATTERNS = re.compile(
-            r"^(ignore (all |previous )?instructions?[:\s]|"
-            r"system:\s|"
-            r"you are now |"
-            r"disregard (all )?previous |"
-            r"forget (all )?previous )",
-            re.IGNORECASE | re.MULTILINE,
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        importance = max(0, min(4, importance))
+
+        expires_at_dt = None
+        if expires_at:
+            try:
+                from datetime import datetime
+                expires_at_dt = datetime.fromisoformat(expires_at)
+            except ValueError:
+                return {"error": f"Invalid expires_at format: '{expires_at}'. Use ISO 8601 (e.g. '2026-04-30T00:00:00+00:00')."}
+
+        # Prompt injection sanitization for critical/immutable memories.
+        # Injection patterns in importance=0 + immutable=True memories would survive
+        # indefinitely in the graph and surface in every recall — highest risk vector.
+        if importance == 0 and immutable:
+            _INJECTION_PATTERNS = re.compile(
+                r"^(ignore (all |previous )?instructions?[:\s]|"
+                r"system:\s|"
+                r"you are now |"
+                r"disregard (all )?previous |"
+                r"forget (all )?previous )",
+                re.IGNORECASE | re.MULTILINE,
+            )
+            sanitized_lines = []
+            for line in content.splitlines():
+                if _INJECTION_PATTERNS.match(line.strip()):
+                    logger.warning(
+                        "Prompt injection pattern stripped from immutable memory (project=%s)", project
+                    )
+                    continue
+                sanitized_lines.append(line)
+            content = "\n".join(sanitized_lines)
+        elif _INJECTION_SOFT_WARNING.search(content):
+            logger.warning(
+                "Possible prompt injection pattern in memory content (project=%s, importance=%d)",
+                project, importance,
+            )
+
+        memory = Memory(
+            content=content,
+            memory_type=mt,
+            tags=tag_list,
+            importance=importance,
+            immutable=immutable,
+            expires_at=expires_at_dt,
         )
-        sanitized_lines = []
-        for line in content.splitlines():
-            if _INJECTION_PATTERNS.match(line.strip()):
-                logger.warning(
-                    "Prompt injection pattern stripped from immutable memory (project=%s)", project
-                )
-                continue
-            sanitized_lines.append(line)
-        content = "\n".join(sanitized_lines)
-    elif _INJECTION_SOFT_WARNING.search(content):
-        logger.warning(
-            "Possible prompt injection pattern in memory content (project=%s, importance=%d)",
-            project, importance,
-        )
 
-    memory = Memory(
-        content=content,
-        memory_type=mt,
-        tags=tag_list,
-        importance=importance,
-        immutable=immutable,
-        expires_at=expires_at_dt,
-    )
+        try:
+            stored = engine.store(memory)
+        except EmbeddingConfigMismatchError as e:
+            return {"error": str(e)}
 
-    try:
-        stored = engine.store(memory)
-    except EmbeddingConfigMismatchError as e:
-        return {"error": str(e)}
-
-    return {
-        "status": "stored",
-        "id": stored.id,
-        "memory_type": stored.memory_type.value,
-        "tags": stored.tags,
-        "importance": stored.importance,
-    }
+        return {
+            "status": "stored",
+            "id": stored.id,
+            "memory_type": stored.memory_type.value,
+            "tags": stored.tags,
+            "importance": stored.importance,
+        }
 
 
 @mcp.tool()
@@ -427,61 +426,60 @@ def memory_store_batch(
             window.append(now)
         items = items[:batch_size]
 
-    engine = _get_engine(project or None)
+    with _get_engine(project or None) as engine:
+        memory_objects: list[Memory] = []
+        failed = 0
+        for item in items:
+            if not isinstance(item, dict):
+                failed += 1
+                continue
+            content = item.get("content", "")
+            if not content or len(content) > MAX_CONTENT_LENGTH:
+                failed += 1
+                continue
 
-    memory_objects: list[Memory] = []
-    failed = 0
-    for item in items:
-        if not isinstance(item, dict):
-            failed += 1
-            continue
-        content = item.get("content", "")
-        if not content or len(content) > MAX_CONTENT_LENGTH:
-            failed += 1
-            continue
+            try:
+                mt = MemoryType(item.get("memory_type", "context"))
+            except ValueError:
+                mt = MemoryType.CONTEXT
+
+            raw_tags = item.get("tags", "")
+            if isinstance(raw_tags, list):
+                tag_list = [str(t).strip() for t in raw_tags if str(t).strip()]
+            else:
+                tag_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
+
+            importance = max(0, min(4, int(item.get("importance", 2))))
+            immutable = bool(item.get("immutable", False))
+
+            expires_at_dt = None
+            ea = item.get("expires_at", "")
+            if ea:
+                try:
+                    from datetime import datetime as _dt
+                    expires_at_dt = _dt.fromisoformat(ea)
+                except ValueError:
+                    pass  # Ignore invalid expires_at
+
+            memory_objects.append(Memory(
+                content=content,
+                memory_type=mt,
+                tags=tag_list,
+                importance=importance,
+                immutable=immutable,
+                expires_at=expires_at_dt,
+            ))
 
         try:
-            mt = MemoryType(item.get("memory_type", "context"))
-        except ValueError:
-            mt = MemoryType.CONTEXT
+            stored = engine.store_batch(memory_objects)
+        except EmbeddingConfigMismatchError as e:
+            return {"error": str(e)}
 
-        raw_tags = item.get("tags", "")
-        if isinstance(raw_tags, list):
-            tag_list = [str(t).strip() for t in raw_tags if str(t).strip()]
-        else:
-            tag_list = [t.strip() for t in str(raw_tags).split(",") if t.strip()]
-
-        importance = max(0, min(4, int(item.get("importance", 2))))
-        immutable = bool(item.get("immutable", False))
-
-        expires_at_dt = None
-        ea = item.get("expires_at", "")
-        if ea:
-            try:
-                from datetime import datetime as _dt
-                expires_at_dt = _dt.fromisoformat(ea)
-            except ValueError:
-                pass  # Ignore invalid expires_at
-
-        memory_objects.append(Memory(
-            content=content,
-            memory_type=mt,
-            tags=tag_list,
-            importance=importance,
-            immutable=immutable,
-            expires_at=expires_at_dt,
-        ))
-
-    try:
-        stored = engine.store_batch(memory_objects)
-    except EmbeddingConfigMismatchError as e:
-        return {"error": str(e)}
-
-    return {
-        "stored": len(stored),
-        "failed": failed + (len(memory_objects) - len(stored)),
-        "ids": [m.id for m in stored],
-    }
+        return {
+            "stored": len(stored),
+            "failed": failed + (len(memory_objects) - len(stored)),
+            "ids": [m.id for m in stored],
+        }
 
 
 @mcp.tool()
@@ -524,91 +522,91 @@ def memory_recall(
         Ranked list of memories with scores, matched chunks, and connected context.
     """
     logger.debug("memory_recall called: project=%s, query=%r, top_k=%d", project, query[:50], top_k)
-    engine = _get_engine(project or None)
-    top_k = max(1, min(50, top_k))
+    with _get_engine(project or None) as engine:
+        top_k = max(1, min(50, top_k))
 
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
-    mt = memory_type if memory_type else None
-    # max_importance is a clearer alias for the ceiling-based filter (min_importance <= this value)
-    effective_importance = max_importance if max_importance is not None else min_importance
-    mi = effective_importance if effective_importance < 4 else None
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+        mt = memory_type if memory_type else None
+        # max_importance is a clearer alias for the ceiling-based filter (min_importance <= this value)
+        effective_importance = max_importance if max_importance is not None else min_importance
+        mi = effective_importance if effective_importance < 4 else None
 
-    from datetime import datetime as _dt
-    since_dt = None
-    if since:
-        try:
-            since_dt = _dt.fromisoformat(since)
-        except ValueError:
-            return {"error": f"Invalid date format for 'since': '{since}'. Use ISO 8601 (e.g. '2026-01-01T00:00:00+00:00')."}
-    before_dt = None
-    if before:
-        try:
-            before_dt = _dt.fromisoformat(before)
-        except ValueError:
-            return {"error": f"Invalid date format for 'before': '{before}'. Use ISO 8601 (e.g. '2026-03-31T23:59:59+00:00')."}
+        from datetime import datetime as _dt
+        since_dt = None
+        if since:
+            try:
+                since_dt = _dt.fromisoformat(since)
+            except ValueError:
+                return {"error": f"Invalid date format for 'since': '{since}'. Use ISO 8601 (e.g. '2026-01-01T00:00:00+00:00')."}
+        before_dt = None
+        if before:
+            try:
+                before_dt = _dt.fromisoformat(before)
+            except ValueError:
+                return {"error": f"Invalid date format for 'before': '{before}'. Use ISO 8601 (e.g. '2026-03-31T23:59:59+00:00')."}
 
-    results = engine.recall(
-        query=query,
-        top_k=top_k,
-        memory_type=mt,
-        tags=tag_list,
-        min_importance=mi,
-        graph_hops=max(1, min(2, graph_hops)),
-        since=since_dt,
-        before=before_dt,
-    )
+        results = engine.recall(
+            query=query,
+            top_k=top_k,
+            memory_type=mt,
+            tags=tag_list,
+            min_importance=mi,
+            graph_hops=max(1, min(2, graph_hops)),
+            since=since_dt,
+            before=before_dt,
+        )
 
-    output = []
-    for r in results:
-        # Determine supersede status from both edge directions.
-        # Convention (set by memory_correct): source=new supersedes target=old.
-        #   incoming edge (other → this): this memory IS superseded by other.
-        #   outgoing edge (this → other): this memory supersedes other (this is the new version).
-        superseded_by = None
-        supersedes_list = []
-        for c in r.connected:
-            if c.rel_type != "supersedes":
-                continue
-            if c.direction == "incoming":
-                # Another memory declared itself as superseding this one.
-                superseded_by = {"id": c.memory.id, "content": c.memory.content[:300]}
-            elif c.direction == "outgoing":
-                # This memory supersedes another — surface it so callers know
-                # the old version still exists.
-                supersedes_list.append({"id": c.memory.id, "content": c.memory.content[:300]})
+        output = []
+        for r in results:
+            # Determine supersede status from both edge directions.
+            # Convention (set by memory_correct): source=new supersedes target=old.
+            #   incoming edge (other → this): this memory IS superseded by other.
+            #   outgoing edge (this → other): this memory supersedes other (this is the new version).
+            superseded_by = None
+            supersedes_list = []
+            for c in r.connected:
+                if c.rel_type != "supersedes":
+                    continue
+                if c.direction == "incoming":
+                    # Another memory declared itself as superseding this one.
+                    superseded_by = {"id": c.memory.id, "content": c.memory.content[:300]}
+                elif c.direction == "outgoing":
+                    # This memory supersedes another — surface it so callers know
+                    # the old version still exists.
+                    supersedes_list.append({"id": c.memory.id, "content": c.memory.content[:300]})
 
-        entry = {
-            "id": r.memory.id,
-            "content": _resolve_content(r.memory, r.matched_chunk, detail),
-            "content_length": len(r.memory.content),
-            "summary_available": r.memory.summary is not None,
-            "type": r.memory.memory_type.value,
-            "tags": r.memory.tags,
-            "importance": r.memory.importance,
-            "score": r.score,
-            "score_breakdown": r.score_breakdown,
-            "matched_chunk": r.matched_chunk,
-            "connected": [
-                {
-                    "id": c.memory.id,
-                    "content": c.memory.content[:300],
-                    "rel_type": c.rel_type,
-                    "direction": c.direction,
-                    "strength": c.strength,
-                }
-                for c in r.connected
-            ],
-        }
+            entry = {
+                "id": r.memory.id,
+                "content": _resolve_content(r.memory, r.matched_chunk, detail),
+                "content_length": len(r.memory.content),
+                "summary_available": r.memory.summary is not None,
+                "type": r.memory.memory_type.value,
+                "tags": r.memory.tags,
+                "importance": r.memory.importance,
+                "score": r.score,
+                "score_breakdown": r.score_breakdown,
+                "matched_chunk": r.matched_chunk,
+                "connected": [
+                    {
+                        "id": c.memory.id,
+                        "content": c.memory.content[:300],
+                        "rel_type": c.rel_type,
+                        "direction": c.direction,
+                        "strength": c.strength,
+                    }
+                    for c in r.connected
+                ],
+            }
 
-        if superseded_by:
-            entry["WARNING"] = "THIS MEMORY HAS BEEN SUPERSEDED. Use the newer version instead."
-            entry["superseded_by"] = superseded_by
-        if supersedes_list:
-            entry["supersedes"] = supersedes_list
+            if superseded_by:
+                entry["WARNING"] = "THIS MEMORY HAS BEEN SUPERSEDED. Use the newer version instead."
+                entry["superseded_by"] = superseded_by
+            if supersedes_list:
+                entry["supersedes"] = supersedes_list
 
-        output.append(entry)
+            output.append(entry)
 
-    return {"results": output, "count": len(output)}
+        return {"results": output, "count": len(output)}
 
 
 @mcp.tool()
@@ -636,39 +634,38 @@ def memory_connect(
         The created relationship.
     """
     logger.debug("memory_connect called: project=%s, %s -> %s (%s)", project, source_id, target_id, rel_type)
-    engine = _get_engine(project or None)
+    with _get_engine(project or None) as engine:
+        source = engine.db.get_memory(source_id)
+        target = engine.db.get_memory(target_id)
+        if not source:
+            return {"error": f"Source memory '{source_id}' not found."}
+        if not target:
+            return {"error": f"Target memory '{target_id}' not found."}
 
-    source = engine.db.get_memory(source_id)
-    target = engine.db.get_memory(target_id)
-    if not source:
-        return {"error": f"Source memory '{source_id}' not found."}
-    if not target:
-        return {"error": f"Target memory '{target_id}' not found."}
+        try:
+            rt = RelationType(rel_type)
+        except ValueError:
+            rt = RelationType.RELATES_TO
 
-    try:
-        rt = RelationType(rel_type)
-    except ValueError:
-        rt = RelationType.RELATES_TO
+        rel = Relationship(
+            source_id=source_id,
+            target_id=target_id,
+            rel_type=rt,
+            strength=max(0.0, min(1.0, strength)),
+        )
+        try:
+            engine.db.store_relationship(rel)
+        except ValueError as exc:
+            return {"error": str(exc)}
 
-    rel = Relationship(
-        source_id=source_id,
-        target_id=target_id,
-        rel_type=rt,
-        strength=max(0.0, min(1.0, strength)),
-    )
-    try:
-        engine.db.store_relationship(rel)
-    except ValueError as exc:
-        return {"error": str(exc)}
-
-    return {
-        "status": "connected",
-        "id": rel.id,
-        "source_id": source_id,
-        "target_id": target_id,
-        "rel_type": rt.value,
-        "strength": rel.strength,
-    }
+        return {
+            "status": "connected",
+            "id": rel.id,
+            "source_id": source_id,
+            "target_id": target_id,
+            "rel_type": rt.value,
+            "strength": rel.strength,
+        }
 
 
 @mcp.tool()
@@ -694,46 +691,46 @@ def memory_list(
         List of memories sorted by most recently updated.
     """
     logger.debug("memory_list called: project=%s, type=%s, limit=%d", project, memory_type, limit)
-    engine = _get_engine(project or None)
-    limit = max(1, min(100, limit))
+    with _get_engine(project or None) as engine:
+        limit = max(1, min(100, limit))
 
-    mt = None
-    if memory_type:
-        try:
-            mt = MemoryType(memory_type)
-        except ValueError:
-            return {"error": f"Invalid memory_type '{memory_type}'. Valid: {[t.value for t in MemoryType]}"}
+        mt = None
+        if memory_type:
+            try:
+                mt = MemoryType(memory_type)
+            except ValueError:
+                return {"error": f"Invalid memory_type '{memory_type}'. Valid: {[t.value for t in MemoryType]}"}
 
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
-    mi = min_importance if min_importance < 4 else None
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+        mi = min_importance if min_importance < 4 else None
 
-    memories = engine.db.list_memories(
-        memory_type=mt,
-        tags=tag_list,
-        min_importance=mi,
-        limit=limit,
-    )
+        memories = engine.db.list_memories(
+            memory_type=mt,
+            tags=tag_list,
+            min_importance=mi,
+            limit=limit,
+        )
 
-    result_items = []
-    for m in memories:
-        item = {
-            "id": m.id,
-            "content": _resolve_content(m, "", detail),
-            "content_length": len(m.content),
-            "summary_available": m.summary is not None,
-            "type": m.memory_type.value,
-            "tags": m.tags,
-            "importance": m.importance,
-            "access_count": m.access_count,
-            "created_at": m.created_at.isoformat(),
-            "updated_at": m.updated_at.isoformat(),
+        result_items = []
+        for m in memories:
+            item = {
+                "id": m.id,
+                "content": _resolve_content(m, "", detail),
+                "content_length": len(m.content),
+                "summary_available": m.summary is not None,
+                "type": m.memory_type.value,
+                "tags": m.tags,
+                "importance": m.importance,
+                "access_count": m.access_count,
+                "created_at": m.created_at.isoformat(),
+                "updated_at": m.updated_at.isoformat(),
+            }
+            result_items.append(item)
+
+        return {
+            "memories": result_items,
+            "count": len(memories),
         }
-        result_items.append(item)
-
-    return {
-        "memories": result_items,
-        "count": len(memories),
-    }
 
 
 @mcp.tool()
@@ -765,59 +762,58 @@ def memory_correct(
         The new memory ID and confirmation that the old one was superseded.
     """
     logger.debug("memory_correct called: project=%s, old_id=%s", project, old_memory_id)
-    engine = _get_engine(project or None)
+    with _get_engine(project or None) as engine:
+        old_mem = engine.db.get_memory(old_memory_id)
+        if not old_mem:
+            return {"error": f"Memory '{old_memory_id}' not found."}
 
-    old_mem = engine.db.get_memory(old_memory_id)
-    if not old_mem:
-        return {"error": f"Memory '{old_memory_id}' not found."}
+        if old_mem.immutable:
+            return {"error": f"Memory '{old_memory_id}' is immutable and cannot be corrected."}
 
-    if old_mem.immutable:
-        return {"error": f"Memory '{old_memory_id}' is immutable and cannot be corrected."}
-
-    if not memory_type:
-        mt = old_mem.memory_type
-    else:
-        try:
-            mt = MemoryType(memory_type)
-        except ValueError:
+        if not memory_type:
             mt = old_mem.memory_type
+        else:
+            try:
+                mt = MemoryType(memory_type)
+            except ValueError:
+                mt = old_mem.memory_type
 
-    tag_list = (
-        [t.strip() for t in tags.split(",") if t.strip()] if tags else old_mem.tags
-    )
+        tag_list = (
+            [t.strip() for t in tags.split(",") if t.strip()] if tags else old_mem.tags
+        )
 
-    new_memory = Memory(
-        content=new_content,
-        memory_type=mt,
-        tags=tag_list,
-        importance=max(0, min(4, importance)),
-    )
-    try:
-        stored = engine.store(new_memory)
-    except EmbeddingConfigMismatchError as e:
-        return {"error": str(e)}
+        new_memory = Memory(
+            content=new_content,
+            memory_type=mt,
+            tags=tag_list,
+            importance=max(0, min(4, importance)),
+        )
+        try:
+            stored = engine.store(new_memory)
+        except EmbeddingConfigMismatchError as e:
+            return {"error": str(e)}
 
-    # Link: new supersedes old
-    rel = Relationship(
-        source_id=stored.id,
-        target_id=old_memory_id,
-        rel_type=RelationType.SUPERSEDES,
-        strength=1.0,
-    )
-    engine.db.store_relationship(rel)
+        # Link: new supersedes old
+        rel = Relationship(
+            source_id=stored.id,
+            target_id=old_memory_id,
+            rel_type=RelationType.SUPERSEDES,
+            strength=1.0,
+        )
+        engine.db.store_relationship(rel)
 
-    # Demote old memory to trivial so it gets pruned over time
-    engine.db.update_memory(old_memory_id, importance=4)
+        # Demote old memory to trivial so it gets pruned over time
+        engine.db.update_memory(old_memory_id, importance=4)
 
-    return {
-        "status": "corrected",
-        "old_id": old_memory_id,
-        "old_content_preview": old_mem.content[:200],
-        "new_id": stored.id,
-        "new_content_preview": new_content[:200],
-        "relationship": "new supersedes old",
-        "old_demoted_to": "trivial (will be pruned if unused)",
-    }
+        return {
+            "status": "corrected",
+            "old_id": old_memory_id,
+            "old_content_preview": old_mem.content[:200],
+            "new_id": stored.id,
+            "new_content_preview": new_content[:200],
+            "relationship": "new supersedes old",
+            "old_demoted_to": "trivial (will be pruned if unused)",
+        }
 
 
 @mcp.tool()
@@ -832,18 +828,17 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
         Confirmation of deletion.
     """
     logger.debug("memory_forget called: project=%s, id=%s", project, memory_id)
-    engine = _get_engine(project or None)
+    with _get_engine(project or None) as engine:
+        mem = engine.db.get_memory(memory_id)
+        if not mem:
+            return {"error": f"Memory '{memory_id}' not found."}
 
-    mem = engine.db.get_memory(memory_id)
-    if not mem:
-        return {"error": f"Memory '{memory_id}' not found."}
+        if mem.immutable:
+            return {"error": f"Memory '{memory_id}' is immutable and cannot be deleted."}
 
-    if mem.immutable:
-        return {"error": f"Memory '{memory_id}' is immutable and cannot be deleted."}
+        engine.db.delete_memory_atomic(memory_id)
 
-    engine.db.delete_memory_atomic(memory_id)
-
-    return {"status": "forgotten", "id": memory_id}
+        return {"status": "forgotten", "id": memory_id}
 
 
 @mcp.tool()
@@ -868,27 +863,27 @@ def memory_summarize(
     from .summarizer import summarize_content as _summarize_content
 
     proj = _normalize_project(project or "")
-    engine = _get_engine(proj)
     effective_model = model or SUMMARIZE_MODEL
 
-    pending = engine.db.get_memories_pending_summary(proj, limit=limit)
-    summarized = 0
-    failed = 0
+    with _get_engine(proj) as engine:
+        pending = engine.db.get_memories_pending_summary(proj, limit=limit)
+        summarized = 0
+        failed = 0
 
-    for memory_id, content in pending:
-        summary = _summarize_content(content, model=effective_model)
-        if summary:
-            engine.db.store_summary(memory_id, summary)
-            summarized += 1
-        else:
-            failed += 1
+        for memory_id, content in pending:
+            summary = _summarize_content(content, model=effective_model)
+            if summary:
+                engine.db.store_summary(memory_id, summary)
+                summarized += 1
+            else:
+                failed += 1
 
-    return {
-        "summarized": summarized,
-        "failed": failed,
-        "remaining": engine.db.get_pending_summary_count(proj),
-        "model": effective_model,
-    }
+        return {
+            "summarized": summarized,
+            "failed": failed,
+            "remaining": engine.db.get_pending_summary_count(proj),
+            "model": effective_model,
+        }
 
 
 @mcp.tool()
@@ -903,28 +898,28 @@ def memory_status(project: str = "") -> dict:
         database size, and age range.
     """
     logger.debug("memory_status called: project=%s", project)
-    engine = _get_engine(project or None)
-    proj = engine.db.project
-    stats = engine.db.get_stats()
-    result = stats.model_dump()
-    result["summarization"] = {
-        "pending": engine.db.get_pending_summary_count(proj),
-        "model": SUMMARIZE_MODEL,
-        "enabled": SUMMARIZE_ENABLED,
-        "ollama_url": OLLAMA_URL,
-    }
-    integrity_stats = engine.db.get_integrity_stats(proj)
-    result["integrity"] = {
-        "total": integrity_stats["total"],
-        "hashed": integrity_stats["hashed"],
-        "coverage_pct": round(integrity_stats["hashed"] / integrity_stats["total"] * 100, 1) if integrity_stats["total"] > 0 else 0.0,
-    }
-    result["embedding_migration"] = {
-        "in_progress": engine.db.get_meta("embedding_migration_in_progress") == "true",
-        "pending_chunks": engine.db.get_pending_embedding_count(proj),
-        "embedder": engine.db.get_meta("embedder_name") or "none",
-    }
-    return result
+    with _get_engine(project or None) as engine:
+        proj = engine.db.project
+        stats = engine.db.get_stats()
+        result = stats.model_dump()
+        result["summarization"] = {
+            "pending": engine.db.get_pending_summary_count(proj),
+            "model": SUMMARIZE_MODEL,
+            "enabled": SUMMARIZE_ENABLED,
+            "ollama_url": OLLAMA_URL,
+        }
+        integrity_stats = engine.db.get_integrity_stats(proj)
+        result["integrity"] = {
+            "total": integrity_stats["total"],
+            "hashed": integrity_stats["hashed"],
+            "coverage_pct": round(integrity_stats["hashed"] / integrity_stats["total"] * 100, 1) if integrity_stats["total"] > 0 else 0.0,
+        }
+        result["embedding_migration"] = {
+            "in_progress": engine.db.get_meta("embedding_migration_in_progress") == "true",
+            "pending_chunks": engine.db.get_pending_embedding_count(proj),
+            "embedder": engine.db.get_meta("embedder_name") or "none",
+        }
+        return result
 
 
 @mcp.tool()
@@ -951,12 +946,12 @@ def memory_feedback(
         Number of memories whose graph edges were adjusted.
     """
     logger.debug("memory_feedback called: project=%s, helpful=%s", project, helpful)
-    engine = _get_engine(project or None)
-    ids = [mid.strip() for mid in memory_ids.split(",") if mid.strip()]
-    if not ids:
-        return {"error": "No memory IDs provided."}
-    result = engine.feedback(ids, helpful)
-    return result
+    with _get_engine(project or None) as engine:
+        ids = [mid.strip() for mid in memory_ids.split(",") if mid.strip()]
+        if not ids:
+            return {"error": "No memory IDs provided."}
+        result = engine.feedback(ids, helpful)
+        return result
 
 
 @mcp.tool()
@@ -979,9 +974,9 @@ def memory_consolidate(project: str = "") -> dict:
         Breakdown of chunks deduped, edges decayed/pruned, and stale memories removed.
     """
     logger.debug("memory_consolidate called: project=%s", project)
-    engine = _get_engine(project or None)
-    result = engine.consolidate()
-    return {"status": "consolidated", **result}
+    with _get_engine(project or None) as engine:
+        result = engine.consolidate()
+        return {"status": "consolidated", **result}
 
 
 @mcp.tool()
@@ -1000,41 +995,41 @@ def memory_verify(
     """
     from .db_postgres import _content_hash
 
-    engine = _get_engine(project or None)
-    proj = engine.db.project
-
-    stats = engine.db.get_integrity_stats(proj)
-    fixed = 0
-
-    if fix:
-        # Backfill missing hashes
-        pending = engine.db.get_memories_missing_hash(proj, limit=10_000)
-        for memory_id, content in pending:
-            engine.db.update_memory_hash(memory_id, _content_hash(content))
-            fixed += 1
-
-        # Recompute corrupt hashes — re-fetch stats to find them
-        if stats["corrupt"] > 0:
-            with engine.db.pool.connection() as conn:
-                rows = conn.execute(
-                    "SELECT id, content FROM memories "
-                    "WHERE project = %s AND content_hash IS NOT NULL "
-                    "AND content_hash != encode(sha256(content::bytea), 'hex')",
-                    (proj,),
-                ).fetchall()
-            for row in rows:
-                engine.db.update_memory_hash(row["id"], _content_hash(row["content"]))
-                fixed += 1
+    with _get_engine(project or None) as engine:
+        proj = engine.db.project
 
         stats = engine.db.get_integrity_stats(proj)
+        fixed = 0
 
-    return {
-        "ok": stats["hashed"] - stats["corrupt"],
-        "missing_hash": stats["total"] - stats["hashed"],
-        "corrupt": stats["corrupt"],
-        "fixed": fixed,
-        "project": proj,
-    }
+        if fix:
+            # Backfill missing hashes
+            pending = engine.db.get_memories_missing_hash(proj, limit=10_000)
+            for memory_id, content in pending:
+                engine.db.update_memory_hash(memory_id, _content_hash(content))
+                fixed += 1
+
+            # Recompute corrupt hashes — re-fetch stats to find them
+            if stats["corrupt"] > 0:
+                with engine.db.pool.connection() as conn:
+                    rows = conn.execute(
+                        "SELECT id, content FROM memories "
+                        "WHERE project = %s AND content_hash IS NOT NULL "
+                        "AND content_hash != encode(sha256(content::bytea), 'hex')",
+                        (proj,),
+                    ).fetchall()
+                for row in rows:
+                    engine.db.update_memory_hash(row["id"], _content_hash(row["content"]))
+                    fixed += 1
+
+            stats = engine.db.get_integrity_stats(proj)
+
+        return {
+            "ok": stats["hashed"] - stats["corrupt"],
+            "missing_hash": stats["total"] - stats["hashed"],
+            "corrupt": stats["corrupt"],
+            "fixed": fixed,
+            "project": proj,
+        }
 
 
 @mcp.tool()
@@ -1062,79 +1057,78 @@ def memory_migrate_embedder(
     import os as _os
 
     proj = _normalize_project(project)
-    engine = _get_engine(proj)
+    with _get_engine(proj) as engine:
+        old_embedder = engine.db.get_meta("embedder_name") or "unknown"
+        total_chunks = engine.db.get_pending_embedding_count(proj)
 
-    old_embedder = engine.db.get_meta("embedder_name") or "unknown"
-    total_chunks = engine.db.get_pending_embedding_count(proj)
+        if dry_run:
+            # Count all chunks (not just pending) for the dry-run estimate
+            with engine.db.pool.connection() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM chunks c "
+                    "JOIN memories m ON m.id = c.memory_id "
+                    "WHERE m.project = %s",
+                    (proj,),
+                ).fetchone()
+            all_chunks = row["c"] if row else 0
+            return {
+                "status": "dry_run",
+                "old_embedder": old_embedder,
+                "new_embedder": new_embedder or "(current)",
+                "chunks_would_be_queued": all_chunks,
+            }
 
-    if dry_run:
-        # Count all chunks (not just pending) for the dry-run estimate
-        with engine.db.pool.connection() as conn:
-            row = conn.execute(
-                "SELECT COUNT(*) AS c FROM chunks c "
-                "JOIN memories m ON m.id = c.memory_id "
-                "WHERE m.project = %s",
-                (proj,),
-            ).fetchone()
-        all_chunks = row["c"] if row else 0
+        if not new_embedder:
+            return {"error": "new_embedder is required"}
+
+        # Null all embeddings — triggers BM25-only fallback during migration
+        nulled = engine.db.null_all_embeddings(proj)
+
+        # Parse "provider/model" format
+        parts = new_embedder.split("/", 1)
+        provider = parts[0] if len(parts) > 1 else "ollama"
+        model = parts[1] if len(parts) > 1 else parts[0]
+
+        # Create the new embedder to read its .name and .dimensions, then restore env
+        old_provider_env = _os.environ.get("ENGRAM_EMBEDDER")
+        old_model_env = _os.environ.get("ENGRAM_OLLAMA_MODEL") or _os.environ.get("ENGRAM_OPENAI_MODEL")
+        try:
+            _os.environ["ENGRAM_EMBEDDER"] = provider
+            if provider == "ollama":
+                _os.environ["ENGRAM_OLLAMA_MODEL"] = model
+            elif provider == "openai":
+                _os.environ["ENGRAM_OPENAI_MODEL"] = model
+            new_emb = create_embedder()
+            engine.db.set_meta("embedder_name", new_emb.name)
+            engine.db.set_meta("embedder_dimensions", str(new_emb.dimensions))
+            engine.db.set_meta("embedder_version", getattr(new_emb, "version", "unknown"))
+        finally:
+            # Restore env — engine will use updated project_meta from now on
+            if old_provider_env is not None:
+                _os.environ["ENGRAM_EMBEDDER"] = old_provider_env
+            elif "ENGRAM_EMBEDDER" in _os.environ:
+                del _os.environ["ENGRAM_EMBEDDER"]
+
+        # Set migration flag and timestamp
+        from datetime import datetime, timezone
+        engine.db.set_meta("embedding_migration_in_progress", "true")
+        engine.db.set_meta("embedding_migration_started_at", datetime.now(timezone.utc).isoformat())
+
+        # Restart the reembedder with the new embedder instance
+        engine._reembedder.stop()
+        engine._reembedder = BackgroundReembedder(db=engine.db, embedder=new_emb, project=proj)
+        engine._reembedder.start()
+
+        # Rough estimate: ~0.5s per batch of 20
+        estimated_minutes = round((nulled / 20) * 0.5 / 60, 1)
+
         return {
-            "status": "dry_run",
+            "status": "migration_started",
+            "chunks_queued": nulled,
             "old_embedder": old_embedder,
-            "new_embedder": new_embedder or "(current)",
-            "chunks_would_be_queued": all_chunks,
+            "new_embedder": new_emb.name,
+            "estimated_minutes": estimated_minutes,
         }
-
-    if not new_embedder:
-        return {"error": "new_embedder is required"}
-
-    # Null all embeddings — triggers BM25-only fallback during migration
-    nulled = engine.db.null_all_embeddings(proj)
-
-    # Parse "provider/model" format
-    parts = new_embedder.split("/", 1)
-    provider = parts[0] if len(parts) > 1 else "ollama"
-    model = parts[1] if len(parts) > 1 else parts[0]
-
-    # Create the new embedder to read its .name and .dimensions, then restore env
-    old_provider_env = _os.environ.get("ENGRAM_EMBEDDER")
-    old_model_env = _os.environ.get("ENGRAM_OLLAMA_MODEL") or _os.environ.get("ENGRAM_OPENAI_MODEL")
-    try:
-        _os.environ["ENGRAM_EMBEDDER"] = provider
-        if provider == "ollama":
-            _os.environ["ENGRAM_OLLAMA_MODEL"] = model
-        elif provider == "openai":
-            _os.environ["ENGRAM_OPENAI_MODEL"] = model
-        new_emb = create_embedder()
-        engine.db.set_meta("embedder_name", new_emb.name)
-        engine.db.set_meta("embedder_dimensions", str(new_emb.dimensions))
-        engine.db.set_meta("embedder_version", getattr(new_emb, "version", "unknown"))
-    finally:
-        # Restore env — engine will use updated project_meta from now on
-        if old_provider_env is not None:
-            _os.environ["ENGRAM_EMBEDDER"] = old_provider_env
-        elif "ENGRAM_EMBEDDER" in _os.environ:
-            del _os.environ["ENGRAM_EMBEDDER"]
-
-    # Set migration flag and timestamp
-    from datetime import datetime, timezone
-    engine.db.set_meta("embedding_migration_in_progress", "true")
-    engine.db.set_meta("embedding_migration_started_at", datetime.now(timezone.utc).isoformat())
-
-    # Restart the reembedder with the new embedder instance
-    engine._reembedder.stop()
-    engine._reembedder = BackgroundReembedder(db=engine.db, embedder=new_emb, project=proj)
-    engine._reembedder.start()
-
-    # Rough estimate: ~0.5s per batch of 20
-    estimated_minutes = round((nulled / 20) * 0.5 / 60, 1)
-
-    return {
-        "status": "migration_started",
-        "chunks_queued": nulled,
-        "old_embedder": old_embedder,
-        "new_embedder": new_emb.name,
-        "estimated_minutes": estimated_minutes,
-    }
 
 
 @mcp.tool()
@@ -1179,38 +1173,37 @@ def memory_export_all(
         }
 
     # Use the global engine to get a DB handle, then access all projects
-    engine = _get_engine("global")
+    with _get_engine("global") as engine:
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(":", "-") + "Z"
+        export_dir_name = f"engram-export-{timestamp}"
+        base_path = Path(output_path)
+        export_dir = base_path / export_dir_name
 
-    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(":", "-") + "Z"
-    export_dir_name = f"engram-export-{timestamp}"
-    base_path = Path(output_path)
-    export_dir = base_path / export_dir_name
+        try:
+            manifest = dump_all_projects(engine.db, export_dir)
+            readme_path = create_export_readme(manifest, export_dir)
 
-    try:
-        manifest = dump_all_projects(engine.db, export_dir)
-        readme_path = create_export_readme(manifest, export_dir)
+            # Write manifest.json
+            manifest_path = export_dir / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-        # Write manifest.json
-        manifest_path = export_dir / "manifest.json"
-        manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+            # Create ZIP
+            zip_path = base_path / f"{export_dir_name}.zip"
+            with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for file_path in export_dir.rglob("*"):
+                    if file_path.is_file():
+                        zf.write(file_path, arcname=file_path.relative_to(base_path))
 
-        # Create ZIP
-        zip_path = base_path / f"{export_dir_name}.zip"
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for file_path in export_dir.rglob("*"):
-                if file_path.is_file():
-                    zf.write(file_path, arcname=file_path.relative_to(base_path))
-
-        return {
-            "status": "exported",
-            "projects": list(manifest["projects"].keys()),
-            "total_memories": manifest["total_memories"],
-            "export_dir": str(export_dir),
-            "zip_path": str(zip_path),
-        }
-    except Exception as e:
-        logger.exception("Export failed")
-        return {"error": str(e)}
+            return {
+                "status": "exported",
+                "projects": list(manifest["projects"].keys()),
+                "total_memories": manifest["total_memories"],
+                "export_dir": str(export_dir),
+                "zip_path": str(zip_path),
+            }
+        except Exception as e:
+            logger.exception("Export failed")
+            return {"error": str(e)}
 
 
 @mcp.tool()
@@ -1266,41 +1259,40 @@ def memory_import_claudemd(
     if not extracted:
         return {"status": "no_memories_found", "extracted": 0}
 
-    engine = _get_engine(project)
-
-    # Pre-import backup
-    import tempfile
-    backup_path = None
-    try:
-        current_memories = engine.db.list_memories(
-            memory_type=None, tags=[], min_importance=4, limit=10000
-        )
-        out_dir = backup_dir or str(Path(file_path).parent)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            dump_memories_to_directory(current_memories, tmp_dir)
-            backup_zip = create_snapshot_zip(tmp_dir, current_memories, out_dir)
-            backup_path = str(backup_zip)
-    except Exception as e:
-        logger.warning(f"Pre-import backup failed (continuing): {e}")
-
-    # Store extracted memories
-    stored = 0
-    failed = 0
-    for memory in extracted:
+    with _get_engine(project) as engine:
+        # Pre-import backup
+        import tempfile
+        backup_path = None
         try:
-            engine.store(memory)
-            stored += 1
+            current_memories = engine.db.list_memories(
+                memory_type=None, tags=[], min_importance=4, limit=10000
+            )
+            out_dir = backup_dir or str(Path(file_path).parent)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                dump_memories_to_directory(current_memories, tmp_dir)
+                backup_zip = create_snapshot_zip(tmp_dir, current_memories, out_dir)
+                backup_path = str(backup_zip)
         except Exception as e:
-            failed += 1
-            logger.warning(f"Failed to store memory: {e}")
+            logger.warning(f"Pre-import backup failed (continuing): {e}")
 
-    return {
-        "status": "imported",
-        "extracted": len(extracted),
-        "stored": stored,
-        "failed": failed,
-        "pre_import_backup": backup_path,
-    }
+        # Store extracted memories
+        stored = 0
+        failed = 0
+        for memory in extracted:
+            try:
+                engine.store(memory)
+                stored += 1
+            except Exception as e:
+                failed += 1
+                logger.warning(f"Failed to store memory: {e}")
+
+        return {
+            "status": "imported",
+            "extracted": len(extracted),
+            "stored": stored,
+            "failed": failed,
+            "pre_import_backup": backup_path,
+        }
 
 
 @mcp.tool()
@@ -1327,28 +1319,27 @@ def memory_dump(project: str = "", output_path: str = "./memory-dump") -> dict:
     except ValueError as exc:
         return {"error": str(exc)}
 
-    engine = _get_engine(project or None)
+    with _get_engine(project or None) as engine:
+        # List all memories in the project
+        memories = engine.db.list_memories(limit=10_000)
 
-    # List all memories in the project
-    memories = engine.db.list_memories(limit=10_000)
+        if not memories:
+            return {
+                "status": "no_memories",
+                "project": engine.db.project,
+                "count": 0,
+                "message": f"No memories found in project '{engine.db.project}'",
+            }
 
-    if not memories:
+        # Dump to markdown
+        count = dump_memories_to_directory(memories, output_path)
+
         return {
-            "status": "no_memories",
+            "status": "dumped",
             "project": engine.db.project,
-            "count": 0,
-            "message": f"No memories found in project '{engine.db.project}'",
+            "count": count,
+            "output_path": str(output_path),
         }
-
-    # Dump to markdown
-    count = dump_memories_to_directory(memories, output_path)
-
-    return {
-        "status": "dumped",
-        "project": engine.db.project,
-        "count": count,
-        "output_path": str(output_path),
-    }
 
 
 @mcp.tool()
@@ -1388,89 +1379,88 @@ def memory_ingest(
     )
 
     logger.debug("memory_ingest called: project=%s, directory=%s", project, directory)
-    engine = _get_engine(project or None)
+    with _get_engine(project or None) as engine:
+        # --- Pre-import backup: snapshot existing DB state before writing anything ---
+        pre_import_backup: str | None = None
+        backup_warning: str | None = None
+        try:
+            current_memories = engine.db.list_memories(
+                memory_type=None, tags=[], min_importance=4, limit=100_000
+            )
+            out_dir = backup_dir or directory
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                dump_memories_to_directory(current_memories, tmp_dir)
+                backup_zip = create_snapshot_zip(tmp_dir, current_memories, out_dir)
+                pre_import_backup = str(backup_zip)
+                logger.info(f"Pre-import backup created: {pre_import_backup}")
+        except Exception as e:
+            backup_warning = f"Pre-import backup failed: {e}"
+            logger.warning(backup_warning)
 
-    # --- Pre-import backup: snapshot existing DB state before writing anything ---
-    pre_import_backup: str | None = None
-    backup_warning: str | None = None
-    try:
-        current_memories = engine.db.list_memories(
-            memory_type=None, tags=[], min_importance=4, limit=100_000
-        )
-        out_dir = backup_dir or directory
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            dump_memories_to_directory(current_memories, tmp_dir)
-            backup_zip = create_snapshot_zip(tmp_dir, current_memories, out_dir)
-            pre_import_backup = str(backup_zip)
-            logger.info(f"Pre-import backup created: {pre_import_backup}")
-    except Exception as e:
-        backup_warning = f"Pre-import backup failed: {e}"
-        logger.warning(backup_warning)
+        # Parse markdown files
+        memories, failed = ingest_memories_from_directory(directory, project=engine.db.project)
 
-    # Parse markdown files
-    memories, failed = ingest_memories_from_directory(directory, project=engine.db.project)
+        if not memories:
+            return {
+                "status": "no_memories",
+                "project": engine.db.project,
+                "count": 0,
+                "failed": len(failed),
+                "message": f"No memories to ingest from {directory}",
+                "pre_import_backup": pre_import_backup,
+                "backup_warning": backup_warning,
+            }
 
-    if not memories:
+        # Apply type filter if specified
+        if memory_type:
+            try:
+                mt = MemoryType(memory_type)
+                memories = [m for m in memories if m.memory_type == mt]
+            except ValueError:
+                pass
+
+        # Apply importance override if specified
+        if importance is not None and importance != 2:
+            for m in memories:
+                m.importance = max(0, min(4, importance))
+
+        # Skip memories whose ID already exists in the DB (non-destructive ingest)
+        skipped_existing = 0
+        if skip_existing_ids:
+            existing_ids = engine.db.get_all_memory_ids(engine.db.project)
+            to_import = []
+            for m in memories:
+                if m.id in existing_ids:
+                    skipped_existing += 1
+                    logger.debug(f"Skipping existing memory {m.id}")
+                else:
+                    to_import.append(m)
+            memories = to_import
+
+        # Store all memories
+        stored_count = 0
+        for memory in memories:
+            try:
+                engine.store(memory)
+                stored_count += 1
+            except Exception as e:
+                logger.error(f"Failed to store memory: {e}")
+
+        # Create source-files snapshot zip (existing behavior — documents what was imported)
+        snapshot_zip = create_snapshot_zip(directory, memories, ".")
+        logger.info(f"Created snapshot zip: {snapshot_zip}")
+
         return {
-            "status": "no_memories",
+            "status": "ingested",
             "project": engine.db.project,
-            "count": 0,
+            "count": stored_count,
+            "skipped_existing": skipped_existing,
             "failed": len(failed),
-            "message": f"No memories to ingest from {directory}",
+            "failed_files": failed,
             "pre_import_backup": pre_import_backup,
             "backup_warning": backup_warning,
+            "snapshot_zip": str(snapshot_zip),
         }
-
-    # Apply type filter if specified
-    if memory_type:
-        try:
-            mt = MemoryType(memory_type)
-            memories = [m for m in memories if m.memory_type == mt]
-        except ValueError:
-            pass
-
-    # Apply importance override if specified
-    if importance is not None and importance != 2:
-        for m in memories:
-            m.importance = max(0, min(4, importance))
-
-    # Skip memories whose ID already exists in the DB (non-destructive ingest)
-    skipped_existing = 0
-    if skip_existing_ids:
-        existing_ids = engine.db.get_all_memory_ids(engine.db.project)
-        to_import = []
-        for m in memories:
-            if m.id in existing_ids:
-                skipped_existing += 1
-                logger.debug(f"Skipping existing memory {m.id}")
-            else:
-                to_import.append(m)
-        memories = to_import
-
-    # Store all memories
-    stored_count = 0
-    for memory in memories:
-        try:
-            engine.store(memory)
-            stored_count += 1
-        except Exception as e:
-            logger.error(f"Failed to store memory: {e}")
-
-    # Create source-files snapshot zip (existing behavior — documents what was imported)
-    snapshot_zip = create_snapshot_zip(directory, memories, ".")
-    logger.info(f"Created snapshot zip: {snapshot_zip}")
-
-    return {
-        "status": "ingested",
-        "project": engine.db.project,
-        "count": stored_count,
-        "skipped_existing": skipped_existing,
-        "failed": len(failed),
-        "failed_files": failed,
-        "pre_import_backup": pre_import_backup,
-        "backup_warning": backup_warning,
-        "snapshot_zip": str(snapshot_zip),
-    }
 
 
 @mcp.prompt()
@@ -1482,67 +1472,67 @@ def onboarding(project: str = "") -> str:
         project: Project namespace to show stats for. Empty = "default".
     """
     proj = (project or "default").strip().lower()
-    engine = _get_engine(proj)
-    stats = engine.db.get_stats()
-    s = stats.model_dump()
+    with _get_engine(proj) as engine:
+        stats = engine.db.get_stats()
+        s = stats.model_dump()
 
-    mem_count = s.get("total_memories", 0)
-    is_new = mem_count == 0
+        mem_count = s.get("total_memories", 0)
+        is_new = mem_count == 0
 
-    header = (
-        f"# Engram Quick-Start -- project: `{proj}`\n\n"
-        f"**Memory DB status:** {mem_count} memories, "
-        f"{s.get('total_chunks', 0)} chunks, "
-        f"{s.get('total_relationships', 0)} graph edges.\n\n"
-    )
-
-    bootstrap = ""
-    if is_new:
-        bootstrap = (
-            "## NEW PROJECT -- Bootstrap Required\n\n"
-            "This project has zero memories. You should store foundational context:\n\n"
-            "1. **What is this project?** Purpose, goals, current status.\n"
-            "2. **Tech stack:** Languages, frameworks, databases, infra.\n"
-            "3. **Architecture:** Key patterns, data flow, directory structure.\n"
-            "4. **Conventions:** Coding style, naming, testing approach.\n"
-            "5. **Known issues:** Current bugs, tech debt, gotchas.\n\n"
-            "Use type `architecture` for #2-3, type `context` for #1, "
-            "type `preference` for #4, type `error` for #5.\n\n"
-            "Also recall from project=`global` for user-wide preferences.\n\n"
+        header = (
+            f"# Engram Quick-Start -- project: `{proj}`\n\n"
+            f"**Memory DB status:** {mem_count} memories, "
+            f"{s.get('total_chunks', 0)} chunks, "
+            f"{s.get('total_relationships', 0)} graph edges.\n\n"
         )
 
-    workflow = (
-        "## Your Workflow\n\n"
-        f"1. **Recall first:** `memory_recall('topic', project='{proj}')`\n"
-        f"2. **Also check global:** `memory_recall('topic', project='global')`\n"
-        "3. **Work:** Use recalled context to inform your decisions.\n"
-        f"4. **Store:** `memory_store('...', project='{proj}')`\n"
-        f"5. **Connect:** `memory_connect(src, tgt, project='{proj}')`\n"
-        "6. **Feedback:** Mark recall results helpful/unhelpful.\n\n"
-    )
+        bootstrap = ""
+        if is_new:
+            bootstrap = (
+                "## NEW PROJECT -- Bootstrap Required\n\n"
+                "This project has zero memories. You should store foundational context:\n\n"
+                "1. **What is this project?** Purpose, goals, current status.\n"
+                "2. **Tech stack:** Languages, frameworks, databases, infra.\n"
+                "3. **Architecture:** Key patterns, data flow, directory structure.\n"
+                "4. **Conventions:** Coding style, naming, testing approach.\n"
+                "5. **Known issues:** Current bugs, tech debt, gotchas.\n\n"
+                "Use type `architecture` for #2-3, type `context` for #1, "
+                "type `preference` for #4, type `error` for #5.\n\n"
+                "Also recall from project=`global` for user-wide preferences.\n\n"
+            )
 
-    types_and_tips = (
-        "## Memory Types\n\n"
-        "| Type | Use for |\n"
-        "|------|--------|\n"
-        "| decision | Choices made and their reasoning |\n"
-        "| pattern | Recurring code/architecture patterns |\n"
-        "| error | Bugs, gotchas, and their fixes |\n"
-        "| architecture | System design, data flow, integrations |\n"
-        "| preference | User preferences and conventions |\n"
-        "| context | General project/environment context |\n\n"
-        "## Project Scoping\n\n"
-        f"- **This project:** `project='{proj}'` -- for project-specific memories.\n"
-        "- **User-wide:** `project='global'` -- for preferences that apply everywhere.\n"
-        "- Never mix: don't store project-specific decisions in global, or vice versa.\n\n"
-        "## Tips\n\n"
-        "- Be specific. 'Auth uses JWT' < 'Auth uses RS256 JWT issued by /api/login "
-        "with 24h expiry in httpOnly cookie.'\n"
-        "- Always add tags. Future recall depends on them.\n"
-        "- Use importance 0-1 sparingly -- only for things that should never be pruned.\n"
-    )
+        workflow = (
+            "## Your Workflow\n\n"
+            f"1. **Recall first:** `memory_recall('topic', project='{proj}')`\n"
+            f"2. **Also check global:** `memory_recall('topic', project='global')`\n"
+            "3. **Work:** Use recalled context to inform your decisions.\n"
+            f"4. **Store:** `memory_store('...', project='{proj}')`\n"
+            f"5. **Connect:** `memory_connect(src, tgt, project='{proj}')`\n"
+            "6. **Feedback:** Mark recall results helpful/unhelpful.\n\n"
+        )
 
-    return header + bootstrap + workflow + types_and_tips
+        types_and_tips = (
+            "## Memory Types\n\n"
+            "| Type | Use for |\n"
+            "|------|--------|\n"
+            "| decision | Choices made and their reasoning |\n"
+            "| pattern | Recurring code/architecture patterns |\n"
+            "| error | Bugs, gotchas, and their fixes |\n"
+            "| architecture | System design, data flow, integrations |\n"
+            "| preference | User preferences and conventions |\n"
+            "| context | General project/environment context |\n\n"
+            "## Project Scoping\n\n"
+            f"- **This project:** `project='{proj}'` -- for project-specific memories.\n"
+            "- **User-wide:** `project='global'` -- for preferences that apply everywhere.\n"
+            "- Never mix: don't store project-specific decisions in global, or vice versa.\n\n"
+            "## Tips\n\n"
+            "- Be specific. 'Auth uses JWT' < 'Auth uses RS256 JWT issued by /api/login "
+            "with 24h expiry in httpOnly cookie.'\n"
+            "- Always add tags. Future recall depends on them.\n"
+            "- Use importance 0-1 sparingly -- only for things that should never be pruned.\n"
+        )
+
+        return header + bootstrap + workflow + types_and_tips
 
 
 def _wrap_with_api_key_auth(app, api_key: str):

@@ -53,6 +53,7 @@ class TestMemoryDumpPathTraversal:
 
         # Patch _get_engine and dump_memories_to_directory so no DB needed
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.db.project = "test"
         mock_engine.db.list_memories.return_value = []
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
@@ -125,6 +126,7 @@ class TestMemoryRecallDateValidation:
     def test_invalid_since_returns_error(self, monkeypatch):
         srv = _import_server()
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
         result = srv.memory_recall(query="test", since="not-a-date", project="test")
@@ -134,6 +136,7 @@ class TestMemoryRecallDateValidation:
     def test_invalid_before_returns_error(self, monkeypatch):
         srv = _import_server()
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
         result = srv.memory_recall(query="test", before="2026-99-99", project="test")
@@ -143,6 +146,7 @@ class TestMemoryRecallDateValidation:
     def test_valid_since_does_not_error(self, monkeypatch):
         srv = _import_server()
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.recall.return_value = []
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
@@ -463,6 +467,7 @@ class TestMigrateEmbedderNoEnvMutation:
         original_embedder = os.environ.get("ENGRAM_EMBEDDER", "UNSET")
 
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.db.get_meta.return_value = None
         mock_engine.db.null_all_embeddings.return_value = 5
         mock_engine.db.get_pending_embedding_count.return_value = 5
@@ -514,6 +519,7 @@ class TestMaxImportanceAlias:
         srv = _import_server()
 
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.recall.return_value = []
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
@@ -526,6 +532,7 @@ class TestMaxImportanceAlias:
         srv = _import_server()
 
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.recall.return_value = []
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
@@ -788,6 +795,7 @@ class TestPromptInjectionSanitization:
             return memory
 
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.store.side_effect = fake_store
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
@@ -819,6 +827,7 @@ class TestPromptInjectionSanitization:
             return memory
 
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.store.side_effect = fake_store
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
@@ -844,6 +853,7 @@ class TestPromptInjectionSanitization:
             return memory
 
         mock_engine = MagicMock()
+        mock_engine.__enter__.return_value = mock_engine
         mock_engine.store.side_effect = fake_store
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: mock_engine)
 
