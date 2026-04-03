@@ -18,6 +18,8 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
+from psycopg import sql
+
 import hashlib
 
 from psycopg.errors import DuplicateColumn
@@ -261,7 +263,11 @@ class PostgresBackend:
                 for col in ("content_compressed", "compression_algo", "compressed_at"):
                     try:
                         with conn.transaction():
-                            conn.execute(f"ALTER TABLE memories DROP COLUMN IF EXISTS {col}")
+                            conn.execute(
+                                sql.SQL("ALTER TABLE memories DROP COLUMN IF EXISTS {}").format(
+                                    sql.Identifier(col)
+                                )
+                            )
                     except Exception:
                         pass
                 conn.execute(
@@ -357,6 +363,10 @@ class PostgresBackend:
         mem = self.get_memory(memory_id)
         if not mem:
             return None
+        if mem.immutable:
+            raise ValueError(
+                f"Memory '{memory_id}' is immutable and cannot be updated."
+            )
 
         now = datetime.now(timezone.utc)
         if content is not None:
@@ -389,6 +399,11 @@ class PostgresBackend:
         return mem
 
     def delete_memory(self, memory_id: str) -> bool:
+        mem = self.get_memory(memory_id)
+        if mem and mem.immutable:
+            raise ValueError(
+                f"Memory '{memory_id}' is immutable and cannot be deleted."
+            )
         with self.pool.connection() as conn:
             row = conn.execute(
                 "WITH deleted AS (DELETE FROM memories WHERE id = %s RETURNING id) "

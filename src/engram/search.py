@@ -393,9 +393,10 @@ class SearchEngine:
         return self.db.project
 
     def close(self) -> None:
-        """Stop background threads cleanly."""
+        """Stop background threads and close the DB connection pool."""
         self._summarizer.stop()
         self._reembedder.stop()
+        self.db.close()
 
     def _dedup_chunks(self) -> int:
         all_chunks = self.db.get_all_chunks_with_embeddings()

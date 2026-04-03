@@ -7,7 +7,8 @@ import os
 import re
 import threading
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 from .db import create_database
 from .embeddings import create_embedder
 from .errors import EmbeddingConfigMismatchError
+from .reembedder import BackgroundReembedder
 from .search import SearchEngine
 from .summarizer import OLLAMA_URL, SUMMARIZE_ENABLED, SUMMARIZE_MODEL
 from .types import (
@@ -127,6 +129,50 @@ def _normalize_project(project: str) -> str:
     return re.sub(r'[^a-z0-9_-]', '', (project or "default").strip().lower()) or "default"
 
 
+def _validate_output_path(path: str) -> Path:
+    """Resolve path and reject anything outside the user's home directory.
+
+    Shared by memory_export_all and memory_dump to prevent path traversal:
+    an MCP client must not be able to write to arbitrary filesystem locations
+    by passing e.g. output_path="/etc/cron.d/x".
+
+    Returns the resolved Path on success.
+    Raises ValueError with a descriptive message on failure.
+    """
+    resolved = Path(path).resolve()
+    home = Path.home().resolve()
+    try:
+        resolved.relative_to(home)
+    except ValueError:
+        raise ValueError(
+            f"Output path must be within home directory ({home}). "
+            f"Resolved path '{resolved}' is outside the allowed area."
+        )
+    return resolved
+
+
+def _validate_input_path(path: str) -> Path:
+    """Resolve path and reject anything outside the user's home directory.
+
+    Shared by memory_import_claudemd to prevent arbitrary file read:
+    an MCP client must not be able to read /etc/passwd or similar by passing
+    file_path outside the home tree.
+
+    Returns the resolved Path on success.
+    Raises ValueError with a descriptive message on failure.
+    """
+    resolved = Path(path).resolve()
+    home = Path.home().resolve()
+    try:
+        resolved.relative_to(home)
+    except ValueError:
+        raise ValueError(
+            f"Input path must be within home directory ({home}). "
+            f"Resolved path '{resolved}' is outside the allowed area."
+        )
+    return resolved
+
+
 def _resolve_content(memory: "Memory", matched_chunk: str, detail: str) -> str:
     """Return the appropriate content string based on detail level.
 
@@ -148,7 +194,8 @@ def _resolve_content(memory: "Memory", matched_chunk: str, detail: str) -> str:
 
 
 MAX_ENGINE_CACHE_SIZE = 64
-_engines: dict[str, SearchEngine] = {}
+# OrderedDict enables true LRU: move_to_end(key) on every hit, pop oldest on eviction.
+_engines: OrderedDict[str, SearchEngine] = OrderedDict()
 _engines_lock = threading.Lock()            # guards dict reads/writes only
 _creation_locks: dict[str, threading.Lock] = {}
 _creation_locks_lock = threading.Lock()     # guards _creation_locks dict
@@ -158,6 +205,15 @@ _RATE_LIMIT_WINDOW = 60  # seconds
 _RATE_LIMIT_MAX = int(os.environ.get("ENGRAM_RATE_LIMIT", "100"))  # calls per window
 _store_calls: dict[str, deque] = defaultdict(deque)
 _rate_limit_lock = threading.Lock()
+
+# Soft-warning pattern for suspicious content in any memory (non-critical memories are warned, not stripped)
+_INJECTION_SOFT_WARNING = re.compile(
+    r"(ignore (all |previous )?instructions?|"
+    r"you are now |"
+    r"disregard (all )?previous |"
+    r"forget (all )?previous )",
+    re.IGNORECASE,
+)
 
 
 def _get_engine(project: str | None = None) -> SearchEngine:
@@ -170,9 +226,10 @@ def _get_engine(project: str | None = None) -> SearchEngine:
     raw = (project or os.environ.get("ENGRAM_PROJECT", "default")).strip().lower()
     proj = re.sub(r"[^a-z0-9_-]", "", raw) or "default"
 
-    # Fast path — engine already cached
+    # Fast path — engine already cached; move to MRU position for LRU eviction
     with _engines_lock:
         if proj in _engines:
+            _engines.move_to_end(proj)
             return _engines[proj]
 
     # Slow path — get or create a per-project creation lock
@@ -185,6 +242,7 @@ def _get_engine(project: str | None = None) -> SearchEngine:
         # Double-check after acquiring project lock
         with _engines_lock:
             if proj in _engines:
+                _engines.move_to_end(proj)
                 return _engines[proj]
 
         db = create_database(project=proj)
@@ -194,9 +252,10 @@ def _get_engine(project: str | None = None) -> SearchEngine:
         with _engines_lock:
             _engines[proj] = engine
             if len(_engines) > MAX_ENGINE_CACHE_SIZE:
-                oldest = next(iter(_engines))
-                evicted = _engines.pop(oldest)
-                logger.info("Evicted engine for project=%s", oldest)
+                # Pop the least-recently-used entry (first item, last=False)
+                oldest, evicted = next(iter(_engines.items()))
+                del _engines[oldest]
+                logger.info("Evicted LRU engine for project=%s", oldest)
                 evicted.close()
 
         return engine
@@ -263,6 +322,33 @@ def memory_store(
             expires_at_dt = datetime.fromisoformat(expires_at)
         except ValueError:
             return {"error": f"Invalid expires_at format: '{expires_at}'. Use ISO 8601 (e.g. '2026-04-30T00:00:00+00:00')."}
+
+    # Prompt injection sanitization for critical/immutable memories.
+    # Injection patterns in importance=0 + immutable=True memories would survive
+    # indefinitely in the graph and surface in every recall — highest risk vector.
+    if importance == 0 and immutable:
+        _INJECTION_PATTERNS = re.compile(
+            r"^(ignore (all |previous )?instructions?[:\s]|"
+            r"system:\s|"
+            r"you are now |"
+            r"disregard (all )?previous |"
+            r"forget (all )?previous )",
+            re.IGNORECASE | re.MULTILINE,
+        )
+        sanitized_lines = []
+        for line in content.splitlines():
+            if _INJECTION_PATTERNS.match(line.strip()):
+                logger.warning(
+                    "Prompt injection pattern stripped from immutable memory (project=%s)", project
+                )
+                continue
+            sanitized_lines.append(line)
+        content = "\n".join(sanitized_lines)
+    elif _INJECTION_SOFT_WARNING.search(content):
+        logger.warning(
+            "Possible prompt injection pattern in memory content (project=%s, importance=%d)",
+            project, importance,
+        )
 
     memory = Memory(
         content=content,
@@ -402,6 +488,7 @@ def memory_recall(
     memory_type: str = "",
     tags: str = "",
     min_importance: int = 4,
+    max_importance: int | None = None,
     graph_hops: int = 1,
     since: str = "",
     before: str = "",
@@ -439,11 +526,23 @@ def memory_recall(
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
     mt = memory_type if memory_type else None
-    mi = min_importance if min_importance < 4 else None
+    # max_importance is a clearer alias for the ceiling-based filter (min_importance <= this value)
+    effective_importance = max_importance if max_importance is not None else min_importance
+    mi = effective_importance if effective_importance < 4 else None
 
     from datetime import datetime as _dt
-    since_dt = _dt.fromisoformat(since) if since else None
-    before_dt = _dt.fromisoformat(before) if before else None
+    since_dt = None
+    if since:
+        try:
+            since_dt = _dt.fromisoformat(since)
+        except ValueError:
+            return {"error": f"Invalid date format for 'since': '{since}'. Use ISO 8601 (e.g. '2026-01-01T00:00:00+00:00')."}
+    before_dt = None
+    if before:
+        try:
+            before_dt = _dt.fromisoformat(before)
+        except ValueError:
+            return {"error": f"Invalid date format for 'before': '{before}'. Use ISO 8601 (e.g. '2026-03-31T23:59:59+00:00')."}
 
     results = engine.recall(
         query=query,
@@ -957,7 +1056,6 @@ def memory_migrate_embedder(
         Migration status, chunk count queued, old and new embedder names,
         and estimated completion time in minutes.
     """
-    from .embeddings import create_embedder as _create_embedder
     import os as _os
 
     proj = _normalize_project(project)
@@ -1003,7 +1101,7 @@ def memory_migrate_embedder(
             _os.environ["ENGRAM_OLLAMA_MODEL"] = model
         elif provider == "openai":
             _os.environ["ENGRAM_OPENAI_MODEL"] = model
-        new_emb = _create_embedder()
+        new_emb = create_embedder()
         engine.db.set_meta("embedder_name", new_emb.name)
         engine.db.set_meta("embedder_dimensions", str(new_emb.dimensions))
         engine.db.set_meta("embedder_version", getattr(new_emb, "version", "unknown"))
@@ -1021,7 +1119,6 @@ def memory_migrate_embedder(
 
     # Restart the reembedder with the new embedder instance
     engine._reembedder.stop()
-    from .reembedder import BackgroundReembedder
     engine._reembedder = BackgroundReembedder(db=engine.db, embedder=new_emb, project=proj)
     engine._reembedder.start()
 
@@ -1135,6 +1232,12 @@ def memory_import_claudemd(
     from pathlib import Path
     project = _normalize_project(project)
 
+    # Security: reject paths outside the user's home directory (arbitrary file read)
+    try:
+        _validate_input_path(file_path)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
     if not Path(file_path).exists():
         return {"error": f"File not found: {file_path}"}
 
@@ -1214,6 +1317,13 @@ def memory_dump(project: str = "", output_path: str = "./memory-dump") -> dict:
     from .markdown_io import dump_memories_to_directory
 
     logger.debug("memory_dump called: project=%s, output=%s", project, output_path)
+
+    # Security: reject paths outside the user's home directory (path traversal)
+    try:
+        _validate_output_path(output_path)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
     engine = _get_engine(project or None)
 
     # List all memories in the project

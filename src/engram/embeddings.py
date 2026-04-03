@@ -92,6 +92,30 @@ class OpenAIEmbedder:
 
 _ALLOWED_PORTS = {80, 443, 11434, 8080, 3000, 8788}
 
+# RFC-1918 private address ranges to block for SSRF protection.
+# We block non-loopback private ranges and link-local (169.254.x.x / metadata endpoints).
+# Loopback (127.0.0.1) is explicitly allowed — local Ollama is a primary use case.
+_SSRF_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("10.0.0.0/8"),       # RFC-1918
+    ipaddress.ip_network("172.16.0.0/12"),     # RFC-1918
+    ipaddress.ip_network("192.168.0.0/16"),    # RFC-1918
+    ipaddress.ip_network("169.254.0.0/16"),    # link-local / AWS/GCP metadata
+    ipaddress.ip_network("fc00::/7"),          # IPv6 unique local
+    ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
+]
+
+
+def _is_ssrf_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Return True if the IP address should be blocked for SSRF protection.
+
+    Blocks RFC-1918 private ranges and link-local addresses.
+    Loopback (127.x.x.x / ::1) is explicitly allowed for local Ollama.
+    """
+    if ip.is_loopback:
+        return False
+    return any(ip in net for net in _SSRF_BLOCKED_NETWORKS)
+
+
 def _validate_ollama_url(url: str) -> bool:
     """Validate that an Ollama URL is not targeting internal/metadata services (SSRF protection)."""
     try:
@@ -106,10 +130,18 @@ def _validate_ollama_url(url: str) -> bool:
             return False
         try:
             ip = ipaddress.ip_address(hostname)
-            if ip.is_link_local:
+            if _is_ssrf_blocked(ip):
                 return False
         except ValueError:
-            pass
+            # hostname is not a bare IP literal — attempt DNS resolution to check
+            import socket
+            try:
+                resolved_ip = socket.gethostbyname(hostname)
+                ip = ipaddress.ip_address(resolved_ip)
+                if _is_ssrf_blocked(ip):
+                    return False
+            except (socket.gaierror, ValueError):
+                pass
         return True
     except Exception:
         return False
