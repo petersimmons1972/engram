@@ -124,61 +124,55 @@ class SearchEngine:
         return memory
 
     def store_batch(self, memories: list[Memory]) -> list[Memory]:
-        """Store multiple memories with batched embedding.
+        """Store multiple memories inside a single DB transaction.
 
-        Chunks all memories, embeds all chunks in one batch call, then stores.
-        Individual memory failures are skipped without aborting the batch.
+        All memory rows, chunk rows, and embeddings are written within one
+        transaction opened on ``self.db.pool``.  If embedding fails or any
+        write raises, the transaction rolls back automatically — no manual
+        delete_memory_atomic cleanup loop is needed or invoked.
 
-        If embed_batch raises, all memory records committed so far are rolled
-        back via delete_memory_atomic to prevent orphaned records.
+        The embed step runs *before* store_chunks so that a provider failure
+        never leaves half-embedded chunk rows.
         """
         self._check_embedder_metadata()
+
         stored: list[Memory] = []
-        stored_ids: list[str] = []
         all_chunks: list[Chunk] = []
         all_texts: list[str] = []
 
-        for memory in memories:
-            try:
-                memory = self.db.store_memory(memory)
-                stored.append(memory)
-                stored_ids.append(memory.id)
-                chunks = chunk_text(memory.content)
-                for i, text in enumerate(chunks):
-                    h = chunk_hash(text)
-                    if self.db.chunk_hash_exists(h):
-                        continue
-                    chunk_obj = Chunk(
-                        memory_id=memory.id, chunk_text=text,
-                        chunk_index=i, chunk_hash=h,
-                    )
-                    all_chunks.append(chunk_obj)
-                    all_texts.append(text)
-            except Exception as e:
-                logger.warning("Failed to process memory %s in batch: %s", memory.id, e)
-                continue  # Skip failed individual memories
+        with self.db.pool.connection() as conn:
+            with conn.transaction():
+                # --- Phase 1: write memory rows, collect chunk metadata ---
+                for memory in memories:
+                    try:
+                        memory = self.db.store_memory(memory, conn=conn)
+                        stored.append(memory)
+                        chunks = chunk_text(memory.content)
+                        for i, text in enumerate(chunks):
+                            h = chunk_hash(text)
+                            if self.db.chunk_hash_exists(h):
+                                continue
+                            chunk_obj = Chunk(
+                                memory_id=memory.id, chunk_text=text,
+                                chunk_index=i, chunk_hash=h,
+                            )
+                            all_chunks.append(chunk_obj)
+                            all_texts.append(text)
+                    except Exception as e:
+                        # Re-raise so the transaction rolls back everything
+                        raise RuntimeError(
+                            f"Failed to process memory {memory.id} in batch: {e}"
+                        ) from e
 
-        try:
-            if all_texts and self.has_vectors:
-                embeddings = self.embedder.embed_batch(all_texts)
-                for chunk_obj, emb in zip(all_chunks, embeddings):
-                    chunk_obj.embedding = to_blob(emb)
+                # --- Phase 2: embed all chunks in one call ---
+                if all_texts and self.has_vectors:
+                    embeddings = self.embedder.embed_batch(all_texts)
+                    for chunk_obj, emb in zip(all_chunks, embeddings):
+                        chunk_obj.embedding = to_blob(emb)
 
-            if all_chunks:
-                self.db.store_chunks(all_chunks)
-        except Exception:
-            # Roll back all memory records committed before the failure to
-            # prevent orphaned memory rows with no associated chunks.
-            for memory_id in stored_ids:
-                try:
-                    # force=True: these records were just created in this batch
-                    # and must be cleaned up even if marked immutable.
-                    self.db.delete_memory_atomic(memory_id, force=True)
-                except Exception:
-                    logger.warning(
-                        "store_batch rollback failed for memory_id %s", memory_id
-                    )
-            raise
+                # --- Phase 3: write chunk rows ---
+                if all_chunks:
+                    self.db.store_chunks(all_chunks, conn=conn)
 
         return stored
 

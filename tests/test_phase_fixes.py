@@ -247,11 +247,30 @@ class TestSearchEngineCloseClosesDB:
 # ---------------------------------------------------------------------------
 
 class TestStoreBatchRollbackOnEmbedFailure:
-    """If embedding fails mid-batch, no memories should be stored."""
+    """If embedding fails mid-batch, no memories should be stored.
 
-    def test_embedding_failure_stores_nothing(self):
-        from unittest.mock import MagicMock, call, patch
+    Post #123 refactor: store_batch wraps everything in a single DB transaction.
+    On embedding failure the transaction rolls back automatically — no manual
+    delete_memory_atomic loop needed or expected.
+    """
+
+    def _make_engine(self, mock_db, embedder):
+        """Construct a SearchEngine with mocked background workers."""
+        from unittest.mock import patch
         import engram.search as search_mod
+
+        with patch("engram.search.BackgroundSummarizer") as MockSumm, \
+             patch("engram.search.BackgroundReembedder") as MockReemb:
+            MockSumm.return_value = MagicMock()
+            MockReemb.return_value = MagicMock()
+            return search_mod.SearchEngine(db=mock_db, embedder=embedder)
+
+    def test_embedding_failure_raises_and_does_not_call_delete_atomic(self):
+        """Embedding failure must raise and must NOT call delete_memory_atomic.
+
+        The transaction rollback handles cleanup — a manual delete loop would
+        attempt to remove records that were never committed.
+        """
         from engram.types import Memory
 
         mock_db = MagicMock()
@@ -259,13 +278,22 @@ class TestStoreBatchRollbackOnEmbedFailure:
         mock_db.get_meta.return_value = None
         mock_db.chunk_hash_exists.return_value = False
 
-        # store_memory returns a Memory with a predictable id
-        stored_ids = ["id-one", "id-two"]
-        side_effects = [
+        # Simulate the pool/transaction context managers used by store_batch
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = lambda s: mock_conn
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_tx = MagicMock()
+        mock_tx.__enter__ = lambda s: mock_tx
+        mock_tx.__exit__ = MagicMock(return_value=False)
+        mock_conn.transaction.return_value = mock_tx
+        mock_pool = MagicMock()
+        mock_pool.connection.return_value = mock_conn
+        mock_db.pool = mock_pool
+
+        mock_db.store_memory.side_effect = [
             Memory(id="id-one", content="Memory one"),
             Memory(id="id-two", content="Memory two"),
         ]
-        mock_db.store_memory.side_effect = side_effects
 
         class FailingEmbedder:
             name = "failing/test"
@@ -275,36 +303,65 @@ class TestStoreBatchRollbackOnEmbedFailure:
             def embed_batch(self, texts, batch_size=64):
                 raise RuntimeError("API down")
 
-        with patch("engram.search.BackgroundSummarizer") as MockSumm, \
-             patch("engram.search.BackgroundReembedder") as MockReemb:
-            MockSumm.return_value = MagicMock()
-            MockReemb.return_value = MagicMock()
-            engine = search_mod.SearchEngine(db=mock_db, embedder=FailingEmbedder())
+        engine = self._make_engine(mock_db, FailingEmbedder())
 
         memories = [
             Memory(content="Memory one"),
             Memory(content="Memory two"),
         ]
 
-        # store_batch must raise (embedding failed) and must not leave orphan records
+        # store_batch must propagate the embedding error
         with pytest.raises(RuntimeError, match="API down"):
             engine.store_batch(memories)
 
-        # No chunks should have been stored
+        # No chunks should have been stored (embedding failed before store_chunks)
         assert not mock_db.store_chunks.called, (
-            "store_chunks was called despite embedding failure — "
-            "batch should embed all-or-nothing before storing chunks"
+            "store_chunks was called despite embedding failure"
         )
 
-        # Every memory that was committed to the DB must have been rolled back
+        # Transaction rollback handles cleanup — delete_memory_atomic must NOT be called
+        assert not mock_db.delete_memory_atomic.called, (
+            "delete_memory_atomic should not be called — transaction rollback handles cleanup"
+        )
+
+    def test_store_batch_success_calls_store_memory_for_each(self):
+        """On success, store_memory is called once per input memory."""
+        from engram.types import Memory
+
+        mock_db = MagicMock()
+        mock_db.project = "test"
+        mock_db.get_meta.return_value = None
+        mock_db.chunk_hash_exists.return_value = False
+
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = lambda s: mock_conn
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_tx = MagicMock()
+        mock_tx.__enter__ = lambda s: mock_tx
+        mock_tx.__exit__ = MagicMock(return_value=False)
+        mock_conn.transaction.return_value = mock_tx
+        mock_pool = MagicMock()
+        mock_pool.connection.return_value = mock_conn
+        mock_db.pool = mock_pool
+
+        returned_memories = [
+            Memory(id="id-one", content="Alpha"),
+            Memory(id="id-two", content="Beta"),
+        ]
+        mock_db.store_memory.side_effect = list(returned_memories)
+
+        # NullEmbedder makes has_vectors=False so embed_batch is never called,
+        # keeping the test focused on the transaction structure and call count.
+        from engram.embeddings import NullEmbedder
+        engine = self._make_engine(mock_db, NullEmbedder())
+
+        memories = [Memory(content="Alpha"), Memory(content="Beta")]
+        result = engine.store_batch(memories)
+
         assert mock_db.store_memory.call_count == 2, (
-            "Expected store_memory to be called for each input memory"
+            f"Expected store_memory called 2 times, got {mock_db.store_memory.call_count}"
         )
-        deleted = {c.args[0] for c in mock_db.delete_memory_atomic.call_args_list}
-        assert deleted == set(stored_ids), (
-            f"Orphan rollback incomplete — expected delete_memory_atomic called "
-            f"for {stored_ids}, got {deleted}"
-        )
+        assert len(result) == 2, f"Expected 2 stored memories, got {len(result)}"
 
 
 # ---------------------------------------------------------------------------
