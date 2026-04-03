@@ -37,6 +37,11 @@ class SearchEngine:
         self._summarizer.start()
         self._reembedder = BackgroundReembedder(db=self.db, embedder=self.embedder, project=self.db.project)
         self._reembedder.start()
+        # Reference counting for deferred-close (issue #102).
+        # _ref_lock guards both _ref_count and _closing.
+        self._ref_count: int = 0
+        self._closing: bool = False
+        self._ref_lock: threading.Lock = threading.Lock()
 
     @property
     def has_vectors(self) -> bool:
@@ -111,8 +116,11 @@ class SearchEngine:
             if chunk_objects:
                 self.db.store_chunks(chunk_objects)
         except Exception as e:
-            # Any failure after memory creation: roll back to prevent orphans
-            self.db.delete_memory_atomic(memory.id)
+            # Any failure after memory creation: roll back to prevent orphans.
+            # force=True because the memory was just created and has never been
+            # visible to callers — we must be able to clean it up regardless of
+            # the immutable flag.
+            self.db.delete_memory_atomic(memory.id, force=True)
             raise ValueError(
                 f"Failed to store memory {memory.id}. "
                 f"Memory deleted to prevent orphaned record. Error: {e}"
@@ -121,59 +129,55 @@ class SearchEngine:
         return memory
 
     def store_batch(self, memories: list[Memory]) -> list[Memory]:
-        """Store multiple memories with batched embedding.
+        """Store multiple memories inside a single DB transaction.
 
-        Chunks all memories, embeds all chunks in one batch call, then stores.
-        Individual memory failures are skipped without aborting the batch.
+        All memory rows, chunk rows, and embeddings are written within one
+        transaction opened on ``self.db.pool``.  If embedding fails or any
+        write raises, the transaction rolls back automatically — no manual
+        delete_memory_atomic cleanup loop is needed or invoked.
 
-        If embed_batch raises, all memory records committed so far are rolled
-        back via delete_memory_atomic to prevent orphaned records.
+        The embed step runs *before* store_chunks so that a provider failure
+        never leaves half-embedded chunk rows.
         """
         self._check_embedder_metadata()
+
         stored: list[Memory] = []
-        stored_ids: list[str] = []
         all_chunks: list[Chunk] = []
         all_texts: list[str] = []
 
-        for memory in memories:
-            try:
-                memory = self.db.store_memory(memory)
-                stored.append(memory)
-                stored_ids.append(memory.id)
-                chunks = chunk_text(memory.content)
-                for i, text in enumerate(chunks):
-                    h = chunk_hash(text)
-                    if self.db.chunk_hash_exists(h):
-                        continue
-                    chunk_obj = Chunk(
-                        memory_id=memory.id, chunk_text=text,
-                        chunk_index=i, chunk_hash=h,
-                    )
-                    all_chunks.append(chunk_obj)
-                    all_texts.append(text)
-            except Exception as e:
-                logger.warning("Failed to process memory %s in batch: %s", memory.id, e)
-                continue  # Skip failed individual memories
+        with self.db.pool.connection() as conn:
+            with conn.transaction():
+                # --- Phase 1: write memory rows, collect chunk metadata ---
+                for memory in memories:
+                    try:
+                        memory = self.db.store_memory(memory, conn=conn)
+                        stored.append(memory)
+                        chunks = chunk_text(memory.content)
+                        for i, text in enumerate(chunks):
+                            h = chunk_hash(text)
+                            if self.db.chunk_hash_exists(h):
+                                continue
+                            chunk_obj = Chunk(
+                                memory_id=memory.id, chunk_text=text,
+                                chunk_index=i, chunk_hash=h,
+                            )
+                            all_chunks.append(chunk_obj)
+                            all_texts.append(text)
+                    except Exception as e:
+                        # Re-raise so the transaction rolls back everything
+                        raise RuntimeError(
+                            f"Failed to process memory {memory.id} in batch: {e}"
+                        ) from e
 
-        try:
-            if all_texts and self.has_vectors:
-                embeddings = self.embedder.embed_batch(all_texts)
-                for chunk_obj, emb in zip(all_chunks, embeddings):
-                    chunk_obj.embedding = to_blob(emb)
+                # --- Phase 2: embed all chunks in one call ---
+                if all_texts and self.has_vectors:
+                    embeddings = self.embedder.embed_batch(all_texts)
+                    for chunk_obj, emb in zip(all_chunks, embeddings):
+                        chunk_obj.embedding = to_blob(emb)
 
-            if all_chunks:
-                self.db.store_chunks(all_chunks)
-        except Exception:
-            # Roll back all memory records committed before the failure to
-            # prevent orphaned memory rows with no associated chunks.
-            for memory_id in stored_ids:
-                try:
-                    self.db.delete_memory_atomic(memory_id)
-                except Exception:
-                    logger.warning(
-                        "store_batch rollback failed for memory_id %s", memory_id
-                    )
-            raise
+                # --- Phase 3: write chunk rows ---
+                if all_chunks:
+                    self.db.store_chunks(all_chunks, conn=conn)
 
         return stored
 
@@ -409,8 +413,49 @@ class SearchEngine:
         """Convenience accessor for the underlying DB project name."""
         return self.db.project
 
+    def __enter__(self) -> "SearchEngine":
+        """Increment active reference count.
+
+        Raises RuntimeError if the engine is already being evicted.  The caller
+        should catch this, call _get_engine() again to obtain a fresh engine,
+        and retry the operation.
+        """
+        with self._ref_lock:
+            if self._closing:
+                raise RuntimeError(
+                    "SearchEngine for project is being evicted — caller should retry"
+                )
+            self._ref_count += 1
+        return self
+
+    def __exit__(self, *_) -> None:
+        """Decrement active reference count. If closing and now at zero, tear down."""
+        with self._ref_lock:
+            self._ref_count -= 1
+            should_close = self._closing and self._ref_count == 0
+        if should_close:
+            self._do_close()
+
     def close(self) -> None:
-        """Stop background threads and close the DB connection pool."""
+        """Signal that this engine should close.
+
+        If no active references exist, closes immediately.  If references exist
+        (threads mid-operation), defers teardown until the last reference is
+        released via __exit__.
+        """
+        with self._ref_lock:
+            self._closing = True
+            should_close = self._ref_count == 0
+        if should_close:
+            self._do_close()
+
+    def _do_close(self) -> None:
+        """Actual teardown — stop background threads and close the DB pool.
+
+        Safe to call from any thread.  Called either directly from close() when
+        no refs are held, or from __exit__ when the last ref drops after an
+        eviction-time close().
+        """
         self._summarizer.stop()
         self._reembedder.stop()
         self.db.close()

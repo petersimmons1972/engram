@@ -335,7 +335,15 @@ class PostgresBackend:
 
     # ── Memory CRUD ───────────────────────────────────────────────
 
-    def store_memory(self, memory: Memory) -> Memory:
+    def store_memory(self, memory: Memory, conn=None) -> Memory:
+        """Store a memory row.
+
+        If *conn* is provided the INSERT is executed on that connection without
+        committing — the caller manages the transaction boundary (used by
+        store_batch for single-transaction semantics).  When *conn* is None the
+        method opens its own connection and commits immediately (original
+        single-memory behaviour).
+        """
         now = datetime.now(timezone.utc)
         memory.created_at = now
         memory.updated_at = now
@@ -343,30 +351,33 @@ class PostgresBackend:
         memory.project = self.project
         memory.content_hash = _content_hash(memory.content)
 
-        with self.pool.connection() as conn:
-            conn.execute(
-                """INSERT INTO memories
+        params = (
+            memory.id,
+            memory.content,
+            memory.memory_type.value,
+            memory.project,
+            json.dumps(memory.tags),
+            memory.importance,
+            memory.access_count,
+            now,
+            now,
+            now,
+            memory.immutable,
+            memory.expires_at,
+            memory.content_hash,
+        )
+        sql = """INSERT INTO memories
                    (id, content, memory_type, project, tags,
                     importance, access_count, last_accessed, created_at, updated_at,
                     immutable, expires_at, content_hash)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (
-                    memory.id,
-                    memory.content,
-                    memory.memory_type.value,
-                    memory.project,
-                    json.dumps(memory.tags),
-                    memory.importance,
-                    memory.access_count,
-                    now,
-                    now,
-                    now,
-                    memory.immutable,
-                    memory.expires_at,
-                    memory.content_hash,
-                ),
-            )
-            conn.commit()
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+
+        if conn is not None:
+            conn.execute(sql, params)
+        else:
+            with self.pool.connection() as conn:
+                conn.execute(sql, params)
+                conn.commit()
         return memory
 
     def get_memory(self, memory_id: str) -> Memory | None:
@@ -446,7 +457,27 @@ class PostgresBackend:
             conn.commit()
             return row["c"] > 0
 
-    def delete_memory_atomic(self, memory_id: str) -> bool:
+    def delete_memory_atomic(self, memory_id: str, force: bool = False) -> bool:
+        """Atomically delete a memory and all its chunks and relationships.
+
+        force=False (default): raises ValueError if memory is immutable.
+        force=True: bypasses immutability check — only for rollback operations
+                    where the memory was just created and must be cleaned up.
+        """
+        if not force:
+            mem = self.get_memory(memory_id)
+            if mem and mem.immutable:
+                raise ValueError(
+                    f"Cannot delete immutable memory {memory_id}. "
+                    "Use force=True only for rollback operations."
+                )
+        else:
+            mem = self.get_memory(memory_id)
+            logger.warning(
+                "force-deleting memory %s (immutable=%s) — rollback path only",
+                memory_id,
+                mem.immutable if mem else "unknown",
+            )
         with self.pool.connection() as conn:
             with conn.transaction():
                 conn.execute(
@@ -507,23 +538,33 @@ class PostgresBackend:
 
     # ── Chunk CRUD ────────────────────────────────────────────────
 
-    def store_chunks(self, chunks: list[Chunk]) -> None:
+    def store_chunks(self, chunks: list[Chunk], conn=None) -> None:
+        """Persist chunk rows.
+
+        If *conn* is provided the INSERT runs on that connection without
+        committing — caller manages the transaction (used by store_batch).
+        When *conn* is None the method opens its own connection and commits.
+        """
         if not chunks:
             return
-        with self.pool.connection() as conn:
+        rows = [
+            (c.id, c.memory_id, c.chunk_text, c.chunk_index,
+             c.chunk_hash, c.embedding)
+            for c in chunks
+        ]
+        sql = """INSERT INTO chunks (id, memory_id, chunk_text, chunk_index,
+                   chunk_hash, embedding)
+                   VALUES (%s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (id) DO NOTHING"""
+
+        if conn is not None:
             with conn.cursor() as cur:
-                cur.executemany(
-                    """INSERT INTO chunks (id, memory_id, chunk_text, chunk_index,
-                       chunk_hash, embedding)
-                       VALUES (%s, %s, %s, %s, %s, %s)
-                       ON CONFLICT (id) DO NOTHING""",
-                    [
-                        (c.id, c.memory_id, c.chunk_text, c.chunk_index,
-                         c.chunk_hash, c.embedding)
-                        for c in chunks
-                    ],
-                )
-            conn.commit()
+                cur.executemany(sql, rows)
+        else:
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.executemany(sql, rows)
+                conn.commit()
 
     def get_chunks_for_memory(self, memory_id: str) -> list[Chunk]:
         with self.pool.connection() as conn:

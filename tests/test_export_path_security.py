@@ -79,6 +79,12 @@ class TestExportPathAllowed:
         class _FakeEngine:
             db = _FakeDB()
 
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_):
+                pass
+
         monkeypatch.setattr(srv, "_get_engine", lambda *a, **kw: _FakeEngine())
 
         # Patch dump_all_projects and create_export_readme from markdown_io
