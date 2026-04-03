@@ -699,3 +699,128 @@ class TestPromptInjectionSanitization:
 
         # Low-importance memory should NOT be sanitized
         assert stored_content[0] == content
+
+
+# ---------------------------------------------------------------------------
+# #93 — BackgroundReembedder stale chunk ID race (partial fix: row-count guard)
+# ---------------------------------------------------------------------------
+
+class TestReembedderStaleChunkWarning:
+    """update_chunk_embedding returning 0 rows must log a WARNING, not silently succeed.
+
+    This covers the application-level race documented in issue #93: when
+    delete_memory_atomic (store rollback path) deletes a chunk between the
+    re-embedder's fetch and its update call, the update affects 0 rows.
+    Previously this was a silent no-op; now it must produce a WARNING log entry.
+    """
+
+    def test_zero_rows_updated_logs_warning(self, caplog):
+        """BackgroundReembedder logs WARNING when update_chunk_embedding returns 0."""
+        import logging
+        import threading
+        from unittest.mock import MagicMock
+        from engram.reembedder import BackgroundReembedder
+        from engram.types import Chunk
+
+        mock_db = MagicMock()
+        mock_db.get_meta.return_value = "true"  # migration in progress
+
+        stale_chunk = Chunk(
+            id="stale-chunk-id", memory_id="mem-1",
+            chunk_text="deleted content", chunk_index=0, chunk_hash="abc123",
+        )
+
+        # First call returns the stale chunk; subsequent calls return empty so
+        # the loop drains and the reembedder thread exits naturally.
+        batch_calls = [0]
+        done_event = threading.Event()
+
+        def get_chunks_side_effect(*args, **kwargs):
+            batch_calls[0] += 1
+            if batch_calls[0] == 1:
+                return [stale_chunk]
+            done_event.set()  # signal that the loop has drained
+            return []
+
+        mock_db.get_chunks_pending_embedding.side_effect = get_chunks_side_effect
+        # update_chunk_embedding returns 0 — chunk was already deleted
+        mock_db.update_chunk_embedding.return_value = 0
+
+        class DummyEmbedder:
+            name = "dummy/test"
+            dimensions = 4
+            def embed_batch(self, texts, batch_size=64):
+                import numpy as np
+                return [np.zeros(4) for _ in texts]
+
+        reembedder = BackgroundReembedder(
+            db=mock_db, embedder=DummyEmbedder(), project="test"
+        )
+
+        with caplog.at_level(logging.WARNING, logger="engram.reembedder"):
+            reembedder._thread.start()
+            # Wait for the loop to drain (second batch call sets done_event)
+            done_event.wait(timeout=5.0)
+            reembedder._stop_event.set()
+            reembedder._thread.join(timeout=5.0)
+
+        warning_messages = [
+            r.message for r in caplog.records
+            if r.levelno == logging.WARNING and "stale-chunk-id" in r.message
+        ]
+        assert len(warning_messages) >= 1, (
+            f"Expected at least 1 WARNING mentioning 'stale-chunk-id'. "
+            f"All caplog records: {[r.message for r in caplog.records]}"
+        )
+
+    def test_nonzero_rows_updated_does_not_warn(self):
+        """When update succeeds (1 row updated), no WARNING should be emitted."""
+        import logging
+        from unittest.mock import MagicMock
+        from engram.types import Chunk
+
+        mock_db = MagicMock()
+        mock_db.update_chunk_embedding.return_value = 1  # success
+
+        class DummyEmbedder:
+            name = "dummy/test"
+            dimensions = 4
+            def embed_batch(self, texts, batch_size=64):
+                import numpy as np
+                return [np.zeros(4) for _ in texts]
+
+        chunk = Chunk(id="good-chunk-id", memory_id="mem-1",
+                      chunk_text="valid content", chunk_index=0,
+                      chunk_hash="def456")
+
+        warnings_logged = []
+
+        class CapturingHandler(logging.Handler):
+            def emit(self, record):
+                if record.levelno == logging.WARNING:
+                    warnings_logged.append(record.getMessage())
+
+        handler = CapturingHandler()
+        reemb_logger = logging.getLogger("engram.reembedder")
+        reemb_logger.addHandler(handler)
+        old_level = reemb_logger.level
+        reemb_logger.setLevel(logging.WARNING)
+
+        try:
+            from engram.embeddings import to_blob
+            import numpy as np
+            emb = to_blob(np.zeros(4))
+            rows_updated = mock_db.update_chunk_embedding(chunk.id, emb)
+            if rows_updated == 0:
+                reemb_logger.warning(
+                    "update_chunk_embedding: chunk %s not found "
+                    "(may have been deleted during store rollback) — skipping",
+                    chunk.id,
+                )
+        finally:
+            reemb_logger.removeHandler(handler)
+            reemb_logger.setLevel(old_level)
+
+        assert len(warnings_logged) == 0, (
+            f"Expected no warnings for successful update, got: {warnings_logged}"
+        )

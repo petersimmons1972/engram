@@ -624,13 +624,18 @@ class PostgresBackend:
             ).fetchall()
         return [self._row_to_chunk(r) for r in rows]
 
-    def update_chunk_embedding(self, chunk_id: str, embedding: bytes) -> None:
+    def update_chunk_embedding(self, chunk_id: str, embedding: bytes) -> int:
+        """Update the embedding for a chunk. Returns the number of rows updated.
+
+        Returns 0 if the chunk no longer exists (e.g. deleted by store rollback).
+        """
         with self.pool.connection() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE chunks SET embedding = %s WHERE id = %s",
                 (embedding, chunk_id),
             )
             conn.commit()
+            return cursor.rowcount
 
     def get_pending_embedding_count(self, project: str) -> int:
         with self.pool.connection() as conn:
