@@ -525,6 +525,102 @@ class TestImmutabilityAtDBLayer:
 
 
 # ---------------------------------------------------------------------------
+# #121 — delete_memory_atomic immutability check
+# ---------------------------------------------------------------------------
+
+class TestDeleteMemoryAtomicImmutabilityGuard:
+    """delete_memory_atomic must respect immutability unless force=True."""
+
+    def test_default_raises_for_immutable(self, monkeypatch):
+        """delete_memory_atomic(id) without force must raise ValueError on immutable memory."""
+        import engram.db_postgres as dbmod
+
+        backend = object.__new__(dbmod.PostgresBackend)
+        backend.project = "test"
+
+        immutable_memory = MagicMock()
+        immutable_memory.immutable = True
+
+        monkeypatch.setattr(backend, "get_memory", lambda mid: immutable_memory)
+
+        with pytest.raises(ValueError, match="immutable"):
+            backend.delete_memory_atomic("fake-id")
+
+    def test_force_true_bypasses_immutability_check(self, monkeypatch):
+        """delete_memory_atomic(id, force=True) must skip the immutability check."""
+        import engram.db_postgres as dbmod
+
+        backend = object.__new__(dbmod.PostgresBackend)
+        backend.project = "test"
+
+        immutable_memory = MagicMock()
+        immutable_memory.immutable = True
+
+        # get_memory should NOT be called at all when force=True
+        get_memory_called = []
+        def track_get_memory(mid):
+            get_memory_called.append(mid)
+            return immutable_memory
+        monkeypatch.setattr(backend, "get_memory", track_get_memory)
+
+        # Patch the pool so we don't need a real DB
+        mock_conn = MagicMock()
+        mock_row = MagicMock()
+        mock_row.__getitem__ = lambda self, key: 1  # row["c"] > 0
+        mock_conn.execute.return_value.fetchone.return_value = mock_row
+        mock_conn.__enter__ = lambda s: mock_conn
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        mock_tx = MagicMock()
+        mock_tx.__enter__ = lambda s: mock_tx
+        mock_tx.__exit__ = MagicMock(return_value=False)
+        mock_conn.transaction.return_value = mock_tx
+
+        mock_pool = MagicMock()
+        mock_pool.connection.return_value = mock_conn
+        backend.pool = mock_pool
+
+        # Should not raise, and should not call get_memory
+        backend.delete_memory_atomic("fake-id", force=True)
+        assert get_memory_called == [], (
+            "get_memory should not be called when force=True"
+        )
+
+    def test_default_allows_mutable_memory(self, monkeypatch):
+        """delete_memory_atomic(id) must succeed for mutable memories."""
+        import engram.db_postgres as dbmod
+
+        backend = object.__new__(dbmod.PostgresBackend)
+        backend.project = "test"
+
+        mutable_memory = MagicMock()
+        mutable_memory.immutable = False
+
+        monkeypatch.setattr(backend, "get_memory", lambda mid: mutable_memory)
+
+        # Patch the pool so we don't need a real DB
+        mock_conn = MagicMock()
+        mock_row = MagicMock()
+        mock_row.__getitem__ = lambda self, key: 1  # row["c"] > 0
+        mock_conn.execute.return_value.fetchone.return_value = mock_row
+        mock_conn.__enter__ = lambda s: mock_conn
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        mock_tx = MagicMock()
+        mock_tx.__enter__ = lambda s: mock_tx
+        mock_tx.__exit__ = MagicMock(return_value=False)
+        mock_conn.transaction.return_value = mock_tx
+
+        mock_pool = MagicMock()
+        mock_pool.connection.return_value = mock_conn
+        backend.pool = mock_pool
+
+        # Should not raise
+        result = backend.delete_memory_atomic("fake-id")
+        assert result is True or result is False  # just verify it ran
+
+
+# ---------------------------------------------------------------------------
 # #115 — Engine cache: LRU (OrderedDict) + move-to-end on access
 # ---------------------------------------------------------------------------
 

@@ -446,7 +446,20 @@ class PostgresBackend:
             conn.commit()
             return row["c"] > 0
 
-    def delete_memory_atomic(self, memory_id: str) -> bool:
+    def delete_memory_atomic(self, memory_id: str, force: bool = False) -> bool:
+        """Atomically delete a memory and all its chunks and relationships.
+
+        force=False (default): raises ValueError if memory is immutable.
+        force=True: bypasses immutability check — only for rollback operations
+                    where the memory was just created and must be cleaned up.
+        """
+        if not force:
+            mem = self.get_memory(memory_id)
+            if mem and mem.immutable:
+                raise ValueError(
+                    f"Cannot delete immutable memory {memory_id}. "
+                    "Use force=True only for rollback operations."
+                )
         with self.pool.connection() as conn:
             with conn.transaction():
                 conn.execute(

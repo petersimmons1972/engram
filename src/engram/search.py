@@ -111,8 +111,11 @@ class SearchEngine:
             if chunk_objects:
                 self.db.store_chunks(chunk_objects)
         except Exception as e:
-            # Any failure after memory creation: roll back to prevent orphans
-            self.db.delete_memory_atomic(memory.id)
+            # Any failure after memory creation: roll back to prevent orphans.
+            # force=True because the memory was just created and has never been
+            # visible to callers — we must be able to clean it up regardless of
+            # the immutable flag.
+            self.db.delete_memory_atomic(memory.id, force=True)
             raise ValueError(
                 f"Failed to store memory {memory.id}. "
                 f"Memory deleted to prevent orphaned record. Error: {e}"
@@ -168,7 +171,9 @@ class SearchEngine:
             # prevent orphaned memory rows with no associated chunks.
             for memory_id in stored_ids:
                 try:
-                    self.db.delete_memory_atomic(memory_id)
+                    # force=True: these records were just created in this batch
+                    # and must be cleaned up even if marked immutable.
+                    self.db.delete_memory_atomic(memory_id, force=True)
                 except Exception:
                     logger.warning(
                         "store_batch rollback failed for memory_id %s", memory_id
