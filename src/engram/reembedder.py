@@ -74,8 +74,19 @@ class BackgroundReembedder:
                 texts = [c.chunk_text for c in chunks]
                 embeddings = self.embedder.embed_batch(texts)
                 for chunk, emb in zip(chunks, embeddings):
-                    self.db.update_chunk_embedding(chunk.id, to_blob(emb))
-                    logger.debug("Re-embedded chunk %s", chunk.id)
+                    rows_updated = self.db.update_chunk_embedding(chunk.id, to_blob(emb))
+                    if rows_updated == 0:
+                        # Chunk was deleted between fetch and update — this is the
+                        # application-level race documented in issue #93: store()
+                        # may have deleted the chunk via delete_memory_atomic during
+                        # a store rollback. Skip silently but log so it is traceable.
+                        logger.warning(
+                            "update_chunk_embedding: chunk %s not found "
+                            "(may have been deleted during store rollback) — skipping",
+                            chunk.id,
+                        )
+                    else:
+                        logger.debug("Re-embedded chunk %s", chunk.id)
                 # If we got a full batch there may be more — loop immediately.
                 # If we got a partial batch the queue is nearly drained — loop
                 # immediately to clear it and set the completion flag.

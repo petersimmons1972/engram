@@ -5,6 +5,10 @@
 #   ollama     — local embedding inference (nomic-embed-text)
 #   engram     — MCP server (port 8788)
 #
+# WARNING: NEVER run 'docker compose down -v' — the -v flag destroys Docker
+# volumes and permanently deletes all memory data. Use 'make down-safe' or
+# 'docker compose down' (no -v) to stop containers while preserving data.
+#
 # GPU SETUP — read before starting:
 #
 #   NVIDIA:  Uncomment the `deploy` block under the ollama service.

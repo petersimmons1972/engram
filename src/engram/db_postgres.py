@@ -18,6 +18,8 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone
 
+from psycopg import sql
+
 import hashlib
 
 from psycopg.errors import DuplicateColumn
@@ -117,8 +119,29 @@ class PostgresBackend:
             max_size=10,
             kwargs={"row_factory": dict_row},
         )
+        self._warn_default_password(dsn)
         self._validate_connection()
         self._init_db()
+
+    @staticmethod
+    def _warn_default_password(dsn: str) -> None:
+        """Emit a security warning if the default 'engram' password is in use.
+
+        The default password is only acceptable for local development. Production
+        deployments must set a strong POSTGRES_PASSWORD (and DATABASE_URL) to
+        prevent unauthorized database access.
+        """
+        import os as _os
+        pg_password = _os.environ.get("POSTGRES_PASSWORD", "")
+        # Also check if the DSN contains the default password
+        dsn_has_default = ":engram@" in dsn or "%3Aengram%40" in dsn
+        if pg_password == "engram" or dsn_has_default:
+            logger.warning(
+                "SECURITY WARNING: PostgreSQL is using the default password 'engram'. "
+                "This is only safe for local development. "
+                "Set a strong POSTGRES_PASSWORD before exposing this service. "
+                "See docker-compose.yml for configuration."
+            )
 
     def _validate_connection(self) -> None:
         """Verify the database is reachable before running schema migrations.
@@ -180,6 +203,10 @@ class PostgresBackend:
                            SELECT m.project FROM memories m WHERE m.id = relationships.source_id
                        ) WHERE project = ''"""
                 )
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '3') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
                 conn.commit()
             if current < 4:
                 # Add immutability and TTL columns (Wave 1 enhancements)
@@ -197,6 +224,10 @@ class PostgresBackend:
                         )
                 except DuplicateColumn:
                     pass  # Column already exists (fresh DB created with new schema)
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '4') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
                 conn.commit()
             if current < 5:
                 try:
@@ -220,6 +251,10 @@ class PostgresBackend:
                         )
                 except DuplicateColumn:
                     pass
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '5') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
                 conn.commit()
             if current < 6:
                 try:
@@ -261,7 +296,11 @@ class PostgresBackend:
                 for col in ("content_compressed", "compression_algo", "compressed_at"):
                     try:
                         with conn.transaction():
-                            conn.execute(f"ALTER TABLE memories DROP COLUMN IF EXISTS {col}")
+                            conn.execute(
+                                sql.SQL("ALTER TABLE memories DROP COLUMN IF EXISTS {}").format(
+                                    sql.Identifier(col)
+                                )
+                            )
                     except Exception:
                         pass
                 conn.execute(
@@ -357,6 +396,10 @@ class PostgresBackend:
         mem = self.get_memory(memory_id)
         if not mem:
             return None
+        if mem.immutable:
+            raise ValueError(
+                f"Memory '{memory_id}' is immutable and cannot be updated."
+            )
 
         now = datetime.now(timezone.utc)
         if content is not None:
@@ -389,6 +432,11 @@ class PostgresBackend:
         return mem
 
     def delete_memory(self, memory_id: str) -> bool:
+        mem = self.get_memory(memory_id)
+        if mem and mem.immutable:
+            raise ValueError(
+                f"Memory '{memory_id}' is immutable and cannot be deleted."
+            )
         with self.pool.connection() as conn:
             row = conn.execute(
                 "WITH deleted AS (DELETE FROM memories WHERE id = %s RETURNING id) "
@@ -576,13 +624,18 @@ class PostgresBackend:
             ).fetchall()
         return [self._row_to_chunk(r) for r in rows]
 
-    def update_chunk_embedding(self, chunk_id: str, embedding: bytes) -> None:
+    def update_chunk_embedding(self, chunk_id: str, embedding: bytes) -> int:
+        """Update the embedding for a chunk. Returns the number of rows updated.
+
+        Returns 0 if the chunk no longer exists (e.g. deleted by store rollback).
+        """
         with self.pool.connection() as conn:
-            conn.execute(
+            cursor = conn.execute(
                 "UPDATE chunks SET embedding = %s WHERE id = %s",
                 (embedding, chunk_id),
             )
             conn.commit()
+            return cursor.rowcount
 
     def get_pending_embedding_count(self, project: str) -> int:
         with self.pool.connection() as conn:
