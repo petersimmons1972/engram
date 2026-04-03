@@ -249,6 +249,7 @@ def _get_engine(project: str | None = None) -> SearchEngine:
         embedder = create_embedder()
         engine = SearchEngine(db=db, embedder=embedder)
 
+        evicted = None
         with _engines_lock:
             _engines[proj] = engine
             if len(_engines) > MAX_ENGINE_CACHE_SIZE:
@@ -256,7 +257,9 @@ def _get_engine(project: str | None = None) -> SearchEngine:
                 oldest, evicted = next(iter(_engines.items()))
                 del _engines[oldest]
                 logger.info("Evicted LRU engine for project=%s", oldest)
-                evicted.close()
+        # Close outside the lock — pool.close() may block on in-flight queries (#124)
+        if evicted is not None:
+            evicted.close()
 
         return engine
 
