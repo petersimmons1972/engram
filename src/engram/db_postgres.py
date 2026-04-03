@@ -471,6 +471,13 @@ class PostgresBackend:
                     f"Cannot delete immutable memory {memory_id}. "
                     "Use force=True only for rollback operations."
                 )
+        else:
+            mem = self.get_memory(memory_id)
+            logger.warning(
+                "force-deleting memory %s (immutable=%s) — rollback path only",
+                memory_id,
+                mem.immutable if mem else "unknown",
+            )
         with self.pool.connection() as conn:
             with conn.transaction():
                 conn.execute(

@@ -620,12 +620,8 @@ class TestDeleteMemoryAtomicImmutabilityGuard:
         immutable_memory = MagicMock()
         immutable_memory.immutable = True
 
-        # get_memory should NOT be called at all when force=True
-        get_memory_called = []
-        def track_get_memory(mid):
-            get_memory_called.append(mid)
-            return immutable_memory
-        monkeypatch.setattr(backend, "get_memory", track_get_memory)
+        # get_memory IS called when force=True (for audit log), but must NOT raise
+        monkeypatch.setattr(backend, "get_memory", lambda mid: immutable_memory)
 
         # Patch the pool so we don't need a real DB
         mock_conn = MagicMock()
@@ -644,11 +640,8 @@ class TestDeleteMemoryAtomicImmutabilityGuard:
         mock_pool.connection.return_value = mock_conn
         backend.pool = mock_pool
 
-        # Should not raise, and should not call get_memory
+        # Should not raise despite memory being immutable
         backend.delete_memory_atomic("fake-id", force=True)
-        assert get_memory_called == [], (
-            "get_memory should not be called when force=True"
-        )
 
     def test_default_allows_mutable_memory(self, monkeypatch):
         """delete_memory_atomic(id) must succeed for mutable memories."""
