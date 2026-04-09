@@ -256,3 +256,128 @@ class TestPerformanceBenchmark:
         print(f"  Edges decayed: {result['edges_decayed']}")
         print(f"  Edges pruned: {result['edges_pruned']}")
         print(f"  Stale pruned: {result['stale_memories_pruned']}")
+
+
+class TestColdDocumentPruning:
+    """Stage 4: cold document pruning — document-mode memories with no matched chunks."""
+
+    def _set_created_at(self, db, memory_id: str, days_ago: int) -> None:
+        """Backdate created_at and last_accessed on a memory."""
+        old_date = datetime.now(timezone.utc) - timedelta(days=days_ago)
+        with db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE memories SET created_at = %s, last_accessed = %s WHERE id = %s",
+                (old_date, old_date, memory_id),
+            )
+            conn.commit()
+
+    def _set_chunk_last_matched(self, db, memory_id: str) -> None:
+        """Set last_matched = NOW() on the first chunk of a memory."""
+        with db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE chunks SET last_matched = NOW() "
+                "WHERE id = ("
+                "  SELECT id FROM chunks WHERE memory_id = %s"
+                "  ORDER BY chunk_index LIMIT 1"
+                ")",
+                (memory_id,),
+            )
+            conn.commit()
+
+    def test_cold_document_pruned_when_no_chunks_matched(
+        self, stress_engine: SearchEngine
+    ):
+        """Document-mode memory with no matched chunks older than 60 days is pruned.
+
+        We touch the memory (access_count > 0) so stale pruning skips it, leaving
+        it exclusively to cold document pruning to handle.
+        """
+        m = stress_engine.store(
+            Memory(
+                content=(
+                    "This is a long document about system architecture. "
+                    "It covers multiple topics including databases, caching, "
+                    "and API design. Each section provides detailed guidance "
+                    "for engineers building distributed systems at scale."
+                ),
+                storage_mode="document",
+                importance=4,
+            )
+        )
+        # Touch so access_count > 0 (stale pruning requires access_count = 0)
+        stress_engine.db.touch_memory(m.id)
+        # Backdate both created_at and last_accessed so the memory is old enough
+        self._set_created_at(stress_engine.db, m.id, days_ago=61)
+
+        result = stress_engine.consolidate()
+
+        assert result["cold_documents_pruned"] >= 1
+        assert stress_engine.db.get_memory(m.id) is None
+
+    def test_document_with_matched_chunks_survives(
+        self, stress_engine: SearchEngine
+    ):
+        """Document-mode memory where at least one chunk was matched must not be pruned."""
+        m = stress_engine.store(
+            Memory(
+                content=(
+                    "Another long document covering authentication patterns "
+                    "including OAuth, JWT tokens, and session management. "
+                    "The second section discusses token expiry and refresh flows."
+                ),
+                storage_mode="document",
+                importance=4,
+            )
+        )
+        # Touch so stale pruning skips it; a matched chunk protects from cold pruning
+        stress_engine.db.touch_memory(m.id)
+        self._set_created_at(stress_engine.db, m.id, days_ago=61)
+        self._set_chunk_last_matched(stress_engine.db, m.id)
+
+        result = stress_engine.consolidate()
+
+        assert stress_engine.db.get_memory(m.id) is not None
+
+    def test_focused_memory_not_affected_by_cold_document_pruning(
+        self, stress_engine: SearchEngine
+    ):
+        """Focused-mode memories are not touched by the cold document pruning stage."""
+        # Focused memory: old, low-importance, never accessed, no matched chunks
+        # But importance=3, access_count=0 -> stale pruning would catch it at
+        # max_importance=4, so use importance=3 to survive stale pruning too
+        m = stress_engine.store(
+            Memory(
+                content="A focused memory that is old but not a document",
+                storage_mode="focused",
+                importance=3,
+            )
+        )
+        self._set_created_at(stress_engine.db, m.id, days_ago=61)
+
+        result = stress_engine.consolidate()
+
+        # cold_documents_pruned must not count this focused memory
+        # The memory itself should survive (importance=3 < stale pruning threshold=4)
+        assert stress_engine.db.get_memory(m.id) is not None
+
+    def test_important_cold_document_survives(
+        self, stress_engine: SearchEngine
+    ):
+        """High-importance cold document (importance=1) must never be pruned."""
+        m = stress_engine.store(
+            Memory(
+                content=(
+                    "Critical architecture decision record: we chose PostgreSQL "
+                    "over MongoDB for ACID compliance and relational integrity. "
+                    "This record must be preserved indefinitely regardless of access."
+                ),
+                storage_mode="document",
+                importance=1,
+            )
+        )
+        self._set_created_at(stress_engine.db, m.id, days_ago=61)
+
+        result = stress_engine.consolidate()
+
+        assert stress_engine.db.get_memory(m.id) is not None
+        assert result["cold_documents_pruned"] == 0

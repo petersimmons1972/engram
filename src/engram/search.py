@@ -414,12 +414,13 @@ class SearchEngine:
         }
 
     def consolidate(self) -> dict:
-        """Memory consolidation pass — dedup, decay, and prune.
+        """Memory consolidation pass — dedup, decay, prune, and cold-doc pruning.
 
-        Three stages:
+        Four stages:
         1. Deduplicate chunks (by hash)
         2. Decay all edge strengths and prune weak edges
         3. Prune stale, never-accessed, low-importance memories
+        4. Prune cold document-mode memories (no chunk ever matched, old, low-importance)
         """
         if not self._consolidation_lock.acquire(blocking=False):
             return {
@@ -428,6 +429,7 @@ class SearchEngine:
                 "edges_decayed": 0,
                 "edges_pruned": 0,
                 "stale_memories_pruned": 0,
+                "cold_documents_pruned": 0,
                 "message": "Consolidation already in progress for this project",
             }
         try:
@@ -450,11 +452,17 @@ class SearchEngine:
             if pruned_memories > 0:
                 self.db.rebuild_fts()
 
+            # Stage 4: Cold document pruning — document-mode memories where no
+            # chunk was ever matched, older than 60 days, low importance.
+            # max_importance=3 matches the default threshold (importance >= 3 are candidates).
+            cold_docs_pruned = self.db.prune_cold_documents()
+
             return {
                 "chunks_deduped": deduped,
                 "edges_decayed": decayed,
                 "edges_pruned": pruned_edges,
                 "stale_memories_pruned": pruned_memories,
+                "cold_documents_pruned": cold_docs_pruned,
             }
         finally:
             self._consolidation_lock.release()

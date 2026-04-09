@@ -960,6 +960,48 @@ class PostgresBackend:
             conn.commit()
             return row["c"]
 
+    def prune_cold_documents(
+        self, max_age_hours: float = 1440, max_importance: int = 3,
+    ) -> int:
+        """Prune document-mode memories where no chunk was ever matched.
+
+        A document-mode memory is considered "cold" when:
+        - storage_mode = 'document'
+        - ALL chunks have last_matched IS NULL (no chunk was ever retrieved)
+        - Memory is older than max_age_hours (default 60 days = 1440 hours)
+        - importance >= max_importance (3 = low priority or worse)
+        - Not immutable
+        - Not expired (expires_at handling is separate)
+
+        Returns count of pruned memories.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
+        with self.pool.connection() as conn:
+            row = conn.execute(
+                "WITH cold AS ("
+                "  SELECT m.id"
+                "  FROM memories m"
+                "  WHERE m.project = %s"
+                "    AND m.storage_mode = 'document'"
+                "    AND NOT m.immutable"
+                "    AND m.importance >= %s"
+                "    AND m.created_at < %s"
+                "    AND NOT EXISTS ("
+                "      SELECT 1 FROM chunks c"
+                "      WHERE c.memory_id = m.id"
+                "        AND c.last_matched IS NOT NULL"
+                "    )"
+                "),"
+                "deleted AS ("
+                "  DELETE FROM memories WHERE id IN (SELECT id FROM cold)"
+                "  RETURNING id"
+                ")"
+                "SELECT count(*) AS c FROM deleted",
+                (self.project, max_importance, cutoff),
+            ).fetchone()
+            conn.commit()
+            return row["c"]
+
     def delete_relationships_for_memory(self, memory_id: str) -> None:
         with self.pool.connection() as conn:
             conn.execute(

@@ -59,7 +59,6 @@ def db():
         )
         conn.execute("DELETE FROM relationships WHERE project = 'test'")
         conn.execute("DELETE FROM memories WHERE project = 'test'")
-        conn.execute("DELETE FROM project_meta WHERE project = 'test'")
         conn.commit()
     backend.close()
 
