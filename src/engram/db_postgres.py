@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 from psycopg import sql
@@ -167,6 +168,22 @@ class PostgresBackend:
 
     def close(self) -> None:
         self.pool.close()
+
+    @contextmanager
+    def transaction(self):
+        """Yield a psycopg connection with an open transaction.
+
+        Usage::
+
+            with self.db.transaction() as conn:
+                conn.execute(...)
+
+        The connection is returned to the pool when the ``with`` block exits.
+        Any exception causes the transaction to roll back automatically
+        (psycopg v3 connection context manager semantics).
+        """
+        with self.pool.connection() as conn:
+            yield conn
 
     # ── Initialisation ────────────────────────────────────────────
 
@@ -463,23 +480,41 @@ class PostgresBackend:
         force=False (default): raises ValueError if memory is immutable.
         force=True: bypasses immutability check — only for rollback operations
                     where the memory was just created and must be cleaned up.
+
+        Uses SELECT … FOR UPDATE inside a single transaction to lock the row
+        before inspecting or deleting it, eliminating the TOCTOU race that
+        existed when existence/immutability were checked in a separate query.
         """
-        if not force:
-            mem = self.get_memory(memory_id)
-            if mem and mem.immutable:
-                raise ValueError(
-                    f"Cannot delete immutable memory {memory_id}. "
-                    "Use force=True only for rollback operations."
-                )
-        else:
-            mem = self.get_memory(memory_id)
-            logger.warning(
-                "force-deleting memory %s (immutable=%s) — rollback path only",
-                memory_id,
-                mem.immutable if mem else "unknown",
-            )
         with self.pool.connection() as conn:
             with conn.transaction():
+                # Lock the row for the duration of this transaction.
+                # If another session is deleting the same memory concurrently,
+                # one of them will block here until the other commits.
+                row = conn.execute(
+                    "SELECT id, immutable FROM memories "
+                    "WHERE id = %s AND project = %s FOR UPDATE",
+                    (memory_id, self.project),
+                ).fetchone()
+
+                if row is None:
+                    # Memory does not exist (or belongs to another project).
+                    return False
+
+                immutable = row["immutable"]
+
+                if not force:
+                    if immutable:
+                        raise ValueError(
+                            f"Cannot delete immutable memory {memory_id}. "
+                            "Use force=True only for rollback operations."
+                        )
+                else:
+                    logger.warning(
+                        "force-deleting memory %s (immutable=%s) — rollback path only",
+                        memory_id,
+                        immutable,
+                    )
+
                 conn.execute(
                     "DELETE FROM chunks WHERE memory_id = %s", (memory_id,)
                 )
@@ -487,12 +522,12 @@ class PostgresBackend:
                     "DELETE FROM relationships WHERE source_id = %s OR target_id = %s",
                     (memory_id, memory_id),
                 )
-                row = conn.execute(
+                deleted = conn.execute(
                     "WITH deleted AS (DELETE FROM memories WHERE id = %s RETURNING id) "
                     "SELECT count(*) AS c FROM deleted",
                     (memory_id,),
                 ).fetchone()
-                return row["c"] > 0
+                return deleted["c"] > 0
 
     def list_memories(
         self,
@@ -612,12 +647,22 @@ class PostgresBackend:
             ).fetchall()
             return [self._row_to_chunk(r) for r in rows]
 
-    def chunk_hash_exists(self, chunk_hash: str) -> bool:
+    def chunk_hash_exists(self, chunk_hash: str, project: str) -> bool:
+        """Return True if a chunk with this hash already exists for the given project.
+
+        Scoping by project prevents deduplication collisions across unrelated
+        projects that happen to share identical chunk content.
+        """
         with self.pool.connection() as conn:
             row = conn.execute(
-                "SELECT 1 FROM chunks WHERE chunk_hash = %s LIMIT 1", (chunk_hash,)
+                """SELECT EXISTS(
+                    SELECT 1 FROM chunks
+                    WHERE chunk_hash = %s
+                    AND memory_id IN (SELECT id FROM memories WHERE project = %s)
+                )""",
+                (chunk_hash, project),
             ).fetchone()
-            return row is not None
+            return row[0]
 
     def delete_chunks_for_memory(self, memory_id: str) -> None:
         with self.pool.connection() as conn:

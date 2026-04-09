@@ -1010,7 +1010,7 @@ def memory_verify(
 
             # Recompute corrupt hashes — re-fetch stats to find them
             if stats["corrupt"] > 0:
-                with engine.db.pool.connection() as conn:
+                with engine.db.transaction() as conn:
                     rows = conn.execute(
                         "SELECT id, content FROM memories "
                         "WHERE project = %s AND content_hash IS NOT NULL "
@@ -1063,7 +1063,7 @@ def memory_migrate_embedder(
 
         if dry_run:
             # Count all chunks (not just pending) for the dry-run estimate
-            with engine.db.pool.connection() as conn:
+            with engine.db.transaction() as conn:
                 row = conn.execute(
                     "SELECT COUNT(*) AS c FROM chunks c "
                     "JOIN memories m ON m.id = c.memory_id "

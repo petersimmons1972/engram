@@ -101,7 +101,7 @@ class SearchEngine:
 
             for i, text in enumerate(chunks):
                 h = chunk_hash(text)
-                if self.db.chunk_hash_exists(h):
+                if self.db.chunk_hash_exists(h, self.db.project):
                     continue
                 chunk_objects.append(
                     Chunk(memory_id=memory.id, chunk_text=text, chunk_index=i, chunk_hash=h)
@@ -145,7 +145,7 @@ class SearchEngine:
         all_chunks: list[Chunk] = []
         all_texts: list[str] = []
 
-        with self.db.pool.connection() as conn:
+        with self.db.transaction() as conn:
             with conn.transaction():
                 # --- Phase 1: write memory rows, collect chunk metadata ---
                 for memory in memories:
@@ -155,7 +155,7 @@ class SearchEngine:
                         chunks = chunk_text(memory.content)
                         for i, text in enumerate(chunks):
                             h = chunk_hash(text)
-                            if self.db.chunk_hash_exists(h):
+                            if self.db.chunk_hash_exists(h, self.db.project):
                                 continue
                             chunk_obj = Chunk(
                                 memory_id=memory.id, chunk_text=text,

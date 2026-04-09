@@ -8,6 +8,7 @@ DB-dependent tests use pytest.importorskip or skip via fixture.
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -282,17 +283,18 @@ class TestStoreBatchRollbackOnEmbedFailure:
         mock_db.get_meta.return_value = None
         mock_db.chunk_hash_exists.return_value = False
 
-        # Simulate the pool/transaction context managers used by store_batch
+        # Simulate the transaction() context manager and inner conn.transaction()
         mock_conn = MagicMock()
-        mock_conn.__enter__ = lambda s: mock_conn
-        mock_conn.__exit__ = MagicMock(return_value=False)
         mock_tx = MagicMock()
         mock_tx.__enter__ = lambda s: mock_tx
         mock_tx.__exit__ = MagicMock(return_value=False)
         mock_conn.transaction.return_value = mock_tx
-        mock_pool = MagicMock()
-        mock_pool.connection.return_value = mock_conn
-        mock_db.pool = mock_pool
+
+        @contextmanager
+        def _fake_transaction():
+            yield mock_conn
+
+        mock_db.transaction = _fake_transaction
 
         mock_db.store_memory.side_effect = [
             Memory(id="id-one", content="Memory one"),
@@ -338,15 +340,16 @@ class TestStoreBatchRollbackOnEmbedFailure:
         mock_db.chunk_hash_exists.return_value = False
 
         mock_conn = MagicMock()
-        mock_conn.__enter__ = lambda s: mock_conn
-        mock_conn.__exit__ = MagicMock(return_value=False)
         mock_tx = MagicMock()
         mock_tx.__enter__ = lambda s: mock_tx
         mock_tx.__exit__ = MagicMock(return_value=False)
         mock_conn.transaction.return_value = mock_tx
-        mock_pool = MagicMock()
-        mock_pool.connection.return_value = mock_conn
-        mock_db.pool = mock_pool
+
+        @contextmanager
+        def _fake_transaction():
+            yield mock_conn
+
+        mock_db.transaction = _fake_transaction
 
         returned_memories = [
             Memory(id="id-one", content="Alpha"),
@@ -602,10 +605,21 @@ class TestDeleteMemoryAtomicImmutabilityGuard:
         backend = object.__new__(dbmod.PostgresBackend)
         backend.project = "test"
 
-        immutable_memory = MagicMock()
-        immutable_memory.immutable = True
+        # New implementation uses SELECT FOR UPDATE — set up pool to return an immutable row.
+        mock_conn = MagicMock()
+        mock_row = {"id": "fake-id", "immutable": True}
+        mock_conn.execute.return_value.fetchone.return_value = mock_row
+        mock_conn.__enter__ = lambda s: mock_conn
+        mock_conn.__exit__ = MagicMock(return_value=False)
 
-        monkeypatch.setattr(backend, "get_memory", lambda mid: immutable_memory)
+        mock_tx = MagicMock()
+        mock_tx.__enter__ = lambda s: mock_tx
+        mock_tx.__exit__ = MagicMock(return_value=False)
+        mock_conn.transaction.return_value = mock_tx
+
+        mock_pool = MagicMock()
+        mock_pool.connection.return_value = mock_conn
+        backend.pool = mock_pool
 
         with pytest.raises(ValueError, match="immutable"):
             backend.delete_memory_atomic("fake-id")
@@ -650,16 +664,13 @@ class TestDeleteMemoryAtomicImmutabilityGuard:
         backend = object.__new__(dbmod.PostgresBackend)
         backend.project = "test"
 
-        mutable_memory = MagicMock()
-        mutable_memory.immutable = False
-
-        monkeypatch.setattr(backend, "get_memory", lambda mid: mutable_memory)
-
-        # Patch the pool so we don't need a real DB
+        # New implementation uses SELECT FOR UPDATE — set up pool to return a mutable row.
+        # execute() is called twice: once for SELECT FOR UPDATE, once for the CTE DELETE.
+        # Return a mutable-memory row for the lock query, and a count row for the DELETE.
         mock_conn = MagicMock()
-        mock_row = MagicMock()
-        mock_row.__getitem__ = lambda self, key: 1  # row["c"] > 0
-        mock_conn.execute.return_value.fetchone.return_value = mock_row
+        select_row = {"id": "fake-id", "immutable": False}
+        delete_row = {"c": 1}
+        mock_conn.execute.return_value.fetchone.side_effect = [select_row, delete_row]
         mock_conn.__enter__ = lambda s: mock_conn
         mock_conn.__exit__ = MagicMock(return_value=False)
 
