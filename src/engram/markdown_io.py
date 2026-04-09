@@ -396,7 +396,7 @@ def dump_all_projects(
         for project_name in projects:
             db.project = project_name  # Fix #127: switch project context before querying
             memories = db.list_memories(
-                memory_type=None, tags=[], min_importance=4, limit=100_000,
+                memory_type=None, tags=[], importance_ceiling=4, limit=100_000,
             )
             project_dir = output_path / project_name
             count = dump_memories_to_directory(memories, project_dir)

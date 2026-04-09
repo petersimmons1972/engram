@@ -512,11 +512,11 @@ class TestGraphCycleGuard:
 
 
 # ---------------------------------------------------------------------------
-# #106 — min_importance naming fix: max_importance alias
+# #106/#137 — importance_ceiling naming fix: max_importance alias
 # ---------------------------------------------------------------------------
 
 class TestMaxImportanceAlias:
-    """memory_recall must accept max_importance as an alias for min_importance."""
+    """memory_recall must accept max_importance as an alias for importance_ceiling."""
 
     def test_max_importance_parameter_accepted(self, monkeypatch):
         srv = _import_server()
@@ -541,15 +541,15 @@ class TestMaxImportanceAlias:
 
         srv.memory_recall(query="test", max_importance=2, project="test")
 
-        # Verify min_importance=2 was passed through to engine.recall
+        # Verify importance_ceiling=2 was passed through to engine.recall
         call_kwargs = mock_engine.recall.call_args
         assert call_kwargs is not None
         kwargs = call_kwargs.kwargs if call_kwargs.kwargs else {}
         args = call_kwargs.args if call_kwargs.args else ()
-        # min_importance should be 2 (importance_ceiling semantics)
-        passed_importance = kwargs.get("min_importance", None)
+        # importance_ceiling should be 2 (ceiling-based filter: importance <= 2)
+        passed_importance = kwargs.get("importance_ceiling", None)
         assert passed_importance == 2, (
-            f"Expected min_importance=2 passed to recall, got {passed_importance}"
+            f"Expected importance_ceiling=2 passed to recall, got {passed_importance}"
         )
 
 

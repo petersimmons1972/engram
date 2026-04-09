@@ -281,6 +281,30 @@ def _get_engine(project: str | None = None) -> SearchEngine:
         return engine
 
 
+@contextlib.contextmanager
+def _engine_ctx(project: str | None = None):
+    """Context manager that obtains a SearchEngine and holds a reference count.
+
+    Retries once (after 50 ms) if the engine is being evicted from the LRU
+    cache between _get_engine() returning and __enter__ acquiring the
+    reference — fixes the race described in issue #126.
+    """
+    for attempt in range(2):
+        engine = _get_engine(project)
+        try:
+            engine.__enter__()
+            break
+        except RuntimeError as exc:
+            if "evict" in str(exc).lower() and attempt == 0:
+                time.sleep(0.05)
+                continue
+            raise
+    try:
+        yield engine
+    finally:
+        engine.__exit__(None, None, None)
+
+
 @mcp.tool()
 def memory_store(
     content: str,
@@ -325,7 +349,7 @@ def memory_store(
             }
         window.append(now)
 
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         try:
             mt = MemoryType(memory_type)
         except ValueError:
@@ -443,7 +467,7 @@ def memory_store_batch(
             window.append(now)
         items = items[:batch_size]
 
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         memory_objects: list[Memory] = []
         failed = 0
         for item in items:
@@ -505,7 +529,7 @@ def memory_recall(
     top_k: int = 5,
     memory_type: str = "",
     tags: str = "",
-    min_importance: int = 4,
+    importance_ceiling: int = 4,
     max_importance: int | None = None,
     graph_hops: int = 1,
     since: str = "",
@@ -526,7 +550,8 @@ def memory_recall(
         memory_type: Filter by type (decision/pattern/error/context/architecture/
             preference). Empty = all.
         tags: Comma-separated tags to filter by. Empty = all.
-        min_importance: Only return memories with importance <= this value (0=only critical, 4=all).
+        importance_ceiling: include memories with importance <= this value.
+            Scale: 0=critical (never pruned), 4=trivial (auto-pruned).
         graph_hops: How many relationship hops to traverse (1 or 2).
         since: Only return memories created at or after this ISO datetime (e.g. "2026-03-01T00:00:00+00:00"). Empty = no lower bound.
         before: Only return memories created at or before this ISO datetime. Empty = no upper bound.
@@ -539,13 +564,13 @@ def memory_recall(
         Ranked list of memories with scores, matched chunks, and connected context.
     """
     logger.debug("memory_recall called: project=%s, query=%r, top_k=%d", project, query[:50], top_k)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         top_k = max(1, min(50, top_k))
 
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
         mt = memory_type if memory_type else None
-        # max_importance is a clearer alias for the ceiling-based filter (min_importance <= this value)
-        effective_importance = max_importance if max_importance is not None else min_importance
+        # max_importance is a legacy alias for importance_ceiling; prefer importance_ceiling
+        effective_importance = max_importance if max_importance is not None else importance_ceiling
         mi = effective_importance if effective_importance < 4 else None
 
         from datetime import datetime as _dt
@@ -567,7 +592,7 @@ def memory_recall(
             top_k=top_k,
             memory_type=mt,
             tags=tag_list,
-            min_importance=mi,
+            importance_ceiling=mi,
             graph_hops=max(1, min(2, graph_hops)),
             since=since_dt,
             before=before_dt,
@@ -651,7 +676,7 @@ def memory_connect(
         The created relationship.
     """
     logger.debug("memory_connect called: project=%s, %s -> %s (%s)", project, source_id, target_id, rel_type)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         source = engine.db.get_memory(source_id)
         target = engine.db.get_memory(target_id)
         if not source:
@@ -689,7 +714,7 @@ def memory_connect(
 def memory_list(
     memory_type: str = "",
     tags: str = "",
-    min_importance: int = 4,
+    importance_ceiling: int = 4,
     limit: int = 20,
     project: str = "",
     detail: str = "summary",
@@ -699,7 +724,8 @@ def memory_list(
     Args:
         memory_type: Filter by type. Empty = all types.
         tags: Comma-separated tags to filter by. Empty = all.
-        min_importance: Only return memories with importance <= this (0=only critical, 4=all).
+        importance_ceiling: include memories with importance <= this value.
+            Scale: 0=critical (never pruned), 4=trivial (auto-pruned).
         limit: Max number of memories to return.
         project: Project namespace (e.g. "my-app"). Empty = "default".
         detail: Content verbosity — "summary" (default), "chunk", or "full".
@@ -708,7 +734,7 @@ def memory_list(
         List of memories sorted by most recently updated.
     """
     logger.debug("memory_list called: project=%s, type=%s, limit=%d", project, memory_type, limit)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         limit = max(1, min(100, limit))
 
         mt = None
@@ -719,12 +745,12 @@ def memory_list(
                 return {"error": f"Invalid memory_type '{memory_type}'. Valid: {[t.value for t in MemoryType]}"}
 
         tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
-        mi = min_importance if min_importance < 4 else None
+        mi = importance_ceiling if importance_ceiling < 4 else None
 
         memories = engine.db.list_memories(
             memory_type=mt,
             tags=tag_list,
-            min_importance=mi,
+            importance_ceiling=mi,
             limit=limit,
         )
 
@@ -793,7 +819,7 @@ def memory_correct(
                 "retry_after_seconds": retry_after,
             }
         window.append(now)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         old_mem = engine.db.get_memory(old_memory_id)
         if not old_mem:
             return {"error": f"Memory '{old_memory_id}' not found."}
@@ -859,7 +885,7 @@ def memory_forget(memory_id: str, project: str = "") -> dict:
         Confirmation of deletion.
     """
     logger.debug("memory_forget called: project=%s, id=%s", project, memory_id)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         mem = engine.db.get_memory(memory_id)
         if not mem:
             return {"error": f"Memory '{memory_id}' not found."}
@@ -896,7 +922,7 @@ def memory_summarize(
     proj = _normalize_project(project or "")
     effective_model = model or SUMMARIZE_MODEL
 
-    with _get_engine(proj) as engine:
+    with _engine_ctx(proj) as engine:
         pending = engine.db.get_memories_pending_summary(proj, limit=limit)
         summarized = 0
         failed = 0
@@ -929,7 +955,7 @@ def memory_status(project: str = "") -> dict:
         database size, and age range.
     """
     logger.debug("memory_status called: project=%s", project)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         proj = engine.db.project
         stats = engine.db.get_stats()
         result = stats.model_dump()
@@ -977,7 +1003,7 @@ def memory_feedback(
         Number of memories whose graph edges were adjusted.
     """
     logger.debug("memory_feedback called: project=%s, helpful=%s", project, helpful)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         ids = [mid.strip() for mid in memory_ids.split(",") if mid.strip()]
         if not ids:
             return {"error": "No memory IDs provided."}
@@ -1005,7 +1031,7 @@ def memory_consolidate(project: str = "") -> dict:
         Breakdown of chunks deduped, edges decayed/pruned, and stale memories removed.
     """
     logger.debug("memory_consolidate called: project=%s", project)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         result = engine.consolidate()
         return {"status": "consolidated", **result}
 
@@ -1026,7 +1052,7 @@ def memory_verify(
     """
     from .db_postgres import _content_hash
 
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         proj = engine.db.project
 
         stats = engine.db.get_integrity_stats(proj)
@@ -1086,7 +1112,7 @@ def memory_migrate_embedder(
         and estimated completion time in minutes.
     """
     proj = _normalize_project(project)
-    with _get_engine(proj) as engine:
+    with _engine_ctx(proj) as engine:
         old_embedder = engine.db.get_meta("embedder_name") or "unknown"
         total_chunks = engine.db.get_pending_embedding_count(proj)
 
@@ -1191,7 +1217,7 @@ def memory_export_all(
         }
 
     # Use the global engine to get a DB handle, then access all projects
-    with _get_engine("global") as engine:
+    with _engine_ctx("global") as engine:
         timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds").replace(":", "-") + "Z"
         export_dir_name = f"engram-export-{timestamp}"
         base_path = Path(output_path)
@@ -1277,13 +1303,13 @@ def memory_import_claudemd(
     if not extracted:
         return {"status": "no_memories_found", "extracted": 0}
 
-    with _get_engine(project) as engine:
+    with _engine_ctx(project) as engine:
         # Pre-import backup
         import tempfile
         backup_path = None
         try:
             current_memories = engine.db.list_memories(
-                memory_type=None, tags=[], min_importance=4, limit=10000
+                memory_type=None, tags=[], importance_ceiling=4, limit=10000
             )
             out_dir = backup_dir or str(Path(file_path).parent)
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1337,7 +1363,7 @@ def memory_dump(project: str = "", output_path: str = "./memory-dump") -> dict:
     except ValueError as exc:
         return {"error": str(exc)}
 
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         # List all memories in the project
         memories = engine.db.list_memories(limit=10_000)
 
@@ -1397,13 +1423,13 @@ def memory_ingest(
     )
 
     logger.debug("memory_ingest called: project=%s, directory=%s", project, directory)
-    with _get_engine(project or None) as engine:
+    with _engine_ctx(project or None) as engine:
         # --- Pre-import backup: snapshot existing DB state before writing anything ---
         pre_import_backup: str | None = None
         backup_warning: str | None = None
         try:
             current_memories = engine.db.list_memories(
-                memory_type=None, tags=[], min_importance=4, limit=100_000
+                memory_type=None, tags=[], importance_ceiling=4, limit=100_000
             )
             out_dir = backup_dir or directory
             with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1490,7 +1516,7 @@ def onboarding(project: str = "") -> str:
         project: Project namespace to show stats for. Empty = "default".
     """
     proj = (project or "default").strip().lower()
-    with _get_engine(proj) as engine:
+    with _engine_ctx(proj) as engine:
         stats = engine.db.get_stats()
         s = stats.model_dump()
 

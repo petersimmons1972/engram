@@ -71,7 +71,7 @@ class TestMemoryCRUD:
         db.store_memory(Memory(content="Critical", importance=0))
         db.store_memory(Memory(content="Trivial", importance=4))
 
-        critical = db.list_memories(min_importance=0)
+        critical = db.list_memories(importance_ceiling=0)
         assert len(critical) == 1
         assert critical[0].content == "Critical"
 

@@ -187,12 +187,16 @@ class SearchEngine:
         top_k: int = 10,
         memory_type: str | None = None,
         tags: list[str] | None = None,
-        min_importance: int | None = None,
+        importance_ceiling: int | None = None,
         graph_hops: int = 1,
         since: datetime | None = None,
         before: datetime | None = None,
     ) -> list[SearchResult]:
-        """Three-signal recall: BM25 + vector + recency. Graph is enrichment only."""
+        """Three-signal recall: BM25 + vector + recency. Graph is enrichment only.
+
+        importance_ceiling: include memories with importance <= this value.
+        Scale: 0=critical (never pruned), 4=trivial (auto-pruned).
+        """
 
         candidates: dict[str, _Candidate] = {}
 
@@ -278,7 +282,7 @@ class SearchEngine:
             # Apply filters
             if memory_type and mem.memory_type.value != memory_type:
                 continue
-            if min_importance is not None and mem.importance > min_importance:
+            if importance_ceiling is not None and mem.importance > importance_ceiling:
                 continue
             if tags and not (set(tags) & set(mem.tags)):
                 continue
@@ -392,8 +396,10 @@ class SearchEngine:
             # Stage 2: Decay and prune edges
             decayed, pruned_edges = self.db.decay_all_edges(decay_factor=0.02, min_strength=0.1)
 
-            # Stage 3: Prune stale memories (30 days, low importance, never accessed)
-            pruned_memories = self.db.prune_stale_memories(max_age_hours=720, max_importance=3)
+            # Stage 3: Prune stale memories (30 days, trivial importance, never accessed).
+            # max_importance=4 targets trivial memories (importance=4) as the ceiling;
+            # scale: 0=critical (never pruned), 4=trivial (auto-pruned).
+            pruned_memories = self.db.prune_stale_memories(max_age_hours=720, max_importance=4)
 
             # Rebuild FTS if any memories were pruned (triggers may not fire for all deletions)
             if pruned_memories > 0:

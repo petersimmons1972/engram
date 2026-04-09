@@ -57,7 +57,7 @@ class DatabaseBackend(Protocol):
         self,
         memory_type: MemoryType | None = None,
         tags: list[str] | None = None,
-        min_importance: int | None = None,
+        importance_ceiling: int | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> list[Memory]: ...

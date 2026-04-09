@@ -533,19 +533,24 @@ class PostgresBackend:
         self,
         memory_type: MemoryType | None = None,
         tags: list[str] | None = None,
-        min_importance: int | None = None,
+        importance_ceiling: int | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> list[Memory]:
+        """Return memories matching the given filters.
+
+        importance_ceiling: include memories with importance <= this value.
+        Scale: 0=critical (never pruned), 4=trivial (auto-pruned).
+        """
         query = "SELECT * FROM memories WHERE project = %s"
         params: list = [self.project]
 
         if memory_type:
             query += " AND memory_type = %s"
             params.append(memory_type.value)
-        if min_importance is not None:
+        if importance_ceiling is not None:
             query += " AND importance <= %s"
-            params.append(min_importance)
+            params.append(importance_ceiling)
         if tags:
             # JSONB containment with OR logic (match ANY tag, same as SQLite)
             tag_conditions = []
