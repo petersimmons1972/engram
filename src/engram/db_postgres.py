@@ -793,27 +793,38 @@ class PostgresBackend:
                     (frontier, self.project),
                 ).fetchall()
 
+                # Collect all new node IDs for this hop, preserving direction metadata.
+                # We resolve them with a single IN-list query instead of one
+                # get_memory() call per node (the N+1 that issues #134 tracks).
+                pending: list[tuple[str, str, str, float]] = []  # (nid, rel_type, direction, strength)
                 for row in outgoing:
                     nid = row["target_id"]
                     if nid not in visited:
                         visited.add(nid)
-                        mem = self.get_memory(nid)
-                        if mem:
-                            results.append(
-                                (mem, row["rel_type"], "outgoing", row["strength"])
-                            )
-                            next_frontier.append(nid)
+                        pending.append((nid, row["rel_type"], "outgoing", row["strength"]))
+                        next_frontier.append(nid)
 
                 for row in incoming:
                     nid = row["source_id"]
                     if nid not in visited:
                         visited.add(nid)
-                        mem = self.get_memory(nid)
+                        pending.append((nid, row["rel_type"], "incoming", row["strength"]))
+                        next_frontier.append(nid)
+
+                if pending:
+                    # Single query to fetch all new nodes for this hop.
+                    new_ids = [p[0] for p in pending]
+                    mem_rows = conn.execute(
+                        "SELECT * FROM memories WHERE id = ANY(%s)",
+                        (new_ids,),
+                    ).fetchall()
+                    mem_by_id: dict[str, Memory] = {
+                        r["id"]: self._row_to_memory(r) for r in mem_rows
+                    }
+                    for nid, rel_type, direction, strength in pending:
+                        mem = mem_by_id.get(nid)
                         if mem:
-                            results.append(
-                                (mem, row["rel_type"], "incoming", row["strength"])
-                            )
-                            next_frontier.append(nid)
+                            results.append((mem, rel_type, direction, strength))
 
                 frontier = next_frontier
 
@@ -944,10 +955,17 @@ class PostgresBackend:
         return results
 
     def rebuild_fts(self) -> None:
-        """Reindex the GIN index on the search_vector column."""
+        """Reindex the GIN index on the search_vector column.
+
+        REINDEX INDEX CONCURRENTLY must run outside any transaction block.
+        We set autocommit=True on the connection before issuing the statement
+        so psycopg does not wrap it in an implicit BEGIN.
+        """
         with self.pool.connection() as conn:
-            conn.execute("REINDEX INDEX idx_memories_search")
-            conn.commit()
+            # autocommit=True prevents psycopg from opening an implicit
+            # transaction, which REINDEX CONCURRENTLY forbids.
+            conn.autocommit = True
+            conn.execute("REINDEX INDEX CONCURRENTLY idx_memories_search")
         logger.info("Reindexed FTS GIN index for project %s", self.project)
 
     # ── Stats ─────────────────────────────────────────────────────
