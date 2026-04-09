@@ -5,7 +5,7 @@ import math
 import threading
 from datetime import datetime, timezone
 
-from .chunker import chunk_hash, chunk_text
+from .chunker import ChunkCandidate, chunk_document, chunk_hash, chunk_text
 from .db import DatabaseBackend
 from .embeddings import EmbeddingProvider, NullEmbedder, cosine_similarity, from_blob, to_blob
 from .errors import EmbeddingConfigMismatchError
@@ -94,17 +94,33 @@ class SearchEngine:
         memory = self.db.store_memory(memory)
 
         try:
-            chunks = chunk_text(memory.content)
+            # Document mode uses semantic chunking; focused mode uses sentence-window.
+            if memory.storage_mode == "document":
+                candidates: list[ChunkCandidate] = chunk_document(memory.content)
+                raw_chunks: list[tuple[str, str | None, str]] = [
+                    (c.text, c.section_heading, c.chunk_type) for c in candidates
+                ]
+            else:
+                raw_chunks = [
+                    (text, None, "sentence_window") for text in chunk_text(memory.content)
+                ]
 
             texts_to_embed: list[str] = []
             chunk_objects: list[Chunk] = []
 
-            for i, text in enumerate(chunks):
+            for i, (text, section_heading, chunk_type) in enumerate(raw_chunks):
                 h = chunk_hash(text)
                 if self.db.chunk_hash_exists(h, self.db.project):
                     continue
                 chunk_objects.append(
-                    Chunk(memory_id=memory.id, chunk_text=text, chunk_index=i, chunk_hash=h)
+                    Chunk(
+                        memory_id=memory.id,
+                        chunk_text=text,
+                        chunk_index=i,
+                        chunk_hash=h,
+                        section_heading=section_heading,
+                        chunk_type=chunk_type,
+                    )
                 )
                 texts_to_embed.append(text)
 
@@ -152,14 +168,24 @@ class SearchEngine:
                     try:
                         memory = self.db.store_memory(memory, conn=conn)
                         stored.append(memory)
-                        chunks = chunk_text(memory.content)
-                        for i, text in enumerate(chunks):
+
+                        if memory.storage_mode == "document":
+                            candidates = chunk_document(memory.content)
+                            raw = [(c.text, c.section_heading, c.chunk_type) for c in candidates]
+                        else:
+                            raw = [(t, None, "sentence_window") for t in chunk_text(memory.content)]
+
+                        for i, (text, section_heading, chunk_type) in enumerate(raw):
                             h = chunk_hash(text)
                             if self.db.chunk_hash_exists(h, self.db.project):
                                 continue
                             chunk_obj = Chunk(
-                                memory_id=memory.id, chunk_text=text,
-                                chunk_index=i, chunk_hash=h,
+                                memory_id=memory.id,
+                                chunk_text=text,
+                                chunk_index=i,
+                                chunk_hash=h,
+                                section_heading=section_heading,
+                                chunk_type=chunk_type,
                             )
                             all_chunks.append(chunk_obj)
                             all_texts.append(text)
@@ -273,10 +299,16 @@ class SearchEngine:
                         cand.chunk_score = sim
                         cand.chunk_index = chunk.chunk_index
                         cand.matched_chunk = chunk.chunk_text
+                        cand.chunk_id = chunk.id
+                        cand.matched_chunk_section = chunk.section_heading
 
         # Score each candidate
         now = datetime.now(timezone.utc)
         scored: list[SearchResult] = []
+        # Track the best matched chunk_id per memory for last_matched updates
+        chunk_id_by_memory: dict[str, str] = {
+            mid: cand.chunk_id for mid, cand in candidates.items() if cand.chunk_id
+        }
 
         for cand in candidates.values():
             mem = cand.memory
@@ -317,6 +349,7 @@ class SearchEngine:
                     matched_chunk=cand.matched_chunk,
                     chunk_score=cand.chunk_score,
                     matched_chunk_index=cand.chunk_index,
+                    matched_chunk_section=cand.matched_chunk_section,
                 )
             )
 
@@ -330,9 +363,17 @@ class SearchEngine:
         scored.sort(key=lambda r: r.score, reverse=True)
         top_results = scored[:top_k]
 
-        # Graph expansion: attach connected memories
+        # Graph expansion: attach connected memories and update usage tracking
         for result in top_results:
             self.db.touch_memory(result.memory.id)
+            # Passive last_matched tracking: record which chunk matched this recall
+            if result.matched_chunk_index >= 0:
+                chunk_id = chunk_id_by_memory.get(result.memory.id, "")
+                if chunk_id:
+                    try:
+                        self.db.update_chunk_last_matched(chunk_id)
+                    except Exception:
+                        logger.debug("update_chunk_last_matched failed for chunk %s", chunk_id)
             connected_raw = self.db.get_connected(result.memory.id, max_hops=graph_hops)
             result.connected = [
                 ConnectedMemory(
@@ -486,7 +527,10 @@ class SearchEngine:
 
 
 class _Candidate:
-    __slots__ = ("memory", "bm25_score", "vector_score", "matched_chunk", "chunk_score", "chunk_index")
+    __slots__ = (
+        "memory", "bm25_score", "vector_score", "matched_chunk",
+        "chunk_score", "chunk_index", "chunk_id", "matched_chunk_section",
+    )
 
     def __init__(self, memory: Memory):
         self.memory = memory
@@ -495,3 +539,5 @@ class _Candidate:
         self.matched_chunk: str = ""
         self.chunk_score: float = 0.0
         self.chunk_index: int = -1
+        self.chunk_id: str = ""
+        self.matched_chunk_section: str | None = None

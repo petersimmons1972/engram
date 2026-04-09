@@ -430,3 +430,140 @@ class TestRelationshipIsolation:
                     conn.commit()
             db_a.close()
             db_b.close()
+
+
+# ── Phase 2: Schema v9 column round-trip tests ────────────────────────────────
+
+
+class TestSchemaV9Columns:
+    """Schema v9 adds section_heading, chunk_type, last_matched to chunks
+    and storage_mode to memories.  Verify round-trip through store/retrieve."""
+
+    def test_storage_mode_defaults_to_focused(self, db):
+        """A plain Memory round-trips with storage_mode='focused'."""
+        mem = Memory(content="Plain focused memory")
+        stored = db.store_memory(mem)
+        retrieved = db.get_memory(stored.id)
+        assert retrieved is not None
+        assert retrieved.storage_mode == "focused"
+
+    def test_storage_mode_document_round_trips(self, db):
+        """A document-mode Memory round-trips storage_mode='document'."""
+        mem = Memory(content="Document mode content", storage_mode="document")
+        stored = db.store_memory(mem)
+        retrieved = db.get_memory(stored.id)
+        assert retrieved is not None
+        assert retrieved.storage_mode == "document"
+
+    def test_chunk_section_heading_stored_and_retrieved(self, db):
+        """section_heading on a Chunk is persisted and returned by get_chunks_for_memory."""
+        from engram.types import Chunk
+        mem = db.store_memory(Memory(content="Heading test"))
+        chunk = Chunk(
+            memory_id=mem.id,
+            chunk_text="The introduction text.",
+            chunk_index=0,
+            section_heading="Introduction",
+            chunk_type="section",
+        )
+        db.store_chunks([chunk])
+        retrieved_chunks = db.get_chunks_for_memory(mem.id)
+        assert len(retrieved_chunks) >= 1
+        # Find our chunk by text
+        found = next((c for c in retrieved_chunks if "introduction" in c.chunk_text.lower()), None)
+        assert found is not None, "Could not find stored chunk"
+        assert found.section_heading == "Introduction"
+        assert found.chunk_type == "section"
+
+    def test_chunk_last_matched_initially_none(self, db):
+        """last_matched is NULL for a freshly stored chunk."""
+        from engram.types import Chunk
+        mem = db.store_memory(Memory(content="Last matched test"))
+        chunk = Chunk(
+            memory_id=mem.id,
+            chunk_text="Freshly stored chunk text.",
+            chunk_index=0,
+        )
+        db.store_chunks([chunk])
+        retrieved = db.get_chunks_for_memory(mem.id)
+        assert len(retrieved) >= 1
+        our_chunk = next(c for c in retrieved if "Freshly stored" in c.chunk_text)
+        assert our_chunk.last_matched is None
+
+    def test_update_chunk_last_matched_sets_timestamp(self, db):
+        """update_chunk_last_matched() must set last_matched to a non-null timestamp."""
+        from engram.types import Chunk
+        mem = db.store_memory(Memory(content="Last matched update test"))
+        chunk = Chunk(
+            memory_id=mem.id,
+            chunk_text="Will be matched chunk.",
+            chunk_index=0,
+        )
+        db.store_chunks([chunk])
+
+        stored_chunks = db.get_chunks_for_memory(mem.id)
+        target = next(c for c in stored_chunks if "Will be matched" in c.chunk_text)
+        assert target.last_matched is None
+
+        db.update_chunk_last_matched(target.id)
+
+        updated_chunks = db.get_chunks_for_memory(mem.id)
+        updated = next(c for c in updated_chunks if c.id == target.id)
+        assert updated.last_matched is not None
+
+    def test_chunk_type_defaults_to_sentence_window(self, db):
+        """A chunk stored without explicit chunk_type gets 'sentence_window' on retrieval."""
+        from engram.types import Chunk
+        mem = db.store_memory(Memory(content="Default chunk type test"))
+        chunk = Chunk(
+            memory_id=mem.id,
+            chunk_text="Default type chunk.",
+            chunk_index=0,
+        )
+        db.store_chunks([chunk])
+        retrieved = db.get_chunks_for_memory(mem.id)
+        found = next(c for c in retrieved if "Default type" in c.chunk_text)
+        assert found.chunk_type == "sentence_window"
+
+
+class TestDocumentModeSearchEngine:
+    """SearchEngine.store() with storage_mode='document' uses chunk_document()."""
+
+    def test_document_mode_produces_chunks_with_heading_metadata(self, engine, db):
+        """Storing a document-mode memory stores chunks annotated with section_heading."""
+        doc = """\
+# Background
+
+This is the background section with some content about databases.
+
+# Architecture
+
+This section covers the system architecture and design decisions.
+"""
+        mem = Memory(content=doc, storage_mode="document")
+        stored = engine.store(mem)
+
+        chunks = db.get_chunks_for_memory(stored.id)
+        assert len(chunks) >= 1
+        headings = {c.section_heading for c in chunks if c.section_heading}
+        assert headings, "Expected at least one chunk with a section_heading"
+        assert "Background" in headings or "Architecture" in headings
+
+    def test_document_mode_storage_mode_persists(self, engine, db):
+        """storage_mode='document' is stored in the DB and round-trips."""
+        mem = Memory(content="# Title\n\nSome document content here.", storage_mode="document")
+        stored = engine.store(mem)
+        retrieved = db.get_memory(stored.id)
+        assert retrieved is not None
+        assert retrieved.storage_mode == "document"
+
+    def test_focused_mode_unchanged(self, engine, db):
+        """Focused mode continues to produce chunks without section_heading."""
+        mem = Memory(content="Short focused memory without headings.")
+        stored = engine.store(mem)
+        chunks = db.get_chunks_for_memory(stored.id)
+        # All chunks in focused mode should have section_heading=None
+        for c in chunks:
+            assert c.section_heading is None, (
+                f"Focused mode chunk should have no section_heading, got {c.section_heading!r}"
+            )

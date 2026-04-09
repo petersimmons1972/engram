@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS project_meta (
 );
 """
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 
 
 class PostgresBackend:
@@ -325,6 +325,42 @@ class PostgresBackend:
                     "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
                 )
                 conn.commit()
+            if current < 9:
+                # Phase 2 — Store Big, Retrieve Small: semantic chunking metadata +
+                # storage mode for memories.
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE chunks ADD COLUMN section_heading TEXT"
+                        )
+                except DuplicateColumn:
+                    pass
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE chunks ADD COLUMN chunk_type TEXT DEFAULT 'sentence_window'"
+                        )
+                except DuplicateColumn:
+                    pass
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE chunks ADD COLUMN last_matched TIMESTAMPTZ"
+                        )
+                except DuplicateColumn:
+                    pass
+                try:
+                    with conn.transaction():
+                        conn.execute(
+                            "ALTER TABLE memories ADD COLUMN storage_mode TEXT DEFAULT 'focused'"
+                        )
+                except DuplicateColumn:
+                    pass
+                conn.execute(
+                    "INSERT INTO project_meta (key, value) VALUES ('schema_version', '9') "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                )
+                conn.commit()
             conn.execute(
                 "INSERT INTO project_meta (key, value) VALUES ('schema_version', %s) "
                 "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -382,12 +418,13 @@ class PostgresBackend:
             memory.immutable,
             memory.expires_at,
             memory.content_hash,
+            memory.storage_mode,
         )
         sql = """INSERT INTO memories
                    (id, content, memory_type, project, tags,
                     importance, access_count, last_accessed, created_at, updated_at,
-                    immutable, expires_at, content_hash)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+                    immutable, expires_at, content_hash, storage_mode)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
         if conn is not None:
             conn.execute(sql, params)
@@ -589,12 +626,13 @@ class PostgresBackend:
             return
         rows = [
             (c.id, c.memory_id, c.chunk_text, c.chunk_index,
-             c.chunk_hash, c.embedding)
+             c.chunk_hash, c.embedding,
+             c.section_heading, c.chunk_type)
             for c in chunks
         ]
         sql = """INSERT INTO chunks (id, memory_id, chunk_text, chunk_index,
-                   chunk_hash, embedding)
-                   VALUES (%s, %s, %s, %s, %s, %s)
+                   chunk_hash, embedding, section_heading, chunk_type)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (id) DO NOTHING"""
 
         if conn is not None:
@@ -727,6 +765,15 @@ class PostgresBackend:
             )
             conn.commit()
             return cursor.rowcount
+
+    def update_chunk_last_matched(self, chunk_id: str) -> None:
+        """Set last_matched = NOW() on the given chunk (passive usage tracking)."""
+        with self.pool.connection() as conn:
+            conn.execute(
+                "UPDATE chunks SET last_matched = NOW() WHERE id = %s",
+                (chunk_id,),
+            )
+            conn.commit()
 
     def get_pending_embedding_count(self, project: str) -> int:
         with self.pool.connection() as conn:
@@ -1143,6 +1190,9 @@ class PostgresBackend:
         # Integrity field — added in schema v7; may be None on older rows
         content_hash = row.get("content_hash")
 
+        # Storage mode — added in schema v9; defaults to "focused" for older rows
+        storage_mode = row.get("storage_mode") or "focused"
+
         return Memory(
             id=row["id"],
             content=row["content"],
@@ -1158,6 +1208,7 @@ class PostgresBackend:
             expires_at=expires_at_raw,
             summary=summary,
             content_hash=content_hash,
+            storage_mode=storage_mode,
         )
 
     @staticmethod
@@ -1166,6 +1217,13 @@ class PostgresBackend:
         # psycopg returns bytea as memoryview; convert to bytes
         if isinstance(embedding, memoryview):
             embedding = bytes(embedding)
+
+        # Semantic chunking metadata — added in schema v9; may be absent on older rows
+        last_matched_raw = row.get("last_matched")
+        if isinstance(last_matched_raw, str):
+            from datetime import datetime
+            last_matched_raw = datetime.fromisoformat(last_matched_raw)
+
         return Chunk(
             id=row["id"],
             memory_id=row["memory_id"],
@@ -1173,4 +1231,7 @@ class PostgresBackend:
             chunk_index=row["chunk_index"],
             chunk_hash=row["chunk_hash"],
             embedding=embedding,
+            section_heading=row.get("section_heading"),
+            chunk_type=row.get("chunk_type") or "sentence_window",
+            last_matched=last_matched_raw,
         )

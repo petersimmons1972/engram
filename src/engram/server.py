@@ -314,6 +314,7 @@ def memory_store(
     immutable: bool = False,
     expires_at: str = "",
     project: str = "",
+    storage_mode: str = "auto",
 ) -> dict:
     """Store a new memory. Auto-chunks, embeds, and indexes for three-layer search.
 
@@ -325,6 +326,10 @@ def memory_store(
         immutable: If true, memory cannot be corrected or deleted. Use for critical preferences.
         expires_at: ISO datetime after which memory is auto-pruned (e.g. "2026-04-30T00:00:00+00:00"). Empty = never expires.
         project: Project namespace (e.g. "my-app"). Empty = "default".
+        storage_mode: "auto" (default), "focused", or "document". When "auto", content over
+            10,000 characters is stored in document mode (semantic chunking); shorter content
+            uses focused mode (sentence-window). Explicit "document" forces semantic chunking
+            regardless of length.
 
     Returns:
         The stored memory's ID and metadata.
@@ -393,6 +398,14 @@ def memory_store(
                 project, importance,
             )
 
+        # Resolve effective storage mode: auto-detect on content length
+        if storage_mode == "auto":
+            resolved_mode = "document" if len(content) > 10_000 else "focused"
+        elif storage_mode in ("focused", "document"):
+            resolved_mode = storage_mode
+        else:
+            resolved_mode = "focused"
+
         memory = Memory(
             content=content,
             memory_type=mt,
@@ -400,6 +413,7 @@ def memory_store(
             importance=importance,
             immutable=immutable,
             expires_at=expires_at_dt,
+            storage_mode=resolved_mode,
         )
 
         try:
@@ -413,6 +427,104 @@ def memory_store(
             "memory_type": stored.memory_type.value,
             "tags": stored.tags,
             "importance": stored.importance,
+            "storage_mode": stored.storage_mode,
+        }
+
+
+@mcp.tool()
+def memory_store_document(
+    content: str,
+    title: str = "",
+    memory_type: str = "context",
+    tags: str = "",
+    importance: int = 2,
+    chunk_policy: str = "semantic",
+    target_chunk_chars: int = 1200,
+    project: str = "",
+) -> dict:
+    """Store a large document using semantic chunking.
+
+    Designed for documents up to 500,000 characters. Uses heading-aware chunking:
+    splits on markdown headings first, then paragraphs, then sentence-window as
+    a fallback for oversized paragraphs.  Each chunk carries its section heading
+    as metadata for more precise retrieval.
+
+    Args:
+        content: Document content up to 500,000 characters.
+        title: Optional document title prepended to content for context.
+        memory_type: One of: decision, pattern, error, context, architecture, preference.
+        tags: Comma-separated tags.
+        importance: Priority 0-4.
+        chunk_policy: "semantic" (default, heading-aware), "paragraph", or "fixed".
+            Currently "semantic" and "paragraph" both use chunk_document(); "fixed"
+            falls back to the sentence-window chunker.
+        target_chunk_chars: Target characters per chunk (default 1200).
+        project: Project namespace.
+
+    Returns:
+        id, chunk_count, content_length, storage_mode.
+    """
+    from .chunker import chunk_document as _chunk_document
+
+    logger.debug(
+        "memory_store_document called: project=%s, type=%s, len=%d",
+        project, memory_type, len(content),
+    )
+
+    if len(content) > MAX_CONTENT_LENGTH:
+        return {"error": f"Content exceeds maximum length of {MAX_CONTENT_LENGTH} characters."}
+
+    # Rate limiting shares the same window as memory_store
+    proj_key = (project or "default").strip().lower() or "default"
+    now_t = time.monotonic()
+    with _rate_limit_lock:
+        window = _store_calls[proj_key]
+        while window and now_t - window[0] > _RATE_LIMIT_WINDOW:
+            window.popleft()
+        if len(window) >= _RATE_LIMIT_MAX:
+            retry_after = int(_RATE_LIMIT_WINDOW - (now_t - window[0])) + 1
+            return {
+                "error": f"Rate limit exceeded: max {_RATE_LIMIT_MAX} calls per {_RATE_LIMIT_WINDOW}s per project.",
+                "retry_after_seconds": retry_after,
+            }
+        window.append(now_t)
+
+    # Prepend title to content when provided
+    full_content = f"# {title}\n\n{content}" if title else content
+
+    if len(full_content) > MAX_CONTENT_LENGTH:
+        full_content = full_content[:MAX_CONTENT_LENGTH]
+
+    with _engine_ctx(project or None) as engine:
+        try:
+            mt = MemoryType(memory_type)
+        except ValueError:
+            mt = MemoryType.CONTEXT
+
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
+        importance = max(0, min(4, importance))
+
+        memory = Memory(
+            content=full_content,
+            memory_type=mt,
+            tags=tag_list,
+            importance=importance,
+            storage_mode="document",
+        )
+
+        try:
+            stored = engine.store(memory)
+        except EmbeddingConfigMismatchError as e:
+            return {"error": str(e)}
+
+        # Count the chunks that were stored for this memory
+        chunks = engine.db.get_chunks_for_memory(stored.id)
+        return {
+            "status": "stored",
+            "id": stored.id,
+            "chunk_count": len(chunks),
+            "content_length": len(full_content),
+            "storage_mode": stored.storage_mode,
         }
 
 

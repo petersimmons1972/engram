@@ -53,6 +53,9 @@ class Memory(BaseModel):
     summary: str | None = Field(default=None)
     # Integrity field — SHA-256 of content, stored in DB, validated on read.
     content_hash: str | None = Field(default=None)
+    # Storage mode: "focused" (default, single or sentence-window chunks) vs
+    # "document" (semantic chunking via chunk_document).
+    storage_mode: str = "focused"
 
 
 class Chunk(BaseModel):
@@ -62,6 +65,10 @@ class Chunk(BaseModel):
     chunk_index: int
     chunk_hash: str = ""
     embedding: bytes | None = None
+    # Semantic chunking metadata — populated for document-mode memories.
+    section_heading: str | None = None
+    chunk_type: str = "sentence_window"
+    last_matched: datetime | None = None
 
 
 class Relationship(BaseModel):
@@ -82,6 +89,8 @@ class SearchResult(BaseModel):
     chunk_score: float = 0.0
     matched_chunk_index: int = -1
     connected: list[ConnectedMemory] = Field(default_factory=list)
+    # Populated from the matched chunk's section_heading for document-mode results.
+    matched_chunk_section: str | None = None
 
 
 class ConnectedMemory(BaseModel):

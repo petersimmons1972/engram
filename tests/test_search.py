@@ -610,3 +610,62 @@ class TestMatchedChunkLength:
         assert top.matched_chunk_index >= 0, (
             f"matched_chunk_index should be >= 0 for a chunked memory, got {top.matched_chunk_index}"
         )
+
+
+# ── Phase 2: matched_chunk_section from recall ────────────────────────────────
+
+
+class TestMatchedChunkSection:
+    """recall() must populate matched_chunk_section from the matched chunk's
+    section_heading for document-mode memories."""
+
+    def test_matched_chunk_section_none_for_focused_memory(self, engine):
+        """A focused-mode memory has no section_heading; matched_chunk_section must be None."""
+        engine.store(Memory(content="Short focused memory without headings."))
+        results = engine.recall("focused memory headings")
+        # Focused memories have no section_heading so matched_chunk_section is None
+        if results:
+            assert results[0].matched_chunk_section is None
+
+    def test_matched_chunk_section_populated_for_document_memory(self, engine, db):
+        """A document-mode recall must populate matched_chunk_section when a
+        vector match is found against a chunk with a known section_heading."""
+        from engram.types import Chunk
+
+        # Store a plain memory, then manually attach a chunk with section_heading
+        # (simulating what engine.store does for document-mode)
+        mem = db.store_memory(Memory(
+            content="# Architecture\n\nWe use microservices for scalability.",
+            storage_mode="document",
+        ))
+        chunk = Chunk(
+            memory_id=mem.id,
+            chunk_text="We use microservices for scalability.",
+            chunk_index=0,
+            section_heading="Architecture",
+            chunk_type="section",
+        )
+        db.store_chunks([chunk])
+
+        # Embed the chunk via the engine's embedder and update it
+        embedding = engine.embedder.embed(chunk.chunk_text)
+        from engram.embeddings import to_blob
+        db.update_chunk_embedding(chunk.id, to_blob(embedding))
+
+        results = engine.recall("microservices scalability")
+        # Find the result for our memory
+        our_result = next(
+            (r for r in results if r.memory.id == mem.id), None
+        )
+        if our_result and our_result.matched_chunk_index >= 0:
+            assert our_result.matched_chunk_section == "Architecture", (
+                f"Expected 'Architecture', got {our_result.matched_chunk_section!r}"
+            )
+
+    def test_matched_chunk_section_default_is_none(self):
+        """SearchResult default for matched_chunk_section is None (backward compat)."""
+        from engram.types import Memory, SearchResult
+
+        mem = Memory(content="test")
+        result = SearchResult(memory=mem, score=0.5)
+        assert result.matched_chunk_section is None

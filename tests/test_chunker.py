@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from engram.chunker import chunk_hash, chunk_text, is_duplicate, jaccard_similarity
+from engram.chunker import (
+    ChunkCandidate,
+    chunk_document,
+    chunk_hash,
+    chunk_text,
+    is_duplicate,
+    jaccard_similarity,
+)
 
 
 class TestChunkText:
@@ -201,3 +208,170 @@ class TestChunkLengthAccuracy:
             assert len(chunk) <= max_chars, (
                 f"Chunk {i} is {len(chunk)} chars, exceeds max of {max_chars}: {chunk[:80]}..."
             )
+
+
+# ── Phase 2: chunk_document tests ────────────────────────────────────────────
+
+
+class TestChunkDocumentHeadings:
+    """chunk_document splits on markdown headings and annotates with section_heading."""
+
+    SAMPLE = """\
+# Introduction
+
+This is the introduction paragraph. It has some content.
+
+Another introduction paragraph here.
+
+## Background
+
+Background section paragraph one. More words here for padding.
+
+Background section paragraph two. Still more content to read.
+
+# Conclusion
+
+Final thoughts here in the conclusion section.
+"""
+
+    def test_returns_list_of_chunk_candidates(self):
+        chunks = chunk_document(self.SAMPLE)
+        assert isinstance(chunks, list)
+        assert all(isinstance(c, ChunkCandidate) for c in chunks)
+
+    def test_heading_annotated_on_chunks(self):
+        chunks = chunk_document(self.SAMPLE)
+        headings = [c.section_heading for c in chunks if c.section_heading]
+        # Must have at least one chunk annotated with a heading
+        assert len(headings) > 0
+
+    def test_introduction_heading_detected(self):
+        chunks = chunk_document(self.SAMPLE)
+        intro_chunks = [c for c in chunks if c.section_heading == "Introduction"]
+        assert len(intro_chunks) >= 1
+
+    def test_conclusion_heading_detected(self):
+        chunks = chunk_document(self.SAMPLE)
+        conclusion_chunks = [c for c in chunks if c.section_heading == "Conclusion"]
+        assert len(conclusion_chunks) >= 1
+
+    def test_background_h2_detected(self):
+        chunks = chunk_document(self.SAMPLE)
+        bg_chunks = [c for c in chunks if c.section_heading == "Background"]
+        assert len(bg_chunks) >= 1
+
+    def test_chunk_text_nonempty(self):
+        chunks = chunk_document(self.SAMPLE)
+        for c in chunks:
+            assert c.text.strip(), f"Empty chunk text for section_heading={c.section_heading!r}"
+
+    def test_chunk_type_field_present(self):
+        chunks = chunk_document(self.SAMPLE)
+        for c in chunks:
+            assert c.chunk_type in {"section", "paragraph", "sentence_window"}, (
+                f"Unexpected chunk_type: {c.chunk_type!r}"
+            )
+
+    def test_all_content_covered(self):
+        """Every meaningful word in the source should appear in at least one chunk."""
+        chunks = chunk_document(self.SAMPLE)
+        combined = " ".join(c.text for c in chunks)
+        for word in ["introduction", "background", "conclusion"]:
+            assert word.lower() in combined.lower(), (
+                f"Word '{word}' not found in any chunk"
+            )
+
+
+class TestChunkDocumentSizeLimits:
+    """chunk_document respects target_chunk_chars and applies sentence-window fallback."""
+
+    def test_small_target_produces_multiple_chunks(self):
+        # Each section has enough content to exceed a tiny target
+        doc = """\
+# Alpha
+
+""" + ("Alpha content word. " * 40) + """
+
+# Beta
+
+""" + ("Beta content word. " * 40)
+        chunks = chunk_document(doc, target_chunk_chars=200)
+        assert len(chunks) > 1, "Small target should produce multiple chunks"
+
+    def test_large_paragraph_falls_back_to_sentence_window(self):
+        # Single massive paragraph in one section — must fall back to sentence splitting
+        big_para = "This is sentence number %d for testing the fallback. " * 50
+        doc = "# Section\n\n" + big_para
+        chunks = chunk_document(doc, target_chunk_chars=300)
+        # At least one chunk should be sentence_window type
+        types = {c.chunk_type for c in chunks}
+        assert "sentence_window" in types, (
+            f"Expected sentence_window fallback; got types: {types}"
+        )
+
+    def test_chunks_stay_under_target_approx(self):
+        """No chunk should be more than 2x the target_chunk_chars (overlap headroom)."""
+        doc = """\
+# Section One
+
+""" + ("Word sentence content here. " * 100) + """
+
+# Section Two
+
+""" + ("More content for this section. " * 100)
+        target = 600
+        chunks = chunk_document(doc, target_chunk_chars=target)
+        for c in chunks:
+            assert len(c.text) <= target * 2, (
+                f"Chunk ({len(c.text)} chars) exceeds 2x target={target}: {c.text[:80]!r}"
+            )
+
+
+class TestChunkDocumentNoHeadings:
+    """Fallback: documents without headings use paragraph splitting."""
+
+    def test_no_headings_produces_chunks(self):
+        doc = """\
+First paragraph here with some content. More sentences follow.
+
+Second paragraph about a different topic. Still more content.
+
+Third paragraph wraps up the document.
+"""
+        chunks = chunk_document(doc)
+        assert len(chunks) >= 1
+
+    def test_no_headings_heading_is_none(self):
+        doc = "No headings here. Just plain text. Another sentence.\n\nSecond para."
+        chunks = chunk_document(doc)
+        # Without headings, section_heading should be None on all chunks
+        for c in chunks:
+            assert c.section_heading is None, (
+                f"Expected None section_heading without headings, got {c.section_heading!r}"
+            )
+
+    def test_pure_text_covered(self):
+        doc = "First paragraph text here.\n\nSecond paragraph different words."
+        chunks = chunk_document(doc)
+        combined = " ".join(c.text for c in chunks)
+        assert "First paragraph" in combined
+        assert "Second paragraph" in combined
+
+
+class TestChunkDocumentOverlap:
+    """Adjacent chunks should carry the last sentence of the previous chunk."""
+
+    def test_overlap_between_consecutive_chunks(self):
+        # Force multiple chunks by using very small target and enough content
+        doc = "# Only Section\n\n" + ("Overlap test sentence number %d. " % i for i in range(50)).__next__() * 50
+        # Actually build the doc properly:
+        sentences = [f"Overlap test sentence number {i}." for i in range(60)]
+        doc = "# Only Section\n\n" + " ".join(sentences)
+        chunks = chunk_document(doc, target_chunk_chars=300)
+        if len(chunks) >= 2:
+            # The last sentence of chunk N should appear as the first sentence of chunk N+1
+            last_sentence_chunk0 = chunks[0].text.split(".")[-2].strip() if "." in chunks[0].text else ""
+            if last_sentence_chunk0:
+                assert last_sentence_chunk0 in chunks[1].text or len(chunks) == 1, (
+                    "Expected overlap: last sentence of chunk 0 should appear in chunk 1"
+                )
