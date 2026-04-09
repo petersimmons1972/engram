@@ -238,9 +238,10 @@ class TestSSRFProtection:
         from engram.embeddings import _validate_ollama_url
         assert _validate_ollama_url("http://localhost:11434") is True
 
-    def test_normal_ip_allowed(self):
+    def test_public_ip_allowed(self):
+        # 8.8.8.8 is a public IP — must NOT be blocked by SSRF protection
         from engram.embeddings import _validate_ollama_url
-        assert _validate_ollama_url("http://192.168.1.100:11434") is True
+        assert _validate_ollama_url("http://8.8.8.8:11434") is True
 
     def test_link_local_blocked(self):
         from engram.embeddings import _validate_ollama_url

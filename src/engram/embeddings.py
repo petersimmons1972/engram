@@ -18,9 +18,10 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import socket
 import struct
 from typing import TYPE_CHECKING, Any, Protocol, Sequence, runtime_checkable
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 if TYPE_CHECKING:
     import numpy as np
@@ -118,6 +119,7 @@ class OpenAIEmbedder:
 
 _ALLOWED_PORTS = {80, 443, 11434, 8080, 3000, 8788}
 
+# Blocked: RFC-1918 private ranges (10/8, 172.16/12, 192.168/16), loopback, link-local, metadata IPs
 # RFC-1918 private address ranges to block for SSRF protection.
 # We block non-loopback private ranges and link-local (169.254.x.x / metadata endpoints).
 # Loopback (127.0.0.1) is explicitly allowed — local Ollama is a primary use case.
@@ -198,7 +200,21 @@ class OllamaEmbedder:
         _require_numpy("Ollama embeddings")
         if not _validate_ollama_url(base_url):
             raise ValueError(f"Blocked Ollama URL (potential SSRF): {base_url}")
-        self._base_url = base_url.rstrip("/")
+        # DNS rebinding defence (#122): resolve the hostname once at construction
+        # time and rewrite the URL to an IP literal so httpx always connects to
+        # the address we validated, not whatever DNS returns later.
+        _parsed = urlparse(base_url)
+        _host = _parsed.hostname or "localhost"
+        _port = _parsed.port or 11434
+        try:
+            _resolved_ip = socket.getaddrinfo(_host, _port, type=socket.SOCK_STREAM)[0][4][0]
+            # Rebuild netloc as "ip:port" (IPv6 literals need brackets)
+            _ip_obj = ipaddress.ip_address(_resolved_ip)
+            _netloc = f"[{_resolved_ip}]:{_port}" if _ip_obj.version == 6 else f"{_resolved_ip}:{_port}"
+            _pinned_url = urlunparse(_parsed._replace(netloc=_netloc))
+            self._base_url = _pinned_url.rstrip("/")
+        except (socket.gaierror, ValueError) as exc:
+            raise ValueError(f"Cannot resolve Ollama hostname '{_host}': {exc}") from exc
         self._model = model or os.environ.get("ENGRAM_OLLAMA_MODEL", "nomic-embed-text")
         # Canonicalize name: strip :latest suffix so nomic-embed-text and
         # nomic-embed-text:latest are treated as the same model by the

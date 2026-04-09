@@ -762,6 +762,20 @@ def memory_correct(
         The new memory ID and confirmation that the old one was superseded.
     """
     logger.debug("memory_correct called: project=%s, old_id=%s", project, old_memory_id)
+    # Rate limiting: same sliding-window guard applied by memory_store (#138)
+    proj_key = (project or "default").strip().lower() or "default"
+    now = time.monotonic()
+    with _rate_limit_lock:
+        window = _store_calls[proj_key]
+        while window and now - window[0] > _RATE_LIMIT_WINDOW:
+            window.popleft()
+        if len(window) >= _RATE_LIMIT_MAX:
+            retry_after = int(_RATE_LIMIT_WINDOW - (now - window[0])) + 1
+            return {
+                "error": f"Rate limit exceeded: max {_RATE_LIMIT_MAX} memory_store calls per {_RATE_LIMIT_WINDOW}s per project.",
+                "retry_after_seconds": retry_after,
+            }
+        window.append(now)
     with _get_engine(project or None) as engine:
         old_mem = engine.db.get_memory(old_memory_id)
         if not old_mem:
