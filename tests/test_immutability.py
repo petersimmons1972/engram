@@ -35,13 +35,14 @@ class TestImmutabilityFlag:
         )
         stored = engine.store(mem)
 
-        # Backdate last_accessed so it qualifies for pruning
-        old_time = (datetime.now(timezone.utc) - timedelta(hours=2000)).isoformat()
-        engine.db._get_conn().execute(
-            "UPDATE memories SET last_accessed = ?, access_count = 0 WHERE id = ?",
-            (old_time, stored.id),
-        )
-        engine.db._get_conn().commit()
+        # Backdate last_accessed so it qualifies for pruning (psycopg v3 API)
+        old_time = datetime.now(timezone.utc) - timedelta(hours=2000)
+        with engine.db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE memories SET last_accessed = %s, access_count = 0 WHERE id = %s",
+                (old_time, stored.id),
+            )
+            conn.commit()
 
         pruned = engine.db.prune_stale_memories(max_age_hours=720, max_importance=3)
         assert pruned == 0
@@ -56,12 +57,13 @@ class TestImmutabilityFlag:
         mem = Memory(content="ephemeral", importance=4, immutable=False)
         stored = engine.store(mem)
 
-        old_time = (datetime.now(timezone.utc) - timedelta(hours=2000)).isoformat()
-        engine.db._get_conn().execute(
-            "UPDATE memories SET last_accessed = ?, access_count = 0 WHERE id = ?",
-            (old_time, stored.id),
-        )
-        engine.db._get_conn().commit()
+        old_time = datetime.now(timezone.utc) - timedelta(hours=2000)
+        with engine.db.pool.connection() as conn:
+            conn.execute(
+                "UPDATE memories SET last_accessed = %s, access_count = 0 WHERE id = %s",
+                (old_time, stored.id),
+            )
+            conn.commit()
 
         pruned = engine.db.prune_stale_memories(max_age_hours=720, max_importance=3)
         assert pruned == 1

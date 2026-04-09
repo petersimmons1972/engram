@@ -391,14 +391,19 @@ def dump_all_projects(
         "total_memories": 0,
     }
 
-    for project_name in projects:
-        memories = db.list_memories(
-            memory_type=None, tags=[], min_importance=4, limit=100_000,
-        )
-        project_dir = output_path / project_name
-        count = dump_memories_to_directory(memories, project_dir)
-        manifest["projects"][project_name] = count
-        manifest["total_memories"] += count
+    original_project = db.project
+    try:
+        for project_name in projects:
+            db.project = project_name  # Fix #127: switch project context before querying
+            memories = db.list_memories(
+                memory_type=None, tags=[], min_importance=4, limit=100_000,
+            )
+            project_dir = output_path / project_name
+            count = dump_memories_to_directory(memories, project_dir)
+            manifest["projects"][project_name] = count
+            manifest["total_memories"] += count
+    finally:
+        db.project = original_project  # Restore project context regardless of errors
 
     return manifest
 

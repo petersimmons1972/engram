@@ -31,7 +31,10 @@ def stress_engine() -> SearchEngine:
     engine = SearchEngine(db=db, embedder=FakeEmbedder())
     yield engine
     with db.pool.connection() as conn:
-        conn.execute("DELETE FROM chunks WHERE project = 'stress'")
+        conn.execute(
+            "DELETE FROM chunks WHERE memory_id IN "
+            "(SELECT id FROM memories WHERE project = 'stress')"
+        )
         conn.execute("DELETE FROM relationships WHERE project = 'stress'")
         conn.execute("DELETE FROM memories WHERE project = 'stress'")
         conn.commit()
@@ -59,11 +62,11 @@ class TestChunkDeduplication:
                     embedding=fake_emb,
                 )
                 conn.execute(
-                    "INSERT INTO chunks (id, memory_id, project, chunk_text,"
+                    "INSERT INTO chunks (id, memory_id, chunk_text,"
                     " chunk_index, chunk_hash, embedding)"
-                    " VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                    " VALUES (%s, %s, %s, %s, %s, %s)",
                     (
-                        chunk.id, chunk.memory_id, "stress", chunk.chunk_text,
+                        chunk.id, chunk.memory_id, chunk.chunk_text,
                         chunk.chunk_index, chunk.chunk_hash, chunk.embedding,
                     ),
                 )
