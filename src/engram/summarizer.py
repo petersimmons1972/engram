@@ -86,7 +86,13 @@ class BackgroundSummarizer:
 
     def stop(self) -> None:
         self._stop_event.set()
-        self._thread.join(timeout=5.0)
+        self._thread.join(timeout=35.0)
+        if self._thread.is_alive():
+            logger.warning(
+                "Summarizer thread did not exit within 35 s — possible orphaned thread "
+                "(project=%s)",
+                self.project,
+            )
 
     def _run(self) -> None:
         while not self._stop_event.is_set():

@@ -15,8 +15,12 @@ from .types import Chunk, Memory, MemoryStats, MemoryType, Relationship
 # ── Helpers ──────────────────────────────────────────────────────────
 
 def _normalize_project(project: str) -> str:
-    """Sanitize a project name to safe table characters."""
-    return re.sub(r"[^a-zA-Z0-9_-]", "", project) or "default"
+    """Sanitize a project name for use as a DB namespace.
+
+    Lowercases, strips whitespace, removes characters outside [a-z0-9_-], and
+    falls back to "default" when the result is empty or the input is falsy.
+    """
+    return re.sub(r"[^a-z0-9_-]", "", (project or "default").strip().lower()) or "default"
 
 
 # ── Protocol ─────────────────────────────────────────────────────────

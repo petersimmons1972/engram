@@ -53,10 +53,13 @@ def db():
     backend = PostgresBackend(project="test", dsn=dsn)
     yield backend
     with backend.pool.connection() as conn:
-        conn.execute("DELETE FROM chunks")
-        conn.execute("DELETE FROM relationships")
-        conn.execute("DELETE FROM memories")
-        conn.execute("DELETE FROM project_meta")
+        conn.execute(
+            "DELETE FROM chunks WHERE memory_id IN "
+            "(SELECT id FROM memories WHERE project = 'test')"
+        )
+        conn.execute("DELETE FROM relationships WHERE project = 'test'")
+        conn.execute("DELETE FROM memories WHERE project = 'test'")
+        conn.execute("DELETE FROM project_meta WHERE project = 'test'")
         conn.commit()
     backend.close()
 

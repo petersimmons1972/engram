@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import re
@@ -14,7 +15,28 @@ from mcp.server.fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
-from .db import create_database
+
+@contextlib.contextmanager
+def _temp_env(**overrides: str):
+    """Temporarily mutate os.environ and restore it on exit.
+
+    Not fully thread-safe (os.environ is process-global), but ensures the
+    original values are always restored even when an exception is raised —
+    which prevents permanent env corruption when memory_migrate_embedder fails.
+    """
+    old = {k: os.environ.get(k) for k in overrides}
+    os.environ.update(overrides)
+    try:
+        yield
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+from .db import _normalize_project, create_database
 from .embeddings import create_embedder
 from .errors import EmbeddingConfigMismatchError
 from .reembedder import BackgroundReembedder
@@ -122,11 +144,6 @@ and the user's conventions for this codebase. This bootstraps future agents.
 """
 
 mcp = FastMCP("engram", instructions=ENGRAM_INSTRUCTIONS)
-
-
-def _normalize_project(project: str) -> str:
-    """Sanitize a project name for use as a DB namespace."""
-    return re.sub(r'[^a-z0-9_-]', '', (project or "default").strip().lower()) or "default"
 
 
 def _validate_output_path(path: str) -> Path:
@@ -1068,8 +1085,6 @@ def memory_migrate_embedder(
         Migration status, chunk count queued, old and new embedder names,
         and estimated completion time in minutes.
     """
-    import os as _os
-
     proj = _normalize_project(project)
     with _get_engine(proj) as engine:
         old_embedder = engine.db.get_meta("embedder_name") or "unknown"
@@ -1103,25 +1118,14 @@ def memory_migrate_embedder(
         provider = parts[0] if len(parts) > 1 else "ollama"
         model = parts[1] if len(parts) > 1 else parts[0]
 
-        # Create the new embedder to read its .name and .dimensions, then restore env
-        old_provider_env = _os.environ.get("ENGRAM_EMBEDDER")
-        old_model_env = _os.environ.get("ENGRAM_OLLAMA_MODEL") or _os.environ.get("ENGRAM_OPENAI_MODEL")
-        try:
-            _os.environ["ENGRAM_EMBEDDER"] = provider
-            if provider == "ollama":
-                _os.environ["ENGRAM_OLLAMA_MODEL"] = model
-            elif provider == "openai":
-                _os.environ["ENGRAM_OPENAI_MODEL"] = model
+        # Create the new embedder to read its .name and .dimensions, then restore env.
+        # _temp_env ensures all three vars are restored even if create_embedder() raises.
+        model_env_key = "ENGRAM_OLLAMA_MODEL" if provider == "ollama" else "ENGRAM_OPENAI_MODEL"
+        with _temp_env(ENGRAM_EMBEDDER=provider, **{model_env_key: model}):
             new_emb = create_embedder()
-            engine.db.set_meta("embedder_name", new_emb.name)
-            engine.db.set_meta("embedder_dimensions", str(new_emb.dimensions))
-            engine.db.set_meta("embedder_version", getattr(new_emb, "version", "unknown"))
-        finally:
-            # Restore env — engine will use updated project_meta from now on
-            if old_provider_env is not None:
-                _os.environ["ENGRAM_EMBEDDER"] = old_provider_env
-            elif "ENGRAM_EMBEDDER" in _os.environ:
-                del _os.environ["ENGRAM_EMBEDDER"]
+        engine.db.set_meta("embedder_name", new_emb.name)
+        engine.db.set_meta("embedder_dimensions", str(new_emb.dimensions))
+        engine.db.set_meta("embedder_version", getattr(new_emb, "version", "unknown"))
 
         # Set migration flag and timestamp
         from datetime import datetime, timezone

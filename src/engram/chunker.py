@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 
 LAZY_CHUNK_THRESHOLD = 2000  # characters
@@ -82,13 +83,19 @@ def jaccard_similarity(a: str, b: str) -> float:
     return len(intersection) / len(union)
 
 
-def is_duplicate(new_text: str, existing_texts: list[str], threshold: float = 0.75) -> bool:
+def is_duplicate(new_text: str, existing_texts: list[str], threshold: float | None = None) -> bool:
     """Return True if new_text is too similar to any existing text.
 
     Threshold lowered from 0.85 to 0.75 — the old value was too aggressive
     and deduplicated legitimately distinct memories that share common phrasing.
     Override via ENGRAM_DEDUP_THRESHOLD env var if needed.
+
+    When `threshold` is None (the default), the value is read from the
+    ENGRAM_DEDUP_THRESHOLD environment variable, falling back to 0.75.
+    An explicit numeric argument always takes precedence over the env var.
     """
+    if threshold is None:
+        threshold = float(os.environ.get("ENGRAM_DEDUP_THRESHOLD", "0.75"))
     for existing in existing_texts:
         if jaccard_similarity(new_text, existing) >= threshold:
             return True
