@@ -628,6 +628,8 @@ def memory_recall(
                 "score": r.score,
                 "score_breakdown": r.score_breakdown,
                 "matched_chunk": r.matched_chunk,
+                "chunk_score": r.chunk_score,
+                "matched_chunk_index": r.matched_chunk_index,
                 "connected": [
                     {
                         "id": c.memory.id,

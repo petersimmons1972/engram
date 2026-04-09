@@ -4,7 +4,7 @@ import hashlib
 import os
 import re
 
-LAZY_CHUNK_THRESHOLD = 2000  # characters
+LAZY_CHUNK_THRESHOLD = 8000  # characters
 
 
 def chunk_text(

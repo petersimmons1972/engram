@@ -1,6 +1,46 @@
 """Tests for engram type models — ID generation and field defaults."""
 
-from engram.types import Chunk, Memory, Relationship
+from engram.types import Chunk, Memory, Relationship, SearchResult
+
+
+class TestSearchResultFields:
+    """Phase 1 — Store Big: SearchResult gains chunk_score and matched_chunk_index."""
+
+    def test_search_result_default_chunk_score(self):
+        """SearchResult without chunk_score defaults to 0.0."""
+        mem = Memory(content="test content")
+        result = SearchResult(memory=mem, score=0.5)
+        assert result.chunk_score == 0.0
+
+    def test_search_result_default_matched_chunk_index(self):
+        """SearchResult without matched_chunk_index defaults to -1."""
+        mem = Memory(content="test content")
+        result = SearchResult(memory=mem, score=0.5)
+        assert result.matched_chunk_index == -1
+
+    def test_search_result_accepts_chunk_score(self):
+        """SearchResult accepts an explicit chunk_score."""
+        mem = Memory(content="test content")
+        result = SearchResult(memory=mem, score=0.5, chunk_score=0.87)
+        assert result.chunk_score == 0.87
+
+    def test_search_result_accepts_matched_chunk_index(self):
+        """SearchResult accepts an explicit matched_chunk_index."""
+        mem = Memory(content="test content")
+        result = SearchResult(memory=mem, score=0.5, matched_chunk_index=2)
+        assert result.matched_chunk_index == 2
+
+    def test_old_construction_without_new_fields_still_works(self):
+        """Existing callers that omit chunk_score and matched_chunk_index are unaffected."""
+        mem = Memory(content="backward compatible content")
+        result = SearchResult(
+            memory=mem,
+            score=0.75,
+            matched_chunk="some chunk text",
+        )
+        assert result.chunk_score == 0.0
+        assert result.matched_chunk_index == -1
+        assert result.matched_chunk == "some chunk text"
 
 
 class TestIDGeneration:

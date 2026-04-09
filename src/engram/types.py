@@ -34,7 +34,7 @@ class Importance(int, Enum):
     TRIVIAL = 4
 
 
-MAX_CONTENT_LENGTH = 50_000
+MAX_CONTENT_LENGTH = 500_000
 
 class Memory(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
@@ -79,6 +79,8 @@ class SearchResult(BaseModel):
     score: float
     score_breakdown: dict[str, float] = Field(default_factory=dict)
     matched_chunk: str = ""
+    chunk_score: float = 0.0
+    matched_chunk_index: int = -1
     connected: list[ConnectedMemory] = Field(default_factory=list)
 
 

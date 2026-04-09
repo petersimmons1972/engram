@@ -667,7 +667,7 @@ class PostgresBackend:
                 )""",
                 (chunk_hash, project),
             ).fetchone()
-            return row[0]
+            return row["exists"]
 
     def delete_chunks_for_memory(self, memory_id: str) -> None:
         with self.pool.connection() as conn:

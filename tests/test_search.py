@@ -558,3 +558,55 @@ class TestFTSFirst:
             "PostgresBackend must implement get_chunks_for_memories(memory_ids)"
         )
         db.close()
+
+
+class TestMatchedChunkLength:
+    """Phase 1 — Store Big: matched_chunk must return full chunk, not first 200 chars."""
+
+    def test_matched_chunk_exceeds_200_chars_for_long_memory(self, engine):
+        """For a memory that is chunked (>8000 chars), matched_chunk must be
+        the full chunk text, not truncated to 200 characters.
+
+        The content must be long enough to produce multiple chunks so the
+        vector path picks a specific chunk and returns it untruncated.
+        """
+        # Build a memory clearly over the 8000-char lazy chunk threshold so it
+        # gets split into multiple chunks by the chunker.
+        sentences = [
+            f"Important technical detail number {i} about the deployment pipeline."
+            for i in range(300)
+        ]
+        long_content = " ".join(sentences)
+        assert len(long_content) > 8000, "Test setup: content must exceed chunker threshold"
+
+        engine.store(Memory(content=long_content))
+
+        results = engine.recall("deployment pipeline technical detail")
+        assert len(results) >= 1
+        mc = results[0].matched_chunk
+        # The vector path should return the full chunk, which is up to 500*4=2000 chars.
+        # Either way, it must NOT be truncated to 200.
+        assert len(mc) > 200, (
+            f"matched_chunk was only {len(mc)} chars; expected >200 for a long memory"
+        )
+
+    def test_chunk_score_and_index_populated_in_results(self, engine):
+        """chunk_score must be > 0 and matched_chunk_index must be >= 0
+        when a vector match is found for a long (chunked) memory.
+        """
+        sentences = [
+            f"Detailed architectural note number {i} about the caching strategy."
+            for i in range(300)
+        ]
+        long_content = " ".join(sentences)
+        assert len(long_content) > 8000
+
+        engine.store(Memory(content=long_content))
+
+        results = engine.recall("caching strategy architectural")
+        assert len(results) >= 1
+        top = results[0]
+        assert top.chunk_score >= 0.0, "chunk_score should be non-negative"
+        assert top.matched_chunk_index >= 0, (
+            f"matched_chunk_index should be >= 0 for a chunked memory, got {top.matched_chunk_index}"
+        )

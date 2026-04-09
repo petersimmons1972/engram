@@ -221,7 +221,7 @@ class SearchEngine:
                 norm_score = (score - min_bm25) / score_range if score_range > 0 else 1.0
                 cand = candidates.setdefault(mem.id, _Candidate(memory=mem))
                 cand.bm25_score = norm_score
-                cand.matched_chunk = mem.content[:200]
+                cand.matched_chunk = mem.content[:500]
 
         # Layer 2: Vector / Semantic (skipped for NullEmbedder)
         if self.has_vectors:
@@ -270,7 +270,9 @@ class SearchEngine:
                     cand = candidates.setdefault(mem.id, _Candidate(memory=mem))
                     if norm_score > cand.vector_score:
                         cand.vector_score = norm_score
-                        cand.matched_chunk = chunk.chunk_text[:200]
+                        cand.chunk_score = sim
+                        cand.chunk_index = chunk.chunk_index
+                        cand.matched_chunk = chunk.chunk_text
 
         # Score each candidate
         now = datetime.now(timezone.utc)
@@ -313,6 +315,8 @@ class SearchEngine:
                         "importance_mult": round(importance_mult, 2),
                     },
                     matched_chunk=cand.matched_chunk,
+                    chunk_score=cand.chunk_score,
+                    matched_chunk_index=cand.chunk_index,
                 )
             )
 
@@ -482,10 +486,12 @@ class SearchEngine:
 
 
 class _Candidate:
-    __slots__ = ("memory", "bm25_score", "vector_score", "matched_chunk")
+    __slots__ = ("memory", "bm25_score", "vector_score", "matched_chunk", "chunk_score", "chunk_index")
 
     def __init__(self, memory: Memory):
         self.memory = memory
         self.bm25_score: float = 0.0
         self.vector_score: float = 0.0
         self.matched_chunk: str = ""
+        self.chunk_score: float = 0.0
+        self.chunk_index: int = -1

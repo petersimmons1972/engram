@@ -16,9 +16,10 @@ class TestChunkText:
         assert chunk_text("   ") == []
 
     def test_long_text_splits_into_multiple(self):
-        sentences = [f"Sentence number {i} is here." for i in range(200)]
+        # Need enough content to exceed the LAZY_CHUNK_THRESHOLD (8000 chars)
+        sentences = [f"Sentence number {i} is here for testing purposes." for i in range(300)]
         text = " ".join(sentences)
-        assert len(text) > 2000  # must exceed lazy chunking threshold
+        assert len(text) > 8000  # must exceed lazy chunking threshold
         chunks = chunk_text(text, max_tokens=100)
         assert len(chunks) > 1
 
@@ -100,15 +101,15 @@ class TestIsDuplicate:
 
 
 class TestLazyChunking:
-    """B5: Content under 2000 chars should skip chunking and be stored as a single chunk."""
+    """B5: Content under 8000 chars should skip chunking and be stored as a single chunk."""
 
     def test_short_content_produces_single_chunk(self):
         """500-char content with sentences -> exactly 1 chunk even with small max_tokens."""
         sentences = [f"Fact number {i}." for i in range(30)]
         text = " ".join(sentences)
-        assert len(text) < 2000
+        assert len(text) < 8000
         # With a small max_tokens, the chunker would normally split this.
-        # Lazy chunking should skip splitting entirely for content under 2000 chars.
+        # Lazy chunking should skip splitting entirely for content under 8000 chars.
         chunks = chunk_text(text, max_tokens=20)
         assert len(chunks) == 1, f"Short content should produce 1 chunk, got {len(chunks)}"
         assert chunks[0] == text
@@ -125,41 +126,73 @@ class TestLazyChunking:
         assert len(chunks) > 1
 
     def test_threshold_boundary(self):
-        """2000 chars -> 1 chunk. 2001+ chars -> chunking algorithm runs."""
-        # Build text of exactly ~2000 chars with sentence boundaries
+        """8000 chars -> 1 chunk. 8001+ chars -> chunking algorithm runs."""
+        # Build text of exactly ~8000 chars with sentence boundaries
         sentences = []
         total = 0
         i = 0
-        while total + len(f"Sentence number {i}.") + 1 <= 2000:
+        while total + len(f"Sentence number {i}.") + 1 <= 8000:
             s = f"Sentence number {i}."
             sentences.append(s)
             total += len(s) + (1 if sentences else 0)
             i += 1
         text_at = " ".join(sentences)
-        assert len(text_at) <= 2000
+        assert len(text_at) <= 8000
         # Even with tiny max_tokens, should produce 1 chunk (lazy skip)
         chunks_at = chunk_text(text_at, max_tokens=20)
-        assert len(chunks_at) == 1, f"2000 chars should produce 1 chunk, got {len(chunks_at)}"
+        assert len(chunks_at) == 1, f"8000 chars should produce 1 chunk, got {len(chunks_at)}"
 
-        # 2001+ chars with sentence boundaries: chunking algorithm runs
+        # 8001+ chars with sentence boundaries: chunking algorithm runs
         sentences_over = list(sentences)
-        while len(" ".join(sentences_over)) <= 2000:
+        while len(" ".join(sentences_over)) <= 8000:
             sentences_over.append(f"Sentence number {i}.")
             i += 1
         text_over = " ".join(sentences_over)
-        assert len(text_over) > 2000
+        assert len(text_over) > 8000
         chunks_over = chunk_text(text_over, max_tokens=20)
-        # With max_tokens=20 (80 chars), content >2000 chars should produce multiple chunks
-        assert len(chunks_over) > 1, f"Content over 2000 chars should chunk, got {len(chunks_over)}"
+        # With max_tokens=20 (80 chars), content >8000 chars should produce multiple chunks
+        assert len(chunks_over) > 1, f"Content over 8000 chars should chunk, got {len(chunks_over)}"
+
+
+class TestLazyChunkThreshold:
+    """Phase 1 — Store Big: threshold raised from 2000 to 8000 chars."""
+
+    def test_content_just_under_8000_is_single_chunk(self):
+        """7999-char content must NOT be chunked (returned as-is)."""
+        # Build exactly 7999 chars of valid sentence content.
+        # Use a fixed sentence, fill to length.
+        base = "Sentence for threshold boundary test. "
+        text = (base * 300)[:7999]
+        # Strip trailing partial word to avoid odd results -- just use what we have.
+        chunks = chunk_text(text, max_tokens=20)
+        assert len(chunks) == 1, (
+            f"7999-char content should produce 1 chunk, got {len(chunks)}"
+        )
+
+    def test_content_just_over_8000_is_chunked(self):
+        """8001-char content MUST be chunked (threshold is now 8000)."""
+        base = "Sentence for threshold boundary test. "
+        text = (base * 300)[:8001]
+        # With very small max_tokens, content over threshold should split.
+        chunks = chunk_text(text, max_tokens=20)
+        assert len(chunks) > 1, (
+            f"8001-char content should produce multiple chunks, got {len(chunks)}"
+        )
 
 
 class TestChunkLengthAccuracy:
     """Regression tests for #39: Space separators not counted in chunk length."""
 
     def test_chunks_do_not_exceed_max_chars(self):
-        """Every chunk's actual length must be <= max_tokens * 4 chars."""
-        sentences = [f"Sentence number {i} is here." for i in range(100)]
+        """Every chunk's actual length must be <= max_tokens * 4 chars.
+
+        Content must exceed LAZY_CHUNK_THRESHOLD (8000 chars) so the chunking
+        algorithm actually runs rather than the lazy single-chunk path.
+        """
+        # Use 400 sentences to ensure we exceed the 8000-char lazy threshold
+        sentences = [f"Sentence number {i} is here for testing purposes." for i in range(400)]
         text = " ".join(sentences)
+        assert len(text) > 8000, "Test setup: text must exceed lazy chunk threshold"
         max_tokens = 50  # 200 chars
         chunks = chunk_text(text, max_tokens=max_tokens, overlap_tokens=10)
 
