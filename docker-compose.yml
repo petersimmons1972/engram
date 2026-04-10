@@ -89,6 +89,25 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # engram-go:
+  #   container_name: engram-go-app
+  #   image: engram-go:latest
+  #   build:
+  #     context: ~/projects/engram-go
+  #   ports:
+  #     - "127.0.0.1:8789:8788"
+  #   environment:
+  #     - DATABASE_URL=postgresql://engram:${POSTGRES_PASSWORD:-engram}@postgres:5432/engram
+  #     - OLLAMA_URL=http://ollama:11434
+  #     - ENGRAM_OLLAMA_MODEL=${ENGRAM_OLLAMA_MODEL:-nomic-embed-text}
+  #     - ENGRAM_SUMMARIZE_MODEL=${ENGRAM_SUMMARIZE_MODEL:-llama3.2}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     ollama:
+  #       condition: service_started
+  #   restart: unless-stopped
+
   # ── Test database (CI only) ───────────────────────────────────────────────
   test-postgres:
     container_name: engram-test-postgres
