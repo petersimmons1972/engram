@@ -1,5 +1,12 @@
 <p align="center"><img src="docs/hero.svg" alt="Engram — Persistent Memory for AI Agents" width="100%"></p>
 
+> **⚠️ This repository (v1) is archived.** engram has been rewritten in Go as v2.0.
+> The active project is at **[petersimmons1972/engram-go](https://github.com/petersimmons1972/engram-go)** —
+> faster startup, smaller container, Claude advisor strategy, and 19 MCP tools.
+> No new features will be added here.
+
+---
+
 **Your AI agents forget everything between sessions. Engram fixes that.**
 
 ---
